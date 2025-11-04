@@ -3,15 +3,17 @@ function Canvas({ onCanvasClick }) {
     const { ReactFlow, Controls, Background, useNodesState, useEdgesState, addEdge, Handle, Position } = window.ReactFlow;
 
     // Custom Node Component with separate handles for exec and data
-    const CustomNode = ({ data }) => {
+    const CustomNode = ({ data, selected }) => {
         return (
             <div style={{
                 padding: '10px 20px',
                 borderRadius: '5px',
                 background: '#1a1a1a',
-                border: '2px solid #333',
+                border: selected ? '2px solid #1890ff' : '2px solid #333',
+                boxShadow: selected ? '0 0 10px rgba(24, 144, 255, 0.5)' : 'none',
                 color: 'white',
-                minWidth: '150px'
+                minWidth: '150px',
+                transition: 'all 0.2s ease'
             }}>
                 {/* Handles de entrada (izquierda) */}
                 <Handle

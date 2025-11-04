@@ -147,6 +147,8 @@ The application runs entirely from CDN-loaded libraries with no build step requi
 **Custom Node Component**:
 - **Type**: `custom` (replaces default React Flow nodes)
 - **Style**: Dark theme with rounded corners matching Blueprints aesthetic
+- **Selection Visual**: When selected, border changes from gray to blue with glow effect
+- **Transition**: Smooth 0.2s animation when selection state changes
 - **Handles**: Each node has 4 connection points:
   - `exec-in` (top 30%, white, 12px): Incoming execution signal
   - `exec-out` (top 30%, white, 12px): Outgoing execution signal
@@ -298,6 +300,7 @@ Shared state managed in main App component:
 - **Automatic Styling**: Connections automatically styled based on type
 - **Edge Deletion**: Click edge to select (turns pink), press Delete to remove
 - **Visual Feedback**: Edges highlight on hover and selection
+- **Node Selection Visual**: Selected nodes show blue border with glow effect
 - **Shortcuts Helper**: Info button with modal showing all keyboard shortcuts and rules
 - **Custom Nodes**: Blueprints-inspired dark theme with 4 distinct handles
 - **Node Library**: Searchable tree with category filtering
