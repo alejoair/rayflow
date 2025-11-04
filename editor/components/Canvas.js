@@ -155,6 +155,10 @@ function Canvas({ onCanvasClick }) {
         return true;
     }, [edges]);
 
+    const defaultEdgeOptions = {
+        type: 'smoothstep',
+    };
+
     const onConnect = React.useCallback(
         (params) => {
             // Apply visual styling based on connection type
@@ -236,6 +240,8 @@ function Canvas({ onCanvasClick }) {
                 onDrop={onDrop}
                 onDragOver={onDragOver}
                 nodeTypes={nodeTypes}
+                defaultEdgeOptions={defaultEdgeOptions}
+                deleteKeyCode="Delete"
                 fitView
             >
                 <Controls />

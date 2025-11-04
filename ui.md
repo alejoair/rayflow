@@ -199,6 +199,8 @@ The Canvas implements HTML5 Drag API integrated with React Flow for seamless nod
 - Node dragging and repositioning
 - Edge creation by connecting handles
 - Node selection and deletion
+- **Edge deletion**: Click edge to select (turns pink), press Delete/Backspace to remove
+- Edge hover feedback: Edges become thicker on hover for better visibility
 
 **React Flow Components Used**:
 - `ReactFlow`: Main canvas component
@@ -285,7 +287,10 @@ Shared state managed in main App component:
 - **Drag and Drop**: Seamless node instantiation from library to canvas
 - **Dual Connection Types**: Separate exec (white) and data (blue) connections
 - **Connection Validation**: Type-safe connections (exec-to-exec, data-to-data only)
+- **Single Input Rule**: Each input handle can only receive one connection
 - **Automatic Styling**: Connections automatically styled based on type
+- **Edge Deletion**: Click edge to select (turns pink), press Delete to remove
+- **Visual Feedback**: Edges highlight on hover and selection
 - **Custom Nodes**: Blueprints-inspired dark theme with 4 distinct handles
 - **Node Library**: Searchable tree with category filtering
 - **Responsive Layout**: Collapsible sidebars with Ant Design
