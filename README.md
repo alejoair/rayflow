@@ -44,3 +44,15 @@ This project uses GitHub Actions for automated publishing:
 **Required Secret:**
 - Add `PYPI_TOKEN` to GitHub Secrets (Settings → Secrets → Actions)
 - Use your PyPI API token as the value
+
+## License
+
+RayFlow is licensed under the Business Source License 1.1.
+
+- **Non-commercial use:** Free and unlimited
+- **Commercial use:** Requires a commercial license
+- **Change Date:** 2029-01-01 (converts to Apache 2.0)
+
+For commercial licensing, contact: https://github.com/alejoair/rayflow
+
+See [LICENSE](LICENSE) for full details.
