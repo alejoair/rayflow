@@ -201,6 +201,13 @@ The Canvas implements HTML5 Drag API integrated with React Flow for seamless nod
 - Node selection and deletion
 - **Edge deletion**: Click edge to select (turns pink), press Delete/Backspace to remove
 - Edge hover feedback: Edges become thicker on hover for better visibility
+- **Shortcuts Button**: Info button in top-right corner shows keyboard shortcuts modal
+
+**Shortcuts Modal**:
+- Accessible via button in top-right corner of canvas
+- Organized into three sections: Node Operations, Connection Operations, Canvas Navigation
+- Includes connection rules reminder (exec/data types, single input rule)
+- Uses Ant Design Modal with Cards and Descriptions for clean layout
 
 **React Flow Components Used**:
 - `ReactFlow`: Main canvas component
@@ -291,6 +298,7 @@ Shared state managed in main App component:
 - **Automatic Styling**: Connections automatically styled based on type
 - **Edge Deletion**: Click edge to select (turns pink), press Delete to remove
 - **Visual Feedback**: Edges highlight on hover and selection
+- **Shortcuts Helper**: Info button with modal showing all keyboard shortcuts and rules
 - **Custom Nodes**: Blueprints-inspired dark theme with 4 distinct handles
 - **Node Library**: Searchable tree with category filtering
 - **Responsive Layout**: Collapsible sidebars with Ant Design
