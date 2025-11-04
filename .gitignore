@@ -44,6 +44,7 @@ ray_results/
 Thumbs.db
 
 # Project specific
-flows/
-*.json
-node_modules/
+flows/          # User flow definitions
+*.json          # Flow JSON files (user-generated)
+node_modules/   # Frontend dependencies
+/nodes/         # User custom nodes (not built-in nodes in rayflow/nodes/)

@@ -1,4 +1,4 @@
-"""Example node: Math multiplication."""
+"""Math multiplication node."""
 
 import ray
 from rayflow import RayflowNode

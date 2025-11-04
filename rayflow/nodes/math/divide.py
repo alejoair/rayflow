@@ -1,4 +1,4 @@
-"""Example node: Math division with validation."""
+"""Math division node with error handling."""
 
 import ray
 from rayflow import RayflowNode
