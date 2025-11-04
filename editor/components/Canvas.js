@@ -126,18 +126,34 @@ function Canvas({ onCanvasClick }) {
         const sourceHandle = connection.sourceHandle;
         const targetHandle = connection.targetHandle;
 
-        // Exec handles can only connect to exec handles
+        // Type validation: Exec handles can only connect to exec handles
         if (sourceHandle && sourceHandle.includes('exec')) {
-            return targetHandle && targetHandle.includes('exec');
+            if (!targetHandle || !targetHandle.includes('exec')) {
+                return false;
+            }
         }
 
-        // Data handles can only connect to data handles
+        // Type validation: Data handles can only connect to data handles
         if (sourceHandle && sourceHandle.includes('data')) {
-            return targetHandle && targetHandle.includes('data');
+            if (!targetHandle || !targetHandle.includes('data')) {
+                return false;
+            }
         }
 
-        return false;
-    }, []);
+        // Check if target handle already has a connection
+        const targetNode = connection.target;
+        const targetHandleId = connection.targetHandle;
+
+        const existingConnection = edges.find(
+            edge => edge.target === targetNode && edge.targetHandle === targetHandleId
+        );
+
+        if (existingConnection) {
+            return false; // Target handle already has a connection
+        }
+
+        return true;
+    }, [edges]);
 
     const onConnect = React.useCallback(
         (params) => {

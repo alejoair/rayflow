@@ -181,6 +181,8 @@ The Canvas implements HTML5 Drag API integrated with React Flow for seamless nod
   - Exec handles can only connect to exec handles
   - Data handles can only connect to data handles
   - Prevents mismatched connections (exec to data, or vice versa)
+  - Each input handle can only receive ONE connection (no multiple sources)
+  - Output handles can connect to multiple targets
 - `onConnect()`: Handles user creating connections between nodes
   - Applies appropriate styling based on connection type
   - Exec connections: white, thick, static
