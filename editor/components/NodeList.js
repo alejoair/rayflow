@@ -18,17 +18,30 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
     // Convert nodes to tree data structure for Ant Design Tree
     const treeData = filteredNodes.map(node => ({
         title: (
-            <antd.Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                <antd.Space direction="vertical" size={0}>
-                    <antd.Typography.Text strong>{node.name}</antd.Typography.Text>
-                    <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                        {node.path}
-                    </antd.Typography.Text>
+            <div
+                draggable
+                onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow', JSON.stringify({
+                        type: node.path,
+                        name: node.name,
+                        nodeType: node.type
+                    }));
+                    e.dataTransfer.effectAllowed = 'move';
+                }}
+                style={{ cursor: 'grab' }}
+            >
+                <antd.Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <antd.Space direction="vertical" size={0}>
+                        <antd.Typography.Text strong>{node.name}</antd.Typography.Text>
+                        <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                            {node.path}
+                        </antd.Typography.Text>
+                    </antd.Space>
+                    <antd.Tag color={node.type === 'builtin' ? 'blue' : 'green'} size="small">
+                        {node.type}
+                    </antd.Tag>
                 </antd.Space>
-                <antd.Tag color={node.type === 'builtin' ? 'blue' : 'green'} size="small">
-                    {node.type}
-                </antd.Tag>
-            </antd.Space>
+            </div>
         ),
         key: node.path,
         icon: <i className={node.type === 'builtin' ? 'fas fa-cog' : 'fas fa-user'}></i>,

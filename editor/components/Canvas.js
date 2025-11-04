@@ -117,20 +117,66 @@ function Canvas({ onCanvasClick }) {
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+    const [nodeIdCounter, setNodeIdCounter] = React.useState(4); // Start from 4 since we have 3 initial nodes
+    const [reactFlowInstance, setReactFlowInstance] = React.useState(null);
+    const reactFlowWrapper = React.useRef(null);
 
     const onConnect = React.useCallback(
         (params) => setEdges((eds) => addEdge(params, eds)),
         [setEdges]
     );
 
+    const onDragOver = React.useCallback((event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+    }, []);
+
+    const onDrop = React.useCallback(
+        (event) => {
+            event.preventDefault();
+
+            const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+            const nodeData = JSON.parse(
+                event.dataTransfer.getData('application/reactflow')
+            );
+
+            if (!nodeData || !reactFlowInstance) return;
+
+            // Convert screen coordinates to flow coordinates
+            const position = reactFlowInstance.project({
+                x: event.clientX - reactFlowBounds.left,
+                y: event.clientY - reactFlowBounds.top,
+            });
+
+            // Create new node with unique ID
+            const newNode = {
+                id: `node_${String(nodeIdCounter).padStart(3, '0')}`,
+                type: 'custom',
+                position,
+                data: {
+                    label: nodeData.name,
+                    path: nodeData.type,
+                    nodeType: nodeData.nodeType
+                },
+            };
+
+            setNodes((nds) => nds.concat(newNode));
+            setNodeIdCounter((id) => id + 1);
+        },
+        [reactFlowInstance, nodeIdCounter, setNodes]
+    );
+
     return (
-        <div style={{ width: '100%', height: '100%' }}>
+        <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%' }}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onInit={setReactFlowInstance}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
                 nodeTypes={nodeTypes}
                 fitView
             >
