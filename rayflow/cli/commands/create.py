@@ -23,7 +23,7 @@ def create(port, working_path):
     # Working directory: use --working-path if provided, otherwise current directory
     cwd = Path(working_path) if working_path else Path.cwd()
 
-    click.echo(f"🚀 Starting RayFlow editor...")
+    click.echo(f"Starting RayFlow editor...")
     click.echo(f"   Working directory: {cwd}")
     click.echo(f"   Server: http://localhost:{port}")
     click.echo(f"   Editor: http://localhost:{port}")
@@ -39,6 +39,6 @@ def create(port, working_path):
         # Wait for process
         backend_process.wait()
     except KeyboardInterrupt:
-        click.echo("\n🛑 Shutting down RayFlow...")
+        click.echo("\nShutting down RayFlow...")
         backend_process.terminate()
         backend_process.wait()
