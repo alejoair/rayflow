@@ -1,69 +1,120 @@
-const { useState, useEffect } = React;
+// Node Library Component
+function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
+    const [selectedCategory, setSelectedCategory] = useState('all');
+    const [searchText, setSearchText] = useState('');
 
-function NodeList() {
-  const [nodes, setNodes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+    const categories = [
+        { value: 'all', label: 'All Nodes' },
+        { value: 'builtin', label: 'Built-in Nodes' },
+        { value: 'user', label: 'User Nodes' }
+    ];
 
-  useEffect(() => {
-    loadNodes();
-  }, []);
+    const filteredNodes = nodes
+        .filter(node => selectedCategory === 'all' || node.type === selectedCategory)
+        .filter(node => searchText === '' ||
+                node.name.toLowerCase().includes(searchText.toLowerCase()) ||
+                node.path.toLowerCase().includes(searchText.toLowerCase()));
 
-  async function loadNodes() {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/nodes');
-      if (!response.ok) throw new Error('Failed to fetch nodes');
-      const data = await response.json();
-      setNodes(data);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-bold mb-4">Available Nodes</h2>
-      
-      {loading && (
-        <p className="text-gray-500">Loading nodes...</p>
-      )}
-      
-      {error && (
-        <p className="text-red-500">Error: {error}</p>
-      )}
-
-      {!loading && !error && (
-        <ul className="space-y-2">
-          {nodes.length === 0 ? (
-            <li className="text-gray-500 italic">
-              No nodes found. Create .py files in the nodes/ directory.
-            </li>
-          ) : (
-            nodes.map(node => (
-              <li 
-                key={node.path}
-                className="p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-gray-800">{node.name}</span>
-                  <span className={`px-2 py-1 text-xs rounded ${
-                    node.type === 'builtin' 
-                      ? 'bg-blue-100 text-blue-800' 
-                      : 'bg-green-100 text-green-800'
-                  }`}>
+    // Convert nodes to tree data structure for Ant Design Tree
+    const treeData = filteredNodes.map(node => ({
+        title: (
+            <antd.Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                <antd.Space direction="vertical" size={0}>
+                    <antd.Typography.Text strong>{node.name}</antd.Typography.Text>
+                    <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                        {node.path}
+                    </antd.Typography.Text>
+                </antd.Space>
+                <antd.Tag color={node.type === 'builtin' ? 'blue' : 'green'} size="small">
                     {node.type}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-500 mt-1">{node.path}</div>
-              </li>
-            ))
-          )}
-        </ul>
-      )}
-    </div>
-  );
+                </antd.Tag>
+            </antd.Space>
+        ),
+        key: node.path,
+        icon: <i className={node.type === 'builtin' ? 'fas fa-cog' : 'fas fa-user'}></i>,
+        nodeData: node
+    }));
+
+    const handleNodeClick = (selectedKeys, info) => {
+        if (info.node.nodeData) {
+            onNodeSelect(info.node.nodeData);
+        }
+    };
+
+    return (
+        <antd.Flex vertical style={{ height: '100%', background: '#fff' }}>
+            <antd.Flex vertical style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
+                <antd.Typography.Title level={4} style={{ margin: '0 0 12px 0' }}>
+                    Node Library
+                </antd.Typography.Title>
+
+                <antd.Space direction="vertical" style={{ width: '100%' }} size="middle">
+                    <antd.Select
+                        value={selectedCategory}
+                        onChange={setSelectedCategory}
+                        style={{ width: '100%' }}
+                        options={categories}
+                        size="small"
+                    />
+
+                    <antd.Input.Search
+                        placeholder="Search nodes..."
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        allowClear
+                        size="small"
+                    />
+                </antd.Space>
+            </antd.Flex>
+
+            <antd.Flex flex={1} style={{ padding: '8px', overflow: 'hidden' }}>
+                {loading && (
+                    <antd.Flex
+                        vertical
+                        align="center"
+                        justify="center"
+                        style={{ height: '200px', width: '100%' }}
+                    >
+                        <antd.Spin size="large" />
+                        <antd.Typography.Text type="secondary" style={{ marginTop: '16px' }}>
+                            Loading nodes...
+                        </antd.Typography.Text>
+                    </antd.Flex>
+                )}
+
+                {error && (
+                    <antd.Alert
+                        message="Error loading nodes"
+                        description={error}
+                        type="error"
+                        showIcon
+                        style={{ margin: '16px 0' }}
+                    />
+                )}
+
+                {!loading && !error && (
+                    <>
+                        {filteredNodes.length === 0 ? (
+                            <antd.Empty
+                                description="No nodes found. Create .py files in the nodes/ directory."
+                                style={{ padding: '40px 20px' }}
+                            />
+                        ) : (
+                            <antd.Tree
+                                showIcon
+                                treeData={treeData}
+                                onSelect={handleNodeClick}
+                                style={{
+                                    background: 'transparent',
+                                    height: '100%',
+                                    overflow: 'auto'
+                                }}
+                                blockNode
+                            />
+                        )}
+                    </>
+                )}
+            </antd.Flex>
+        </antd.Flex>
+    );
 }

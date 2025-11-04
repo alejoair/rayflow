@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from rayflow.server.routes import router
@@ -17,6 +17,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Editor files are included in the package
+EDITOR_PATH = Path(__file__).parent.parent.parent / "editor"
+
+
+@app.get("/components/{filename}")
+async def serve_component(filename: str):
+    """Serve component files"""
+    component_file = EDITOR_PATH / "components" / filename
+    if component_file.exists() and component_file.suffix == ".js":
+        return FileResponse(component_file, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Component not found")
+
+
+@app.get("/app.js")
+async def serve_app_js():
+    """Serve main app.js file"""
+    app_file = EDITOR_PATH / "app.js"
+    if app_file.exists():
+        return FileResponse(app_file, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="App file not found")
+
 # Include routes
 app.include_router(router, prefix="/api")
 
@@ -24,11 +45,9 @@ app.include_router(router, prefix="/api")
 @app.get("/")
 def root():
     """Serve the editor HTML"""
-    editor_path = os.environ.get("RAYFLOW_EDITOR_PATH")
-    if editor_path:
-        html_file = Path(editor_path) / "index.html"
-        if html_file.exists():
-            return FileResponse(html_file)
+    html_file = EDITOR_PATH / "index.html"
+    if html_file.exists():
+        return FileResponse(html_file)
     return {"message": "RayFlow API", "version": "0.1.0"}
 
 

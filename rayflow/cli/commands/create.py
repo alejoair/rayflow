@@ -12,14 +12,6 @@ from pathlib import Path
 def create(port, working_path):
     """Launch the RayFlow editor (backend serves frontend)"""
 
-    # Get the directory where rayflow is installed
-    rayflow_root = Path(__file__).parent.parent.parent.parent
-    editor_path = rayflow_root / "editor"
-
-    if not editor_path.exists():
-        click.echo(f"Error: Editor directory not found at {editor_path}")
-        sys.exit(1)
-
     # Working directory: use --working-path if provided, otherwise current directory
     cwd = Path(working_path) if working_path else Path.cwd()
 
@@ -28,11 +20,11 @@ def create(port, working_path):
     click.echo(f"   Server: http://localhost:{port}")
     click.echo(f"   Editor: http://localhost:{port}")
 
-    # Start backend server (it will serve the frontend HTML too)
+    # Start backend server (it will serve the frontend from the package)
     backend_process = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "rayflow.server.app:app",
          "--host", "0.0.0.0", "--port", str(port), "--reload"],
-        env={**os.environ, "RAYFLOW_CWD": str(cwd), "RAYFLOW_EDITOR_PATH": str(editor_path)}
+        env={**os.environ, "RAYFLOW_CWD": str(cwd)}
     )
 
     try:
