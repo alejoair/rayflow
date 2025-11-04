@@ -177,7 +177,14 @@ The Canvas implements HTML5 Drag API integrated with React Flow for seamless nod
    - Increments node ID counter
 
 **Key Functions**:
+- `isValidConnection()`: Validates connection types before allowing them
+  - Exec handles can only connect to exec handles
+  - Data handles can only connect to data handles
+  - Prevents mismatched connections (exec to data, or vice versa)
 - `onConnect()`: Handles user creating connections between nodes
+  - Applies appropriate styling based on connection type
+  - Exec connections: white, thick, static
+  - Data connections: blue, thin, animated
 - `onDragOver()`: Allows dropping by preventing default behavior
 - `onDrop()`: Creates new node instance from dragged template
 - `onNodesChange()`: React Flow callback for node updates (move, delete, etc.)
@@ -275,6 +282,8 @@ Shared state managed in main App component:
 - **React Flow Integration**: Full visual node editor with zoom, pan, and controls
 - **Drag and Drop**: Seamless node instantiation from library to canvas
 - **Dual Connection Types**: Separate exec (white) and data (blue) connections
+- **Connection Validation**: Type-safe connections (exec-to-exec, data-to-data only)
+- **Automatic Styling**: Connections automatically styled based on type
 - **Custom Nodes**: Blueprints-inspired dark theme with 4 distinct handles
 - **Node Library**: Searchable tree with category filtering
 - **Responsive Layout**: Collapsible sidebars with Ant Design
@@ -288,11 +297,12 @@ Shared state managed in main App component:
 - Save/load workflow functionality (export/import JSON)
 - Real-time execution with Ray backend
 - Node deletion UI
-- Connection validation (type checking)
+- Advanced connection validation (parameter type checking)
 - Undo/redo functionality
 - Multiple selection
 - Copy/paste nodes
 - Minimap (currently removed per user preference)
+- Visual feedback when invalid connection is attempted
 
 ### Technical Improvements
 - Add TypeScript for better type safety

@@ -121,8 +121,49 @@ function Canvas({ onCanvasClick }) {
     const [reactFlowInstance, setReactFlowInstance] = React.useState(null);
     const reactFlowWrapper = React.useRef(null);
 
+    const isValidConnection = React.useCallback((connection) => {
+        // Get the handle types from the connection
+        const sourceHandle = connection.sourceHandle;
+        const targetHandle = connection.targetHandle;
+
+        // Exec handles can only connect to exec handles
+        if (sourceHandle && sourceHandle.includes('exec')) {
+            return targetHandle && targetHandle.includes('exec');
+        }
+
+        // Data handles can only connect to data handles
+        if (sourceHandle && sourceHandle.includes('data')) {
+            return targetHandle && targetHandle.includes('data');
+        }
+
+        return false;
+    }, []);
+
     const onConnect = React.useCallback(
-        (params) => setEdges((eds) => addEdge(params, eds)),
+        (params) => {
+            // Apply visual styling based on connection type
+            const sourceHandle = params.sourceHandle;
+            let style = {};
+            let animated = false;
+
+            if (sourceHandle && sourceHandle.includes('exec')) {
+                // Exec connection styling
+                style = { stroke: '#fff', strokeWidth: 3 };
+            } else if (sourceHandle && sourceHandle.includes('data')) {
+                // Data connection styling
+                style = { stroke: '#1890ff', strokeWidth: 2 };
+                animated = true;
+            }
+
+            const newEdge = {
+                ...params,
+                type: 'smoothstep',
+                style: style,
+                animated: animated
+            };
+
+            setEdges((eds) => addEdge(newEdge, eds));
+        },
         [setEdges]
     );
 
@@ -174,6 +215,7 @@ function Canvas({ onCanvasClick }) {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                isValidConnection={isValidConnection}
                 onInit={setReactFlowInstance}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
