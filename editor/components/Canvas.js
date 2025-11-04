@@ -233,6 +233,7 @@ function Canvas({ onCanvasClick }) {
             {/* Shortcuts Info Button */}
             <antd.Button
                 type="default"
+                size="small"
                 icon={<i className="fas fa-keyboard"></i>}
                 onClick={() => setShowShortcuts(true)}
                 style={{
@@ -242,9 +243,7 @@ function Canvas({ onCanvasClick }) {
                     zIndex: 10,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                 }}
-            >
-                Shortcuts
-            </antd.Button>
+            />
 
             {/* Shortcuts Modal */}
             <antd.Modal
@@ -272,7 +271,7 @@ function Canvas({ onCanvasClick }) {
                             <antd.Descriptions.Item label={<antd.Typography.Text strong>Click & Drag Node</antd.Typography.Text>}>
                                 Move node around canvas
                             </antd.Descriptions.Item>
-                            <antd.Descriptions.Item label={<antd.Typography.Text strong>Delete</antd.Typography.Text>}>
+                            <antd.Descriptions.Item label={<antd.Typography.Text strong><antd.Tag color="blue">Delete</antd.Tag></antd.Typography.Text>}>
                                 Delete selected node
                             </antd.Descriptions.Item>
                         </antd.Descriptions>
@@ -286,7 +285,7 @@ function Canvas({ onCanvasClick }) {
                             <antd.Descriptions.Item label={<antd.Typography.Text strong>Click Connection</antd.Typography.Text>}>
                                 Select connection (turns pink)
                             </antd.Descriptions.Item>
-                            <antd.Descriptions.Item label={<antd.Typography.Text strong>Delete / Backspace</antd.Typography.Text>}>
+                            <antd.Descriptions.Item label={<antd.Typography.Text strong><antd.Tag color="blue">Delete</antd.Tag> / <antd.Tag color="blue">Backspace</antd.Tag></antd.Typography.Text>}>
                                 Remove selected connection
                             </antd.Descriptions.Item>
                         </antd.Descriptions>
