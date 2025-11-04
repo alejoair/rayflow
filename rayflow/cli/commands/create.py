@@ -6,10 +6,9 @@ from pathlib import Path
 
 
 @click.command()
-@click.option('--port', default=8000, help='Backend port')
-@click.option('--frontend-port', default=5173, help='Frontend port')
-def create(port, frontend_port):
-    """Launch the RayFlow editor (backend + frontend)"""
+@click.option('--port', default=8000, help='Server port')
+def create(port):
+    """Launch the RayFlow editor (backend serves frontend)"""
 
     # Get the directory where rayflow is installed
     rayflow_root = Path(__file__).parent.parent.parent.parent
@@ -24,29 +23,20 @@ def create(port, frontend_port):
 
     click.echo(f"🚀 Starting RayFlow editor...")
     click.echo(f"   Working directory: {cwd}")
-    click.echo(f"   Backend: http://localhost:{port}")
-    click.echo(f"   Frontend: http://localhost:{frontend_port}")
+    click.echo(f"   Server: http://localhost:{port}")
+    click.echo(f"   Editor: http://localhost:{port}")
 
-    # Start backend server
+    # Start backend server (it will serve the frontend HTML too)
     backend_process = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "rayflow.server.app:app",
          "--host", "0.0.0.0", "--port", str(port), "--reload"],
-        env={**os.environ, "RAYFLOW_CWD": str(cwd)}
-    )
-
-    # Start frontend dev server
-    frontend_process = subprocess.Popen(
-        ["npm", "run", "dev", "--", "--port", str(frontend_port), "--host"],
-        cwd=editor_path
+        env={**os.environ, "RAYFLOW_CWD": str(cwd), "RAYFLOW_EDITOR_PATH": str(editor_path)}
     )
 
     try:
-        # Wait for processes
+        # Wait for process
         backend_process.wait()
-        frontend_process.wait()
     except KeyboardInterrupt:
         click.echo("\n🛑 Shutting down RayFlow...")
         backend_process.terminate()
-        frontend_process.terminate()
         backend_process.wait()
-        frontend_process.wait()

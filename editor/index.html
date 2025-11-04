@@ -1,12 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RayFlow Editor</title>
-  </head>
-  <body>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function NodeEditor() {
+            const [nodes, setNodes] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                loadNodes();
+            }, []);
+
+            async function loadNodes() {
+                try {
+                    setLoading(true);
+                    const response = await fetch('/api/nodes');
+                    if (!response.ok) throw new Error('Failed to fetch nodes');
+                    const data = await response.json();
+                    setNodes(data);
+                    setError(null);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            }
+
+            return (
+                <div>
+                    <h1>RayFlow Editor</h1>
+                    <div>
+                        <h2>Available Nodes</h2>
+                        {loading && <p>Loading nodes...</p>}
+                        {error && <p style={{color: 'red'}}>Error: {error}</p>}
+                        {!loading && !error && (
+                            <ul>
+                                {nodes.length === 0 ? (
+                                    <li>No nodes found. Create .py files in the nodes/ directory.</li>
+                                ) : (
+                                    nodes.map(node => (
+                                        <li key={node.path}>
+                                            <strong>{node.name}</strong> - {node.path}
+                                        </li>
+                                    ))
+                                )}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<NodeEditor />);
+    </script>
+</body>
 </html>

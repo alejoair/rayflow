@@ -46,3 +46,4 @@ Thumbs.db
 # Project specific
 flows/
 *.json
+node_modules/
