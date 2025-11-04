@@ -7,7 +7,9 @@ from pathlib import Path
 
 @click.command()
 @click.option('--port', default=8000, help='Server port')
-def create(port):
+@click.option('--working-path', type=click.Path(exists=True, file_okay=False, dir_okay=True), 
+              help='Working directory for nodes and flows (default: current directory)')
+def create(port, working_path):
     """Launch the RayFlow editor (backend serves frontend)"""
 
     # Get the directory where rayflow is installed
@@ -18,8 +20,8 @@ def create(port):
         click.echo(f"Error: Editor directory not found at {editor_path}")
         sys.exit(1)
 
-    # Current working directory (where user called the command)
-    cwd = Path.cwd()
+    # Working directory: use --working-path if provided, otherwise current directory
+    cwd = Path(working_path) if working_path else Path.cwd()
 
     click.echo(f"🚀 Starting RayFlow editor...")
     click.echo(f"   Working directory: {cwd}")
