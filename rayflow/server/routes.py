@@ -47,6 +47,23 @@ class CreateVariableResponse(BaseModel):
     variable_name: str
 
 
+class VariableFile(BaseModel):
+    """Model for variable metadata extracted from Python files"""
+    name: str
+    variable_name: str
+    value_type: str
+    default_value: Optional[str] = None
+    description: Optional[str] = ""
+    icon: Optional[str] = "fa-variable"
+    category: Optional[str] = "general"
+    is_custom: Optional[bool] = False
+    custom_import: Optional[str] = None
+    custom_type_hint: Optional[str] = None
+    tags: Optional[List[str]] = []
+    is_readonly: Optional[bool] = False
+    file_path: str
+
+
 def get_working_directory() -> Path:
     """Get the working directory where rayflow was called"""
     cwd = os.environ.get("RAYFLOW_CWD")
@@ -162,6 +179,94 @@ def extract_node_metadata(py_file: Path) -> dict:
     except Exception as e:
         # If parsing fails, just return default metadata
         pass
+
+    return metadata
+
+
+def extract_variable_metadata(py_file: Path) -> dict:
+    """Extract metadata from a Python variable file using AST parsing"""
+    metadata = {
+        'variable_name': None,
+        'value_type': None,
+        'default_value': None,
+        'description': '',
+        'icon': 'fa-variable',
+        'category': 'general',
+        'is_custom': False,
+        'custom_import': None,
+        'custom_type_hint': None,
+        'tags': [],
+        'is_readonly': False
+    }
+
+    try:
+        with open(py_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Parse the AST to find class definitions
+        tree = ast.parse(content)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                # Extract docstring as description
+                if (node.body and isinstance(node.body[0], ast.Expr) and 
+                    isinstance(node.body[0].value, (ast.Constant, ast.Str))):
+                    if isinstance(node.body[0].value, ast.Constant):
+                        metadata['description'] = node.body[0].value.value
+                    else:  # ast.Str for older Python
+                        metadata['description'] = node.body[0].value.s
+
+                # Look for class attributes
+                for item in node.body:
+                    if isinstance(item, ast.Assign):
+                        for target in item.targets:
+                            if isinstance(target, ast.Name):
+                                attr_name = target.id
+
+                                # Extract simple attributes
+                                if attr_name in ['variable_name', 'value_type', 'description', 
+                                               'icon', 'category', 'custom_import', 'custom_type_hint']:
+                                    if isinstance(item.value, ast.Constant):
+                                        metadata[attr_name] = item.value.value
+                                    elif isinstance(item.value, ast.Str):  # Python < 3.8
+                                        metadata[attr_name] = item.value.s
+
+                                # Extract boolean attributes
+                                elif attr_name in ['is_custom', 'is_readonly']:
+                                    if isinstance(item.value, ast.Constant):
+                                        metadata[attr_name] = bool(item.value.value)
+                                    elif hasattr(item.value, 'value'):  # NameConstant
+                                        metadata[attr_name] = bool(item.value.value)
+
+                                # Extract default_value (could be various types)
+                                elif attr_name == 'default_value':
+                                    if isinstance(item.value, ast.Constant):
+                                        metadata[attr_name] = item.value.value
+                                    elif isinstance(item.value, ast.Str):
+                                        metadata[attr_name] = item.value.s
+                                    elif isinstance(item.value, ast.Num):
+                                        metadata[attr_name] = item.value.n
+                                    elif isinstance(item.value, ast.NameConstant):
+                                        metadata[attr_name] = item.value.value
+                                    elif isinstance(item.value, ast.Name) and item.value.id == 'None':
+                                        metadata[attr_name] = None
+
+                                # Extract tags list
+                                elif attr_name == 'tags' and isinstance(item.value, ast.List):
+                                    tags = []
+                                    for elt in item.value.elts:
+                                        if isinstance(elt, ast.Constant):
+                                            tags.append(elt.value)
+                                        elif isinstance(elt, ast.Str):
+                                            tags.append(elt.s)
+                                    metadata['tags'] = tags
+
+                # Stop after first class (assuming one class per file)
+                break
+
+    except Exception as e:
+        # If parsing fails, return default metadata
+        print(f"Warning: Failed to parse variable file {py_file}: {e}")
 
     return metadata
 
@@ -285,7 +390,50 @@ def generate_variable_python_code(request: CreateVariableRequest) -> str:
     # Readonly
     if request.is_readonly:
         code_lines.append('    is_readonly = True')
+
+@router.get("/variables", response_model=List[VariableFile])
+def list_variables():
+    """List all variables from the variables directory with metadata"""
+    variables = []
     
+    # Get working directory
+    cwd = get_working_directory()
+    variables_dir = cwd / "variables"
+    
+    if not variables_dir.exists():
+        # Create variables directory if it doesn't exist
+        variables_dir.mkdir(parents=True, exist_ok=True)
+        return variables
+    
+    # Scan all Python files in variables directory
+    for py_file in variables_dir.glob("*.py"):
+        if py_file.name != "__init__.py":
+            try:
+                metadata = extract_variable_metadata(py_file)
+                
+                # Only include if variable_name was successfully extracted
+                if metadata.get('variable_name'):
+                    variables.append(VariableFile(
+                        name=py_file.stem,
+                        variable_name=metadata['variable_name'],
+                        value_type=metadata.get('value_type', 'any'),
+                        default_value=str(metadata.get('default_value')) if metadata.get('default_value') is not None else None,
+                        description=metadata.get('description', ''),
+                        icon=metadata.get('icon', 'fa-variable'),
+                        category=metadata.get('category', 'general'),
+                        is_custom=metadata.get('is_custom', False),
+                        custom_import=metadata.get('custom_import'),
+                        custom_type_hint=metadata.get('custom_type_hint'),
+                        tags=metadata.get('tags', []),
+                        is_readonly=metadata.get('is_readonly', False),
+                        file_path=str(py_file.relative_to(cwd))
+                    ))
+            except Exception as e:
+                print(f"Warning: Failed to process variable file {py_file}: {e}")
+                continue
+    
+    return variables
+
     return '\n'.join(code_lines)
 
 

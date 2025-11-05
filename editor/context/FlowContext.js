@@ -101,6 +101,7 @@ const ActionTypes = {
     ADD_VARIABLE: 'ADD_VARIABLE',
     UPDATE_VARIABLE: 'UPDATE_VARIABLE',
     DELETE_VARIABLE: 'DELETE_VARIABLE',
+    SET_VARIABLES: 'SET_VARIABLES',
 
     // Node library
     SET_AVAILABLE_NODES: 'SET_AVAILABLE_NODES',
@@ -272,6 +273,12 @@ function flowReducer(state, action) {
                 )
             };
 
+        case ActionTypes.SET_VARIABLES:
+            return {
+                ...state,
+                variables: action.payload.variables
+            };
+
         case ActionTypes.SET_AVAILABLE_NODES:
             return {
                 ...state,
@@ -316,18 +323,54 @@ function FlowProvider({ children }) {
 
     // Load available nodes on mount
     React.useEffect(() => {
-        async function loadNodes() {
+        async function loadNodesAndVariables() {
             try {
                 dispatch({ type: ActionTypes.SET_LOADING, payload: { loading: true } });
-                const response = await fetch('/api/nodes');
-                if (!response.ok) throw new Error('Failed to fetch nodes');
-                const data = await response.json();
-                dispatch({ type: ActionTypes.SET_AVAILABLE_NODES, payload: { nodes: data } });
+                
+                // Load nodes
+                const nodesResponse = await fetch('/api/nodes');
+                if (!nodesResponse.ok) throw new Error('Failed to fetch nodes');
+                const nodesData = await nodesResponse.json();
+                
+                // Load variables
+                const variablesResponse = await fetch('/api/variables');
+                if (!variablesResponse.ok) throw new Error('Failed to fetch variables');
+                const variablesData = await variablesResponse.json();
+                
+                // Convert variables to UI format and generate Set/Get nodes
+                const variables = variablesData.map(varFile => ({
+                    id: `var_${varFile.variable_name}_${Date.now()}`,
+                    name: varFile.variable_name,
+                    type: varFile.value_type,
+                    defaultValue: varFile.default_value,
+                    isCustom: varFile.is_custom,
+                    customImport: varFile.custom_import,
+                    createdAt: new Date().toISOString(),
+                    filePath: varFile.file_path,
+                    description: varFile.description,
+                    icon: varFile.icon,
+                    category: varFile.category
+                }));
+                
+                // Generate Set/Get nodes for each variable
+                const variableNodes = [];
+                variables.forEach(variable => {
+                    const [setNode, getNode] = generateVariableNodes(variable);
+                    variableNodes.push(setNode, getNode);
+                });
+                
+                // Combine regular nodes with variable nodes
+                const allNodes = [...nodesData, ...variableNodes];
+                
+                // Dispatch updates
+                dispatch({ type: ActionTypes.SET_AVAILABLE_NODES, payload: { nodes: allNodes } });
+                dispatch({ type: ActionTypes.SET_VARIABLES, payload: { variables } });
+                
             } catch (err) {
                 dispatch({ type: ActionTypes.SET_ERROR, payload: { error: err.message } });
             }
         }
-        loadNodes();
+        loadNodesAndVariables();
     }, []);
 
     // Action creators (helper functions)
