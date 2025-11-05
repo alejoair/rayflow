@@ -139,6 +139,7 @@ function Canvas({ onNodeSelect }) {
 
         const newEdge = {
             ...params,
+            id: `edge-${params.source}-${params.sourceHandle || 'default'}-${params.target}-${params.targetHandle || 'default'}`,
             type: 'smoothstep',
             style: style,
             animated: animated

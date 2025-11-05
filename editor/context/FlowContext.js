@@ -475,6 +475,13 @@ function FlowProvider({ children }) {
                     console.log('AUTO-LOAD: Loaded state:', savedState);
 
                     if (savedState) {
+                        // Update lastSaveRef BEFORE dispatching to prevent auto-save trigger
+                        lastSaveRef.current = {
+                            nodeCount: savedState.nodes.length,
+                            edgeCount: savedState.edges.length,
+                            counter: savedState.nodeIdCounter
+                        };
+
                         dispatch({ type: ActionTypes.SET_NODES, payload: { nodes: savedState.nodes } });
                         dispatch({ type: ActionTypes.SET_EDGES, payload: { edges: savedState.edges } });
                         dispatch({ type: ActionTypes.SET_NODE_COUNTER, payload: { counter: savedState.nodeIdCounter } });
