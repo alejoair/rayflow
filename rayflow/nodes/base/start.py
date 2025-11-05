@@ -20,6 +20,12 @@ class StartNode(RayflowNode):
     category = "base"
     description = "Entry point that starts workflow execution and defines input schema."
 
+    # Configurable constants
+    AUTO_START_DELAY = 0.0  # Delay in seconds before auto-starting
+    ENABLE_INPUT_VALIDATION = True  # Whether to validate inputs
+    LOG_STARTUP_INFO = True  # Whether to log startup information
+    MAX_CONCURRENT_EXECUTIONS = 1  # Maximum concurrent workflow executions
+
     # START nodes have dynamic inputs based on configuration
     inputs = {}
 
@@ -63,6 +69,23 @@ class StartNode(RayflowNode):
         Returns:
             dict: All inputs plus execution flow signal
         """
+        import time
+
+        # Log startup if enabled
+        if self.LOG_STARTUP_INFO:
+            print(f"START node initiated with {len(inputs)} inputs")
+
+        # Apply auto-start delay if configured
+        if self.AUTO_START_DELAY > 0:
+            print(f"Applying auto-start delay of {self.AUTO_START_DELAY} seconds")
+            time.sleep(self.AUTO_START_DELAY)
+
+        # Validate inputs if enabled
+        if self.ENABLE_INPUT_VALIDATION:
+            for key, value in inputs.items():
+                if value is None:
+                    print(f"Warning: Input '{key}' is None")
+
         # Pass through all inputs and add execution flow
         result = dict(inputs)
         result["exec"] = True

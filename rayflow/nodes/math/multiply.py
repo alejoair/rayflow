@@ -13,6 +13,12 @@ class MathMultiplyNode(RayflowNode):
     category = "math"
     description = "Multiplies two numbers together and returns the result."
 
+    # Configurable constants
+    MAX_RESULT_VALUE = 1000000  # Maximum allowed result value
+    ENABLE_OVERFLOW_PROTECTION = True  # Whether to check for overflow
+    RESULT_MULTIPLIER = 1  # Additional multiplier for result
+    ENABLE_LOGGING = False  # Whether to log multiplication operations
+
     inputs = {
         "x": int,
         "y": int
@@ -28,7 +34,19 @@ class MathMultiplyNode(RayflowNode):
 
     def process(self, **inputs):
         """Multiply x and y."""
-        result = inputs["x"] * inputs["y"]
+        x = inputs["x"]
+        y = inputs["y"]
+
+        if self.ENABLE_LOGGING:
+            print(f"Multiplying {x} * {y}")
+
+        result = x * y * self.RESULT_MULTIPLIER
+
+        # Check for overflow protection
+        if self.ENABLE_OVERFLOW_PROTECTION and abs(result) > self.MAX_RESULT_VALUE:
+            print(f"Warning: Result {result} exceeds maximum allowed value {self.MAX_RESULT_VALUE}")
+            result = self.MAX_RESULT_VALUE if result > 0 else -self.MAX_RESULT_VALUE
+
         return {
-            "result": result
+            "result": int(result)
         }

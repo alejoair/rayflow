@@ -21,6 +21,12 @@ class ReturnNode(RayflowNode):
     category = "base"
     description = "Exit point that terminates workflow execution and returns results."
 
+    # Configurable constants
+    DEFAULT_STATUS_CODE = 200  # Default HTTP status code for responses
+    LOG_RETURN_DATA = True  # Whether to log return data
+    FORMAT_JSON_OUTPUT = True  # Whether to format JSON output nicely
+    ENABLE_RESPONSE_VALIDATION = True  # Whether to validate response structure
+
     # RETURN nodes accept any inputs (dynamic based on config)
     inputs = {}
 
@@ -73,6 +79,10 @@ class ReturnNode(RayflowNode):
         # Remove execution flow from inputs for clean output
         clean_inputs = {k: v for k, v in inputs.items() if k != "exec"}
 
+        # Log return data if enabled
+        if self.LOG_RETURN_DATA:
+            print(f"RETURN node processing {len(clean_inputs)} output fields")
+
         # Build response
         response = {
             "status": "success",
@@ -86,7 +96,7 @@ class ReturnNode(RayflowNode):
         if "status_code" in config:
             response["status_code"] = config["status_code"]
         else:
-            response["status_code"] = 200
+            response["status_code"] = self.DEFAULT_STATUS_CODE
 
         if "message" in config:
             response["message"] = config["message"]
@@ -103,6 +113,16 @@ class ReturnNode(RayflowNode):
                     formatted_data[field_name] = field_def["default"]
 
             response["data"] = formatted_data
+
+        # Validate response if enabled
+        if self.ENABLE_RESPONSE_VALIDATION:
+            if not isinstance(response["data"], dict):
+                print("Warning: Response data is not a dictionary")
+
+        # Format JSON output if enabled
+        if self.FORMAT_JSON_OUTPUT and self.LOG_RETURN_DATA:
+            import json
+            print("Return response:", json.dumps(response, indent=2))
 
         return response
 
