@@ -1,0 +1,409 @@
+// Global Flow State Management
+const FlowContext = React.createContext();
+
+// Initial state
+const initialState = {
+    // Flow data
+    nodes: [],
+    edges: [],
+    selectedNode: null,
+
+    // Variables system (future)
+    variables: [],
+
+    // UI state
+    leftSidebarCollapsed: false,
+    rightSidebarCollapsed: false,
+
+    // Node library data
+    availableNodes: [],
+    loading: true,
+    error: null,
+
+    // Counters
+    nodeIdCounter: 1
+};
+
+// Action types
+const ActionTypes = {
+    // Node management
+    ADD_NODE: 'ADD_NODE',
+    UPDATE_NODE: 'UPDATE_NODE',
+    DELETE_NODE: 'DELETE_NODE',
+    SELECT_NODE: 'SELECT_NODE',
+    DESELECT_NODE: 'DESELECT_NODE',
+
+    // Edge management
+    ADD_EDGE: 'ADD_EDGE',
+    UPDATE_EDGE: 'UPDATE_EDGE',
+    DELETE_EDGE: 'DELETE_EDGE',
+
+    // Bulk operations
+    SET_NODES: 'SET_NODES',
+    SET_EDGES: 'SET_EDGES',
+    SET_FLOW_DATA: 'SET_FLOW_DATA',
+
+    // Node constants
+    UPDATE_NODE_CONSTANTS: 'UPDATE_NODE_CONSTANTS',
+
+    // Variables
+    ADD_VARIABLE: 'ADD_VARIABLE',
+    UPDATE_VARIABLE: 'UPDATE_VARIABLE',
+    DELETE_VARIABLE: 'DELETE_VARIABLE',
+
+    // Node library
+    SET_AVAILABLE_NODES: 'SET_AVAILABLE_NODES',
+    SET_LOADING: 'SET_LOADING',
+    SET_ERROR: 'SET_ERROR',
+
+    // UI
+    TOGGLE_LEFT_SIDEBAR: 'TOGGLE_LEFT_SIDEBAR',
+    TOGGLE_RIGHT_SIDEBAR: 'TOGGLE_RIGHT_SIDEBAR'
+};
+
+// Reducer
+function flowReducer(state, action) {
+    switch (action.type) {
+        case ActionTypes.ADD_NODE:
+            const newNode = {
+                id: `node_${String(state.nodeIdCounter).padStart(3, '0')}`,
+                type: 'custom',
+                position: action.payload.position,
+                data: {
+                    ...action.payload.data,
+                    constantValues: {} // Initialize empty constant values
+                }
+            };
+
+            return {
+                ...state,
+                nodes: [...state.nodes, newNode],
+                nodeIdCounter: state.nodeIdCounter + 1
+            };
+
+        case ActionTypes.UPDATE_NODE:
+            return {
+                ...state,
+                nodes: state.nodes.map(node =>
+                    node.id === action.payload.nodeId
+                        ? { ...node, ...action.payload.updates }
+                        : node
+                ),
+                // Also update selectedNode if it's the same node
+                selectedNode: state.selectedNode && state.selectedNode.id === action.payload.nodeId
+                    ? { ...state.selectedNode, ...action.payload.updates }
+                    : state.selectedNode
+            };
+
+        case ActionTypes.UPDATE_NODE_CONSTANTS:
+            return {
+                ...state,
+                nodes: state.nodes.map(node =>
+                    node.id === action.payload.nodeId
+                        ? {
+                            ...node,
+                            data: {
+                                ...node.data,
+                                constantValues: action.payload.constantValues
+                            }
+                        }
+                        : node
+                ),
+                // Also update selectedNode if it's the same node
+                selectedNode: state.selectedNode && state.selectedNode.id === action.payload.nodeId
+                    ? {
+                        ...state.selectedNode,
+                        data: {
+                            ...state.selectedNode.data,
+                            constantValues: action.payload.constantValues
+                        }
+                    }
+                    : state.selectedNode
+            };
+
+        case ActionTypes.DELETE_NODE:
+            const filteredNodes = state.nodes.filter(node => node.id !== action.payload.nodeId);
+            const filteredEdges = state.edges.filter(edge =>
+                edge.source !== action.payload.nodeId && edge.target !== action.payload.nodeId
+            );
+
+            return {
+                ...state,
+                nodes: filteredNodes,
+                edges: filteredEdges,
+                selectedNode: state.selectedNode && state.selectedNode.id === action.payload.nodeId
+                    ? null
+                    : state.selectedNode
+            };
+
+        case ActionTypes.SELECT_NODE:
+            return {
+                ...state,
+                selectedNode: action.payload.node
+            };
+
+        case ActionTypes.DESELECT_NODE:
+            return {
+                ...state,
+                selectedNode: null
+            };
+
+        case ActionTypes.ADD_EDGE:
+            return {
+                ...state,
+                edges: [...state.edges, action.payload.edge]
+            };
+
+        case ActionTypes.UPDATE_EDGE:
+            return {
+                ...state,
+                edges: state.edges.map(edge =>
+                    edge.id === action.payload.edgeId
+                        ? { ...edge, ...action.payload.updates }
+                        : edge
+                )
+            };
+
+        case ActionTypes.DELETE_EDGE:
+            return {
+                ...state,
+                edges: state.edges.filter(edge => edge.id !== action.payload.edgeId)
+            };
+
+        case ActionTypes.SET_NODES:
+            return {
+                ...state,
+                nodes: action.payload.nodes
+            };
+
+        case ActionTypes.SET_EDGES:
+            return {
+                ...state,
+                edges: action.payload.edges
+            };
+
+        case ActionTypes.SET_FLOW_DATA:
+            return {
+                ...state,
+                nodes: action.payload.nodes,
+                edges: action.payload.edges
+            };
+
+        case ActionTypes.ADD_VARIABLE:
+            return {
+                ...state,
+                variables: [...state.variables, action.payload.variable]
+            };
+
+        case ActionTypes.UPDATE_VARIABLE:
+            return {
+                ...state,
+                variables: state.variables.map(variable =>
+                    variable.id === action.payload.variableId
+                        ? { ...variable, ...action.payload.updates }
+                        : variable
+                )
+            };
+
+        case ActionTypes.DELETE_VARIABLE:
+            return {
+                ...state,
+                variables: state.variables.filter(variable => variable.id !== action.payload.variableId)
+            };
+
+        case ActionTypes.SET_AVAILABLE_NODES:
+            return {
+                ...state,
+                availableNodes: action.payload.nodes,
+                loading: false,
+                error: null
+            };
+
+        case ActionTypes.SET_LOADING:
+            return {
+                ...state,
+                loading: action.payload.loading
+            };
+
+        case ActionTypes.SET_ERROR:
+            return {
+                ...state,
+                error: action.payload.error,
+                loading: false
+            };
+
+        case ActionTypes.TOGGLE_LEFT_SIDEBAR:
+            return {
+                ...state,
+                leftSidebarCollapsed: !state.leftSidebarCollapsed
+            };
+
+        case ActionTypes.TOGGLE_RIGHT_SIDEBAR:
+            return {
+                ...state,
+                rightSidebarCollapsed: !state.rightSidebarCollapsed
+            };
+
+        default:
+            return state;
+    }
+}
+
+// Provider component
+function FlowProvider({ children }) {
+    const [state, dispatch] = React.useReducer(flowReducer, initialState);
+
+    // Load available nodes on mount
+    React.useEffect(() => {
+        async function loadNodes() {
+            try {
+                dispatch({ type: ActionTypes.SET_LOADING, payload: { loading: true } });
+                const response = await fetch('/api/nodes');
+                if (!response.ok) throw new Error('Failed to fetch nodes');
+                const data = await response.json();
+                dispatch({ type: ActionTypes.SET_AVAILABLE_NODES, payload: { nodes: data } });
+            } catch (err) {
+                dispatch({ type: ActionTypes.SET_ERROR, payload: { error: err.message } });
+            }
+        }
+        loadNodes();
+    }, []);
+
+    // Action creators (helper functions)
+    const actions = {
+        // Node actions
+        addNode: (position, data) => {
+            dispatch({
+                type: ActionTypes.ADD_NODE,
+                payload: { position, data }
+            });
+        },
+
+        updateNode: (nodeId, updates) => {
+            dispatch({
+                type: ActionTypes.UPDATE_NODE,
+                payload: { nodeId, updates }
+            });
+        },
+
+        updateNodeConstants: (nodeId, constantValues) => {
+            dispatch({
+                type: ActionTypes.UPDATE_NODE_CONSTANTS,
+                payload: { nodeId, constantValues }
+            });
+        },
+
+        deleteNode: (nodeId) => {
+            dispatch({
+                type: ActionTypes.DELETE_NODE,
+                payload: { nodeId }
+            });
+        },
+
+        selectNode: (node) => {
+            dispatch({
+                type: ActionTypes.SELECT_NODE,
+                payload: { node }
+            });
+        },
+
+        deselectNode: () => {
+            dispatch({ type: ActionTypes.DESELECT_NODE });
+        },
+
+        // Edge actions
+        addEdge: (edge) => {
+            dispatch({
+                type: ActionTypes.ADD_EDGE,
+                payload: { edge }
+            });
+        },
+
+        updateEdge: (edgeId, updates) => {
+            dispatch({
+                type: ActionTypes.UPDATE_EDGE,
+                payload: { edgeId, updates }
+            });
+        },
+
+        deleteEdge: (edgeId) => {
+            dispatch({
+                type: ActionTypes.DELETE_EDGE,
+                payload: { edgeId }
+            });
+        },
+
+        // Bulk operations
+        setNodes: (nodes) => {
+            dispatch({
+                type: ActionTypes.SET_NODES,
+                payload: { nodes }
+            });
+        },
+
+        setEdges: (edges) => {
+            dispatch({
+                type: ActionTypes.SET_EDGES,
+                payload: { edges }
+            });
+        },
+
+        setFlowData: (nodes, edges) => {
+            dispatch({
+                type: ActionTypes.SET_FLOW_DATA,
+                payload: { nodes, edges }
+            });
+        },
+
+        // Variable actions
+        addVariable: (variable) => {
+            dispatch({
+                type: ActionTypes.ADD_VARIABLE,
+                payload: { variable }
+            });
+        },
+
+        updateVariable: (variableId, updates) => {
+            dispatch({
+                type: ActionTypes.UPDATE_VARIABLE,
+                payload: { variableId, updates }
+            });
+        },
+
+        deleteVariable: (variableId) => {
+            dispatch({
+                type: ActionTypes.DELETE_VARIABLE,
+                payload: { variableId }
+            });
+        },
+
+        // UI actions
+        toggleLeftSidebar: () => {
+            dispatch({ type: ActionTypes.TOGGLE_LEFT_SIDEBAR });
+        },
+
+        toggleRightSidebar: () => {
+            dispatch({ type: ActionTypes.TOGGLE_RIGHT_SIDEBAR });
+        }
+    };
+
+    return (
+        <FlowContext.Provider value={{ state, actions }}>
+            {children}
+        </FlowContext.Provider>
+    );
+}
+
+// Custom hook to use the flow context
+function useFlow() {
+    const context = React.useContext(FlowContext);
+    if (!context) {
+        throw new Error('useFlow must be used within a FlowProvider');
+    }
+    return context;
+}
+
+// Export everything
+window.FlowProvider = FlowProvider;
+window.useFlow = useFlow;
+window.ActionTypes = ActionTypes;

@@ -1,7 +1,24 @@
 // Inspector Component
-function Inspector({ selectedNode, onNodeDeselect }) {
+function Inspector() {
+    const { state, actions } = useFlow();
     const [typeConfig, setTypeConfig] = React.useState(null);
-    const [constantValues, setConstantValues] = React.useState({});
+
+    // Get selectedNode from global state
+    const selectedNode = state.selectedNode;
+
+    // Get current constant values from selectedNode data (no local state)
+    const constantValues = React.useMemo(() => {
+        if (!selectedNode?.data?.constants) return {};
+
+        const values = {};
+        Object.keys(selectedNode.data.constants).forEach(key => {
+            const constant = selectedNode.data.constants[key];
+            // Use configured value if it exists, otherwise use default value
+            const configuredValue = selectedNode.data.constantValues?.[key];
+            values[key] = configuredValue !== undefined ? configuredValue : constant.value;
+        });
+        return values;
+    }, [selectedNode]);
 
     // Load data type configuration
     React.useEffect(() => {
@@ -22,26 +39,15 @@ function Inspector({ selectedNode, onNodeDeselect }) {
             });
     }, []);
 
-    // Initialize constant values when selectedNode changes
-    React.useEffect(() => {
-        if (selectedNode && selectedNode.constants) {
-            const initialValues = {};
-            Object.keys(selectedNode.constants).forEach(key => {
-                const constant = selectedNode.constants[key];
-                initialValues[key] = constant.value;
-            });
-            setConstantValues(initialValues);
-        } else {
-            setConstantValues({});
-        }
-    }, [selectedNode]);
-
-    // Handle constant value change
+    // Handle constant value change - update global state directly
     const handleConstantChange = (constName, value) => {
-        setConstantValues(prev => ({
-            ...prev,
-            [constName]: value
-        }));
+        if (selectedNode) {
+            const newValues = {
+                ...constantValues,
+                [constName]: value
+            };
+            actions.updateNodeConstants(selectedNode.id, newValues);
+        }
     };
 
     // Render form field based on data type
@@ -122,7 +128,7 @@ function Inspector({ selectedNode, onNodeDeselect }) {
                         type="text"
                         size="small"
                         icon={<i className="fas fa-times"></i>}
-                        onClick={onNodeDeselect}
+                        onClick={actions.deselectNode}
                         style={{ color: '#8c8c8c' }}
                     />
                 )}
@@ -143,14 +149,14 @@ function Inspector({ selectedNode, onNodeDeselect }) {
                                     {
                                         key: 'name',
                                         label: 'Name',
-                                        children: selectedNode.label
+                                        children: selectedNode.data.label
                                     },
                                     {
                                         key: 'type',
                                         label: 'Type',
                                         children: (
-                                            <antd.Tag color={selectedNode.nodeType === 'builtin' ? 'blue' : 'green'}>
-                                                {selectedNode.nodeType}
+                                            <antd.Tag color={selectedNode.data.nodeType === 'builtin' ? 'blue' : 'green'}>
+                                                {selectedNode.data.nodeType}
                                             </antd.Tag>
                                         )
                                     },
@@ -163,7 +169,7 @@ function Inspector({ selectedNode, onNodeDeselect }) {
                                                 copyable
                                                 style={{ fontSize: '12px' }}
                                             >
-                                                {selectedNode.path}
+                                                {selectedNode.data.path}
                                             </antd.Typography.Text>
                                         )
                                     }
@@ -171,14 +177,21 @@ function Inspector({ selectedNode, onNodeDeselect }) {
                             />
                         </antd.Card>
 
-                        {/* Constants Configuration Section - Only for custom nodes */}
-                        {selectedNode.nodeType === 'user' && selectedNode.constants && Object.keys(selectedNode.constants).length > 0 && (
+                        {/* Constants Configuration Section - For both builtin and custom nodes */}
+                        {selectedNode.data.constants && Object.keys(selectedNode.data.constants).length > 0 && (
                             <antd.Card
                                 title={
                                     <antd.Space>
-                                        <i className="fas fa-cog" style={{ color: '#FF6B35' }}></i>
+                                        <i className="fas fa-cog" style={{
+                                            color: selectedNode.data.nodeType === 'user' ? '#FF6B35' : '#1890ff'
+                                        }}></i>
                                         <span>Node Configuration</span>
-                                        <antd.Tag color="orange" size="small">EDITABLE</antd.Tag>
+                                        <antd.Tag
+                                            color={selectedNode.data.nodeType === 'user' ? 'orange' : 'blue'}
+                                            size="small"
+                                        >
+                                            {selectedNode.data.nodeType === 'user' ? 'CUSTOM' : 'BUILTIN'}
+                                        </antd.Tag>
                                     </antd.Space>
                                 }
                                 size="small"
@@ -201,7 +214,7 @@ function Inspector({ selectedNode, onNodeDeselect }) {
                                     <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
                                         Configure node constants. These values will be used as default parameters for the node.
                                     </antd.Typography.Text>
-                                    {Object.entries(selectedNode.constants).map(([constName, constant]) => (
+                                    {Object.entries(selectedNode.data.constants).map(([constName, constant]) => (
                                         <antd.Form.Item
                                             key={constName}
                                             label={
@@ -257,7 +270,7 @@ function Inspector({ selectedNode, onNodeDeselect }) {
                                     # Code editor placeholder
                                 </antd.Typography.Text>
                                 # Double-click node to edit code{'\n'}
-                                # File: {selectedNode.path}
+                                # File: {selectedNode.data.path}
                             </antd.Typography.Paragraph>
                         </antd.Card>
                     </antd.Space>

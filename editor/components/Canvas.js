@@ -1,15 +1,11 @@
 // Canvas Component with React Flow
 function Canvas({ onNodeSelect }) {
-    const { ReactFlow, Controls, Background, useNodesState, useEdgesState, addEdge } = window.ReactFlow;
+    const { ReactFlow, Controls, Background, addEdge, applyNodeChanges, applyEdgeChanges } = window.ReactFlow;
+    const { state, actions } = useFlow();
 
     // Configuration state
     const [typeConfig, setTypeConfig] = React.useState(null);
     const [showShortcuts, setShowShortcuts] = React.useState(false);
-
-    // Flow state
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const [nodeIdCounter, setNodeIdCounter] = React.useState(1);
     const [reactFlowInstance, setReactFlowInstance] = React.useState(null);
     const reactFlowWrapper = React.useRef(null);
 
@@ -44,6 +40,20 @@ function Canvas({ onNodeSelect }) {
             });
     }, []);
 
+    // Custom handlers for React Flow events
+    const onNodesChange = React.useCallback((changes) => {
+        // Handle React Flow nodes changes and sync with global state
+        const updatedNodes = applyNodeChanges(changes, state.nodes);
+        actions.setNodes(updatedNodes);
+    }, [state.nodes, actions]);
+
+    const onEdgesChange = React.useCallback((changes) => {
+        // Handle React Flow edges changes and sync with global state
+        const updatedEdges = applyEdgeChanges(changes, state.edges);
+        actions.setEdges(updatedEdges);
+    }, [state.edges, actions]);
+
+
     // Helper functions
     const getTypeColor = (type) => {
         if (!typeConfig) return '#1890ff';
@@ -68,8 +78,8 @@ function Canvas({ onNodeSelect }) {
         const sourceNodeId = connection.source;
         const targetNodeId = connection.target;
 
-        const sourceNode = nodes.find(node => node.id === sourceNodeId);
-        const targetNode = nodes.find(node => node.id === targetNodeId);
+        const sourceNode = state.nodes.find(node => node.id === sourceNodeId);
+        const targetNode = state.nodes.find(node => node.id === targetNodeId);
 
         if (!sourceNode || !targetNode) return false;
 
@@ -97,12 +107,12 @@ function Canvas({ onNodeSelect }) {
         }
 
         // Check if target handle already has a connection
-        const existingConnection = edges.find(
+        const existingConnection = state.edges.find(
             edge => edge.target === targetNodeId && edge.targetHandle === targetHandle
         );
 
         return !existingConnection;
-    }, [edges, nodes]);
+    }, [state.edges, state.nodes]);
 
     // Connection creation
     const onConnect = React.useCallback((params) => {
@@ -115,7 +125,7 @@ function Canvas({ onNodeSelect }) {
             const execWidth = typeConfig?.settings?.connectionWidth?.exec || 3;
             style = { stroke: getTypeColor('exec'), strokeWidth: execWidth };
         } else if (sourceHandle && sourceHandle.startsWith('output-')) {
-            const sourceNode = nodes.find(node => node.id === sourceNodeId);
+            const sourceNode = state.nodes.find(node => node.id === sourceNodeId);
             if (sourceNode) {
                 const sourceFieldName = sourceHandle.replace('output-', '');
                 const sourceOutputs = sourceNode.data.outputs || {};
@@ -134,31 +144,36 @@ function Canvas({ onNodeSelect }) {
             animated: animated
         };
 
-        setEdges((eds) => addEdge(newEdge, eds));
-    }, [setEdges, typeConfig, nodes, getTypeColor]);
+        actions.addEdge(newEdge);
+    }, [actions, typeConfig, state.nodes, getTypeColor]);
 
     // Node selection handling
     const onNodeClick = React.useCallback((event, node) => {
-        // Call the parent's onNodeSelect callback with the node data
+        // Call the parent's onNodeSelect callback with the complete node (includes id and data)
         if (onNodeSelect) {
-            onNodeSelect(node.data);
+            onNodeSelect(node);
         }
     }, [onNodeSelect]);
 
     // Selection change handling
     const onSelectionChange = React.useCallback(({ nodes: selectedNodes }) => {
         if (selectedNodes.length === 1) {
-            // Single node selected
-            if (onNodeSelect) {
-                onNodeSelect(selectedNodes[0].data);
+            // Single node selected - pass complete node
+            const selectedNode = selectedNodes[0];
+            const currentSelectedId = state.selectedNode?.id;
+            const newSelectedId = selectedNode?.id;
+
+            // Only call if the selection actually changed
+            if (onNodeSelect && currentSelectedId !== newSelectedId) {
+                onNodeSelect(selectedNode);
             }
         } else {
-            // No nodes or multiple nodes selected
-            if (onNodeSelect) {
+            // No nodes or multiple nodes selected - only call if we currently have a selection
+            if (onNodeSelect && state.selectedNode !== null) {
                 onNodeSelect(null);
             }
         }
-    }, [onNodeSelect]);
+    }, [onNodeSelect, state.selectedNode]);
 
     // Drag and drop
     const onDragOver = React.useCallback((event) => {
@@ -179,28 +194,22 @@ function Canvas({ onNodeSelect }) {
             y: event.clientY - reactFlowBounds.top,
         });
 
-        const newNode = {
-            id: `node_${String(nodeIdCounter).padStart(3, '0')}`,
-            type: 'custom',
-            position,
-            data: {
-                label: nodeData.name,
-                path: nodeData.type,
-                nodeType: nodeData.nodeType,
-                icon: nodeData.icon,
-                category: nodeData.category,
-                inputs: nodeData.inputs || {},
-                outputs: nodeData.outputs || {},
-                exec_input: nodeData.exec_input !== undefined ? nodeData.exec_input : true,
-                exec_output: nodeData.exec_output !== undefined ? nodeData.exec_output : true,
-                constants: nodeData.constants || {},
-                type: nodeData.nodeType
-            },
+        const nodeDataForFlow = {
+            label: nodeData.name,
+            path: nodeData.type,
+            nodeType: nodeData.nodeType,
+            icon: nodeData.icon,
+            category: nodeData.category,
+            inputs: nodeData.inputs || {},
+            outputs: nodeData.outputs || {},
+            exec_input: nodeData.exec_input !== undefined ? nodeData.exec_input : true,
+            exec_output: nodeData.exec_output !== undefined ? nodeData.exec_output : true,
+            constants: nodeData.constants || {},
+            type: nodeData.nodeType
         };
 
-        setNodes((nds) => nds.concat(newNode));
-        setNodeIdCounter((id) => id + 1);
-    }, [reactFlowInstance, nodeIdCounter, setNodes]);
+        actions.addNode(position, nodeDataForFlow);
+    }, [reactFlowInstance, actions]);
 
     return (
         <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -226,8 +235,8 @@ function Canvas({ onNodeSelect }) {
             />
 
             <ReactFlow
-                nodes={nodes}
-                edges={edges}
+                nodes={state.nodes}
+                edges={state.edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}

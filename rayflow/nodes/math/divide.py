@@ -18,6 +18,11 @@ class MathDivideNode(RayflowNode):
     ENABLE_ERROR_LOGGING = True  # Whether to log division errors
     DEFAULT_ERROR_VALUE = 0.0  # Default value when division by zero
     ERROR_MESSAGE_PREFIX = "Error"  # Prefix for error messages
+    ENABLE_RANGE_VALIDATION = False  # Whether to validate input ranges
+    MIN_DIVISOR_VALUE = 0.001  # Minimum allowed divisor (prevents near-zero division)
+    MAX_RESULT_VALUE = 1000000.0  # Maximum allowed result value
+    RETURN_INFINITY_ON_OVERFLOW = False  # Whether to return infinity instead of capping result
+    ENABLE_SUCCESS_LOGGING = False  # Whether to log successful operations
 
     inputs = {
         "x": float,

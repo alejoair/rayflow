@@ -47,6 +47,15 @@ async def serve_config(filename: str):
         return FileResponse(config_file, media_type="application/json")
     raise HTTPException(status_code=404, detail="Config file not found")
 
+
+@app.get("/context/{filename}")
+async def serve_context(filename: str):
+    """Serve context files"""
+    context_file = EDITOR_PATH / "context" / filename
+    if context_file.exists() and context_file.suffix == ".js":
+        return FileResponse(context_file, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Context file not found")
+
 # Include routes
 app.include_router(router, prefix="/api")
 
