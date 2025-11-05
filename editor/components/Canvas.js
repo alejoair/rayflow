@@ -148,15 +148,7 @@ function Canvas({ onNodeSelect }) {
         actions.addEdge(newEdge);
     }, [actions, typeConfig, state.nodes, getTypeColor]);
 
-    // Node selection handling
-    const onNodeClick = React.useCallback((event, node) => {
-        // Call the parent's onNodeSelect callback with the complete node (includes id and data)
-        if (onNodeSelect) {
-            onNodeSelect(node);
-        }
-    }, [onNodeSelect]);
-
-    // Selection change handling
+    // Selection change handling (replaces onNodeClick to avoid drag conflicts)
     const onSelectionChange = React.useCallback(({ nodes: selectedNodes }) => {
         if (selectedNodes.length === 1) {
             // Single node selected - pass complete node
@@ -252,7 +244,6 @@ function Canvas({ onNodeSelect }) {
                 onInit={setReactFlowInstance}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
-                onNodeClick={onNodeClick}
                 onSelectionChange={onSelectionChange}
                 nodeTypes={nodeTypes}
                 defaultEdgeOptions={{ type: 'smoothstep' }}
