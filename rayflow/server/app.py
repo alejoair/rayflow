@@ -56,6 +56,15 @@ async def serve_context(filename: str):
         return FileResponse(context_file, media_type="application/javascript")
     raise HTTPException(status_code=404, detail="Context file not found")
 
+
+@app.get("/utils/{filename}")
+async def serve_utils(filename: str):
+    """Serve utility files"""
+    utils_file = EDITOR_PATH / "utils" / filename
+    if utils_file.exists() and utils_file.suffix == ".js":
+        return FileResponse(utils_file, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Utils file not found")
+
 # Include routes
 app.include_router(router, prefix="/api")
 

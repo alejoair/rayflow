@@ -93,6 +93,7 @@ const ActionTypes = {
     SET_NODES: 'SET_NODES',
     SET_EDGES: 'SET_EDGES',
     SET_FLOW_DATA: 'SET_FLOW_DATA',
+    SET_NODE_COUNTER: 'SET_NODE_COUNTER',
 
     // Node constants
     UPDATE_NODE_CONSTANTS: 'UPDATE_NODE_CONSTANTS',
@@ -234,6 +235,12 @@ function flowReducer(state, action) {
                 edges: action.payload.edges
             };
 
+        case ActionTypes.SET_NODE_COUNTER:
+            return {
+                ...state,
+                nodeIdCounter: action.payload.counter
+            };
+
         case ActionTypes.SET_FLOW_DATA:
             return {
                 ...state,
@@ -372,6 +379,63 @@ function FlowProvider({ children }) {
         }
         loadNodesAndVariables();
     }, []);
+
+    // Auto-save hook - save canvas state when it changes
+    React.useEffect(() => {
+        // Skip auto-save during initial loading
+        if (state.loading) return;
+        
+        // Only auto-save if there are nodes or edges to save
+        if (state.nodes.length > 0 || state.edges.length > 0) {
+            window.AutoSave?.debouncedSave(state);
+        }
+    }, [state.nodes, state.edges, state.nodeIdCounter, state.loading]);
+
+    // Load auto-saved state on mount if available
+    React.useEffect(() => {
+        async function loadAutoSave() {
+            try {
+                // Check if there's auto-saved data
+                if (!window.AutoSave?.hasAutoSave()) return;
+                
+                const autoSaveInfo = window.AutoSave?.getInfo();
+                if (!autoSaveInfo) return;
+                
+                // Ask user if they want to restore (only if there's meaningful content)
+                if (autoSaveInfo.nodeCount > 0 || autoSaveInfo.edgeCount > 0) {
+                    const ageText = autoSaveInfo.age ? 
+                        Math.round(autoSaveInfo.age / 1000 / 60) + ' minutes ago' : 'recently';
+                    
+                    const shouldRestore = window.confirm(
+                        `Found auto-saved work from ${ageText}:\n` +
+                        `• ${autoSaveInfo.nodeCount} nodes\n` +
+                        `• ${autoSaveInfo.edgeCount} connections\n\n` +
+                        `Do you want to restore it?`
+                    );
+                    
+                    if (shouldRestore) {
+                        const savedState = window.AutoSave?.load();
+                        if (savedState) {
+                            dispatch({ type: ActionTypes.SET_NODES, payload: { nodes: savedState.nodes } });
+                            dispatch({ type: ActionTypes.SET_EDGES, payload: { edges: savedState.edges } });
+                            dispatch({ type: ActionTypes.SET_NODE_COUNTER, payload: { counter: savedState.nodeIdCounter } });
+                            console.log('🔄 Auto-save restored successfully');
+                        }
+                    } else {
+                        // User declined, clear the auto-save
+                        window.AutoSave?.clear();
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error loading auto-save:', error);
+            }
+        }
+        
+        // Only attempt to load auto-save after nodes are loaded
+        if (!state.loading && state.availableNodes.length > 0) {
+            loadAutoSave();
+        }
+    }, [state.loading, state.availableNodes.length]);
 
     // Action creators (helper functions)
     const actions = {
