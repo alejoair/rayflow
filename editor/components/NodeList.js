@@ -1,7 +1,9 @@
 // Node Library Component
 function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
+    const { state, actions } = useFlow();
     const [searchText, setSearchText] = React.useState('');
-    const [activeCategories, setActiveCategories] = React.useState(['base', 'math', 'variables', 'logic', 'string', 'io', 'data']);
+    const [activeCategories, setActiveCategories] = React.useState(['variables', 'base', 'math', 'logic', 'string', 'io', 'data']);
+    const [modalVisible, setModalVisible] = React.useState(false);
 
     // Group nodes by category
     const nodesByCategory = nodes.reduce((acc, node) => {
@@ -41,6 +43,22 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
     const handleCollapseChange = (keys) => {
         setActiveCategories(keys);
     };
+
+    // Handlers for variables
+    const handleCreateVariable = () => {
+        setModalVisible(true);
+    };
+
+    const handleVariableCreated = (newVariable) => {
+        actions.addVariable(newVariable);
+    };
+
+    const handleDeleteVariable = (variableId) => {
+        actions.deleteVariable(variableId);
+    };
+
+    // Get variable nodes (filtered from category "variables")
+    const variableNodes = filteredNodesByCategory['variables'] || [];
 
     const renderNodeItem = (node) => (
         <antd.List.Item
@@ -126,10 +144,12 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
         </antd.List.Item>
     );
 
-    // Create collapse items
-    const collapseItems = Object.keys(filteredNodesByCategory).map((category, index, array) => {
-        const config = categoryConfig[category] || categoryConfig.other;
-        const isLast = index === array.length - 1;
+    // Create collapse items (exclude 'variables' category - handled separately)
+    const collapseItems = Object.keys(filteredNodesByCategory)
+        .filter(category => category !== 'variables')
+        .map((category, index, array) => {
+            const config = categoryConfig[category] || categoryConfig.other;
+            const isLast = index === array.length - 1;
 
         return {
             key: category,
@@ -166,6 +186,38 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
             )
         };
     });
+
+    // Create Variables Section item
+    const variablesItem = {
+        key: 'variables',
+        label: (
+            <div style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '4px 0'
+            }}>
+                <antd.Space>
+                    <i className="fas fa-box" style={{ color: '#1890ff' }}></i>
+                    <span style={{ fontWeight: '500' }}>Variables</span>
+                </antd.Space>
+                <antd.Badge count={state.variables.length} size="small" />
+            </div>
+        ),
+        children: (
+            <VariablesSection
+                variables={state.variables}
+                variableNodes={variableNodes}
+                renderNodeItem={renderNodeItem}
+                onCreateVariable={handleCreateVariable}
+                onDeleteVariable={handleDeleteVariable}
+            />
+        )
+    };
+
+    // Combine all collapse items (variables first, then others)
+    const allCollapseItems = [variablesItem, ...collapseItems];
 
     return (
         <antd.Flex vertical style={{ height: '100%', background: '#fff' }}>
@@ -219,7 +271,7 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                             <antd.Collapse
                                 activeKey={activeCategories}
                                 onChange={handleCollapseChange}
-                                items={collapseItems}
+                                items={allCollapseItems}
                                 style={{
                                     background: 'transparent',
                                     border: 'none',
@@ -233,6 +285,14 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                     </antd.Space>
                 )}
             </antd.Flex>
+
+            {/* Create Variable Modal */}
+            <CreateVariableModal
+                visible={modalVisible}
+                onClose={() => setModalVisible(false)}
+                onCreateVariable={handleVariableCreated}
+                existingVariables={state.variables}
+            />
         </antd.Flex>
     );
 }

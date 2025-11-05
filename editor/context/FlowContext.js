@@ -1,6 +1,57 @@
 // Global Flow State Management
 const FlowContext = React.createContext();
 
+// Helper function to generate Set/Get nodes for a variable
+function generateVariableNodes(variable) {
+    const setNode = {
+        name: `Set: ${variable.name}`,
+        path: `virtual://variables/set_${variable.id}`,
+        type: "variable",
+        category: "variables",
+        icon: "fa-download",
+        description: `Set value for variable '${variable.name}'${variable.isCustom ? ' ⚠️ Custom type' : ''}`,
+        inputs: { value: variable.type },
+        outputs: {},
+        exec_input: false,
+        exec_output: false,
+        isVariable: true,
+        variableId: variable.id,
+        variableAction: "set",
+        constants: {}
+    };
+
+    const getNode = {
+        name: `Get: ${variable.name}`,
+        path: `virtual://variables/get_${variable.id}`,
+        type: "variable",
+        category: "variables",
+        icon: "fa-upload",
+        description: `Get value of variable '${variable.name}'${variable.isCustom ? ' ⚠️ Custom type' : ''}`,
+        inputs: {},
+        outputs: { value: variable.type },
+        exec_input: false,
+        exec_output: false,
+        isVariable: true,
+        variableId: variable.id,
+        variableAction: "get",
+        constants: {}
+    };
+
+    // Add custom type metadata if applicable
+    if (variable.isCustom) {
+        setNode.customType = {
+            import: variable.customImport,
+            validated: false
+        };
+        getNode.customType = {
+            import: variable.customImport,
+            validated: false
+        };
+    }
+
+    return [setNode, getNode];
+}
+
 // Initial state
 const initialState = {
     // Flow data
@@ -190,9 +241,13 @@ function flowReducer(state, action) {
             };
 
         case ActionTypes.ADD_VARIABLE:
+            const newVariable = action.payload.variable;
+            const [setNode, getNode] = generateVariableNodes(newVariable);
+
             return {
                 ...state,
-                variables: [...state.variables, action.payload.variable]
+                variables: [...state.variables, newVariable],
+                availableNodes: [...state.availableNodes, setNode, getNode]
             };
 
         case ActionTypes.UPDATE_VARIABLE:
@@ -206,9 +261,15 @@ function flowReducer(state, action) {
             };
 
         case ActionTypes.DELETE_VARIABLE:
+            const deletedVariableId = action.payload.variableId;
+
             return {
                 ...state,
-                variables: state.variables.filter(variable => variable.id !== action.payload.variableId)
+                variables: state.variables.filter(variable => variable.id !== deletedVariableId),
+                // Remove Set/Get nodes for this variable
+                availableNodes: state.availableNodes.filter(node =>
+                    !(node.isVariable && node.variableId === deletedVariableId)
+                )
             };
 
         case ActionTypes.SET_AVAILABLE_NODES:
