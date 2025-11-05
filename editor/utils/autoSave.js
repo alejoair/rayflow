@@ -144,3 +144,30 @@ window.AutoSave = {
     AUTOSAVE_KEY,
     AUTOSAVE_DELAY
 };
+
+// Debug logging
+console.log('AutoSave system initialized');
+console.log('AutoSave available at window.AutoSave:', window.AutoSave);
+
+// Test function for manual debugging
+window.AutoSave.test = function() {
+    console.log('Testing AutoSave system...');
+    const testState = {
+        nodes: [{id: 'test', data: {}}],
+        edges: [],
+        nodeIdCounter: 1
+    };
+    
+    console.log('Testing save...');
+    const saveResult = window.AutoSave.save(testState);
+    console.log('Save result:', saveResult);
+    
+    console.log('Testing load...');
+    const loadResult = window.AutoSave.load();
+    console.log('Load result:', loadResult);
+    
+    console.log('Clearing test data...');
+    window.AutoSave.clear();
+    
+    return { saveResult, loadResult };
+};

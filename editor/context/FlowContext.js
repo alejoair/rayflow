@@ -380,60 +380,118 @@ function FlowProvider({ children }) {
         loadNodesAndVariables();
     }, []);
 
-    // Auto-save hook - save canvas state when it changes
+    // Auto-save with debounced trigger to avoid loops
+    const lastSaveRef = React.useRef({ nodeCount: 0, edgeCount: 0, counter: 0 });
+    const saveTimeoutRef = React.useRef(null);
+
+    // Trigger auto-save when state changes (using a separate effect with manual comparison)
     React.useEffect(() => {
         // Skip auto-save during initial loading
         if (state.loading) return;
-        
-        // Only auto-save if there are nodes or edges to save
-        if (state.nodes.length > 0 || state.edges.length > 0) {
-            window.AutoSave?.debouncedSave(state);
+
+        const currentCounts = {
+            nodeCount: state.nodes.length,
+            edgeCount: state.edges.length,
+            counter: state.nodeIdCounter
+        };
+
+        // Only trigger save if something actually changed
+        const hasChanged = (
+            currentCounts.nodeCount !== lastSaveRef.current.nodeCount ||
+            currentCounts.edgeCount !== lastSaveRef.current.edgeCount ||
+            currentCounts.counter !== lastSaveRef.current.counter
+        );
+
+        if (hasChanged && (currentCounts.nodeCount > 0 || currentCounts.edgeCount > 0)) {
+            console.log('AUTO-SAVE: State changed, triggering save', currentCounts);
+            lastSaveRef.current = currentCounts;
+
+            // Clear previous timeout
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+
+            // Set new timeout for debounced save
+            saveTimeoutRef.current = setTimeout(() => {
+                const stateToSave = {
+                    nodes: state.nodes,
+                    edges: state.edges,
+                    nodeIdCounter: state.nodeIdCounter
+                };
+
+                if (window.AutoSave?.save) {
+                    window.AutoSave.save(stateToSave);
+                    console.log('AUTO-SAVE: Save completed');
+                }
+            }, 2000); // 2 second debounce
         }
-    }, [state.nodes, state.edges, state.nodeIdCounter, state.loading]);
+    });
 
     // Load auto-saved state on mount if available
     React.useEffect(() => {
         async function loadAutoSave() {
             try {
+                console.log('AUTO-LOAD: Checking for auto-saved data...');
+
+                // Check if AutoSave is available
+                if (!window.AutoSave) {
+                    console.log('AUTO-LOAD: AutoSave system not available');
+                    return;
+                }
+
                 // Check if there's auto-saved data
-                if (!window.AutoSave?.hasAutoSave()) return;
-                
-                const autoSaveInfo = window.AutoSave?.getInfo();
-                if (!autoSaveInfo) return;
-                
-                // Ask user if they want to restore (only if there's meaningful content)
+                if (!window.AutoSave.hasAutoSave()) {
+                    console.log('AUTO-LOAD: No auto-saved data found');
+                    return;
+                }
+
+                const autoSaveInfo = window.AutoSave.getInfo();
+                console.log('AUTO-LOAD: Found auto-save info:', autoSaveInfo);
+
+                if (!autoSaveInfo) {
+                    console.log('AUTO-LOAD: Could not get auto-save info');
+                    return;
+                }
+
+                // Automatically restore if there's meaningful content
                 if (autoSaveInfo.nodeCount > 0 || autoSaveInfo.edgeCount > 0) {
-                    const ageText = autoSaveInfo.age ? 
+                    const ageText = autoSaveInfo.age ?
                         Math.round(autoSaveInfo.age / 1000 / 60) + ' minutes ago' : 'recently';
-                    
-                    const shouldRestore = window.confirm(
-                        `Found auto-saved work from ${ageText}:\n` +
-                        `• ${autoSaveInfo.nodeCount} nodes\n` +
-                        `• ${autoSaveInfo.edgeCount} connections\n\n` +
-                        `Do you want to restore it?`
-                    );
-                    
-                    if (shouldRestore) {
-                        const savedState = window.AutoSave?.load();
-                        if (savedState) {
-                            dispatch({ type: ActionTypes.SET_NODES, payload: { nodes: savedState.nodes } });
-                            dispatch({ type: ActionTypes.SET_EDGES, payload: { edges: savedState.edges } });
-                            dispatch({ type: ActionTypes.SET_NODE_COUNTER, payload: { counter: savedState.nodeIdCounter } });
-                            console.log('🔄 Auto-save restored successfully');
-                        }
+
+                    console.log('AUTO-LOAD: Automatically restoring', autoSaveInfo.nodeCount, 'nodes and', autoSaveInfo.edgeCount, 'edges from', ageText);
+
+                    const savedState = window.AutoSave.load();
+                    console.log('AUTO-LOAD: Loaded state:', savedState);
+
+                    if (savedState) {
+                        dispatch({ type: ActionTypes.SET_NODES, payload: { nodes: savedState.nodes } });
+                        dispatch({ type: ActionTypes.SET_EDGES, payload: { edges: savedState.edges } });
+                        dispatch({ type: ActionTypes.SET_NODE_COUNTER, payload: { counter: savedState.nodeIdCounter } });
+                        console.log('AUTO-LOAD: State restored successfully');
+
+                        // Show a discrete success message
+                        setTimeout(() => {
+                            if (window.antd?.message) {
+                                window.antd.message.success(`Canvas restored with ${autoSaveInfo.nodeCount} nodes from ${ageText}`);
+                            }
+                        }, 1000);
                     } else {
-                        // User declined, clear the auto-save
-                        window.AutoSave?.clear();
+                        console.log('AUTO-LOAD: Failed to load saved state');
                     }
+                } else {
+                    console.log('AUTO-LOAD: Auto-save found but no meaningful content');
                 }
             } catch (error) {
-                console.error('❌ Error loading auto-save:', error);
+                console.error('AUTO-LOAD: Error loading auto-save:', error);
             }
         }
-        
+
         // Only attempt to load auto-save after nodes are loaded
         if (!state.loading && state.availableNodes.length > 0) {
+            console.log('AUTO-LOAD: Conditions met, attempting to load auto-save');
             loadAutoSave();
+        } else {
+            console.log('AUTO-LOAD: Waiting for conditions - loading:', state.loading, 'availableNodes:', state.availableNodes.length);
         }
     }, [state.loading, state.availableNodes.length]);
 

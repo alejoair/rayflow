@@ -183,11 +183,16 @@ function Canvas({ onNodeSelect }) {
 
     const onDrop = React.useCallback((event) => {
         event.preventDefault();
+        console.log('NODE DROP: Event triggered');
 
         const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
         const nodeData = JSON.parse(event.dataTransfer.getData('application/reactflow'));
+        console.log('NODE DROP: nodeData parsed:', nodeData);
 
-        if (!nodeData || !reactFlowInstance) return;
+        if (!nodeData || !reactFlowInstance) {
+            console.log('NODE DROP: Missing nodeData or reactFlowInstance');
+            return;
+        }
 
         const position = reactFlowInstance.project({
             x: event.clientX - reactFlowBounds.left,
@@ -208,7 +213,9 @@ function Canvas({ onNodeSelect }) {
             type: nodeData.nodeType
         };
 
+        console.log('NODE DROP: Calling actions.addNode with position:', position, 'data:', nodeDataForFlow);
         actions.addNode(position, nodeDataForFlow);
+        console.log('NODE DROP: actions.addNode called successfully');
     }, [reactFlowInstance, actions]);
 
     return (

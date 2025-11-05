@@ -3,27 +3,95 @@ function RayFlowEditor() {
     // Use global state instead of local state
     const { state, actions } = useFlow();
 
-    const handleSave = () => {
+    const handleManualSave = () => {
         // Check if there are nodes to save
         if (state.nodes.length === 0) {
             antd.message.warning('No nodes to save. Create some nodes first!');
             return;
         }
 
-        // Show save dialog
+        const stateToSave = {
+            nodes: state.nodes,
+            edges: state.edges,
+            nodeIdCounter: state.nodeIdCounter
+        };
+
+        if (window.AutoSave?.save) {
+            const success = window.AutoSave.save(stateToSave);
+            if (success) {
+                antd.message.success('Canvas saved successfully!');
+                console.log('MANUAL SAVE: Canvas saved with', state.nodes.length, 'nodes and', state.edges.length, 'edges');
+            } else {
+                antd.message.error('Failed to save canvas');
+            }
+        } else {
+            antd.message.error('AutoSave system not available');
+        }
+    };
+
+    const handleExportFlow = () => {
+        // Check if there are nodes to export
+        if (state.nodes.length === 0) {
+            antd.message.warning('No nodes to export. Create some nodes first!');
+            return;
+        }
+
+        // Show export dialog
         antd.Modal.confirm({
-            title: 'Save Flow',
+            title: 'Export Flow',
             content: (
                 <div>
-                    <p>Save this flow as a JSON file?</p>
+                    <p>Export this flow as a JSON file?</p>
                     <p><strong>Nodes:</strong> {state.nodes.length}</p>
                     <p><strong>Connections:</strong> {state.edges.length}</p>
                 </div>
             ),
-            okText: 'Save',
+            okText: 'Export',
             cancelText: 'Cancel',
             onOk: () => performSave()
         });
+    };
+
+    const handleClearCanvas = () => {
+        // Check if there are nodes to clear
+        if (state.nodes.length === 0) {
+            antd.message.info('Canvas is already empty');
+            return;
+        }
+
+        // Show confirmation dialog
+        antd.Modal.confirm({
+            title: 'Clear Canvas',
+            content: (
+                <div>
+                    <p>Are you sure you want to clear the entire canvas?</p>
+                    <p><strong>This will remove:</strong></p>
+                    <p>• {state.nodes.length} nodes</p>
+                    <p>• {state.edges.length} connections</p>
+                    <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>This action cannot be undone!</p>
+                </div>
+            ),
+            okText: 'Clear Canvas',
+            okType: 'danger',
+            cancelText: 'Cancel',
+            onOk: () => performClear()
+        });
+    };
+
+    const performClear = () => {
+        // Clear all canvas state
+        actions.setNodes([]);
+        actions.setEdges([]);
+        actions.deselectNode();
+
+        // Also clear the auto-save so it doesn't restore an empty canvas
+        if (window.AutoSave?.clear) {
+            window.AutoSave.clear();
+        }
+
+        // Show success message
+        antd.message.success('Canvas cleared successfully');
+        console.log('CLEAR CANVAS: Canvas cleared by user');
     };
 
     const performSave = () => {
@@ -127,8 +195,19 @@ function RayFlowEditor() {
                 </antd.Space>
 
                 <antd.Space>
-                    <antd.Button type="primary" onClick={handleSave}>
-                        Save Flow
+                    <antd.Button type="default" onClick={handleManualSave}>
+                        Save Canvas
+                    </antd.Button>
+                    <antd.Button type="primary" onClick={handleExportFlow}>
+                        Export Flow
+                    </antd.Button>
+                    <antd.Button
+                        type="default"
+                        danger
+                        icon={<i className="fas fa-trash"></i>}
+                        onClick={handleClearCanvas}
+                    >
+                        Clear Canvas
                     </antd.Button>
                     <antd.Button type="primary" style={{ background: '#52c41a' }} onClick={handleRun}>
                         Run Flow
