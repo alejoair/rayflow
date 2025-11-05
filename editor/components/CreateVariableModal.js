@@ -142,7 +142,7 @@ function CreateVariableModal({ visible, onClose, onCreateVariable, existingVaria
         }
     };
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!validateName(variableName)) {
             return;
         }
@@ -152,19 +152,58 @@ function CreateVariableModal({ visible, onClose, onCreateVariable, existingVaria
             return;
         }
 
-        const newVariable = {
-            id: `var_${Date.now()}`,
-            name: variableName,
-            type: variableType,
-            defaultValue: defaultValue,
-            isCustom: variableType === 'custom',
-            customImport: variableType === 'custom' ? customImport : null,
-            createdAt: new Date().toISOString()
+        // Prepare API request data
+        const requestData = {
+            variable_name: variableName,
+            value_type: variableType,
+            default_value: variableType === 'custom' ? null : String(defaultValue),
+            description: `Variable ${variableName}`,
+            icon: 'fa-variable',
+            category: 'user-created',
+            is_custom: variableType === 'custom',
+            custom_import: variableType === 'custom' ? customImport : null,
+            custom_type_hint: null, // Could be extracted from import in future
+            tags: ['user-created'],
+            is_readonly: false
         };
 
-        onCreateVariable(newVariable);
-        onClose();
-        antd.message.success(`Variable '${variableName}' created successfully!`);
+        try {
+            // Call API to create variable file
+            const response = await fetch('/api/variables/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to create variable');
+            }
+
+            const responseData = await response.json();
+
+            // Create variable object for UI state
+            const newVariable = {
+                id: `var_${Date.now()}`,
+                name: variableName,
+                type: variableType,
+                defaultValue: defaultValue,
+                isCustom: variableType === 'custom',
+                customImport: variableType === 'custom' ? customImport : null,
+                createdAt: new Date().toISOString(),
+                filePath: responseData.file_path // Store the file path from API
+            };
+
+            onCreateVariable(newVariable);
+            onClose();
+            antd.message.success(`Variable '${variableName}' created successfully! File: ${responseData.file_path}`);
+
+        } catch (error) {
+            console.error('Error creating variable:', error);
+            antd.message.error(`Failed to create variable: ${error.message}`);
+        }
     };
 
     const typeOptions = [

@@ -24,6 +24,29 @@ class NodeFile(BaseModel):
     constants: Optional[dict] = None  # Class constants (uppercase variables)
 
 
+class CreateVariableRequest(BaseModel):
+    """Request model for creating a new variable"""
+    variable_name: str
+    value_type: str  # "int", "float", "str", "bool", "dict", "list", "custom"
+    default_value: Optional[str] = None  # JSON string for complex types
+    description: Optional[str] = ""
+    icon: Optional[str] = "fa-variable"
+    category: Optional[str] = "general"
+    is_custom: Optional[bool] = False
+    custom_import: Optional[str] = None
+    custom_type_hint: Optional[str] = None
+    tags: Optional[List[str]] = []
+    is_readonly: Optional[bool] = False
+
+
+class CreateVariableResponse(BaseModel):
+    """Response model for variable creation"""
+    success: bool
+    message: str
+    file_path: Optional[str] = None
+    variable_name: str
+
+
 def get_working_directory() -> Path:
     """Get the working directory where rayflow was called"""
     cwd = os.environ.get("RAYFLOW_CWD")
@@ -195,3 +218,124 @@ def list_nodes():
         user_nodes_dir.mkdir(parents=True, exist_ok=True)
 
     return nodes
+
+
+def generate_variable_python_code(request: CreateVariableRequest) -> str:
+    """Generate Python code for a variable class based on the request"""
+    class_name = f"{request.variable_name.title().replace('_', '')}Variable"
+    
+    # Start building the code
+    code_lines = [
+        "from rayflow import RayflowVariable",
+        "",
+        f"class {class_name}(RayflowVariable):",
+    ]
+    
+    # Add description as docstring if provided
+    if request.description:
+        code_lines.extend([
+            f'    """{request.description}"""',
+            ""
+        ])
+    
+    # Required metadata
+    code_lines.extend([
+        f'    variable_name = "{request.variable_name}"',
+        f'    value_type = "{request.value_type}"'
+    ])
+    
+    # Default value handling
+    if request.default_value is not None:
+        # Parse the default value based on type
+        if request.value_type == "str":
+            code_lines.append(f'    default_value = "{request.default_value}"')
+        elif request.value_type in ["int", "float", "bool"]:
+            code_lines.append(f'    default_value = {request.default_value}')
+        elif request.value_type in ["dict", "list"]:
+            # For complex types, use the raw value (should be valid Python)
+            code_lines.append(f'    default_value = {request.default_value}')
+        else:  # custom or other
+            code_lines.append(f'    default_value = {request.default_value}')
+    else:
+        code_lines.append('    default_value = None')
+    
+    # Optional metadata
+    if request.description:
+        code_lines.append(f'    description = "{request.description}"')
+    
+    if request.icon and request.icon != "fa-variable":
+        code_lines.append(f'    icon = "{request.icon}"')
+    
+    if request.category and request.category != "general":
+        code_lines.append(f'    category = "{request.category}"')
+    
+    # Custom type configuration
+    if request.is_custom:
+        code_lines.append('    is_custom = True')
+        if request.custom_import:
+            code_lines.append(f'    custom_import = "{request.custom_import}"')
+        if request.custom_type_hint:
+            code_lines.append(f'    custom_type_hint = "{request.custom_type_hint}"')
+    
+    # Tags
+    if request.tags:
+        tags_str = ', '.join([f'"{tag}"' for tag in request.tags])
+        code_lines.append(f'    tags = [{tags_str}]')
+    
+    # Readonly
+    if request.is_readonly:
+        code_lines.append('    is_readonly = True')
+    
+    return '\n'.join(code_lines)
+
+
+@router.post("/variables/create", response_model=CreateVariableResponse)
+def create_variable(request: CreateVariableRequest):
+    """Create a new variable file in the variables directory"""
+    try:
+        # Validate variable name
+        if not request.variable_name.isidentifier():
+            raise HTTPException(
+                status_code=400, 
+                detail="Variable name must be a valid Python identifier"
+            )
+        
+        # Get working directory
+        cwd = get_working_directory()
+        variables_dir = cwd / "variables"
+        
+        # Create variables directory if it doesn't exist
+        variables_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate file path
+        file_path = variables_dir / f"{request.variable_name}.py"
+        
+        # Check if file already exists
+        if file_path.exists():
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Variable '{request.variable_name}' already exists"
+            )
+        
+        # Generate Python code
+        python_code = generate_variable_python_code(request)
+        
+        # Write to file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(python_code)
+        
+        return CreateVariableResponse(
+            success=True,
+            message=f"Variable '{request.variable_name}' created successfully",
+            file_path=str(file_path.relative_to(cwd)),
+            variable_name=request.variable_name
+        )
+        
+    except HTTPException:
+        # Re-raise HTTPException as-is
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create variable: {str(e)}"
+        )
