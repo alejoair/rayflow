@@ -29,8 +29,22 @@ function Canvas({ onCanvasClick }) {
                     style={{ top: '70%', background: '#1890ff', width: '10px', height: '10px' }}
                 />
 
-                {/* Label del nodo */}
-                <div>{data.label}</div>
+                {/* Label del nodo con icono */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                }}>
+                    {data.icon && (
+                        <i className={`fas ${data.icon}`} style={{
+                            color: '#1890ff',
+                            fontSize: '16px'
+                        }}></i>
+                    )}
+                    <span>{data.label ? data.label.charAt(0).toUpperCase() + data.label.slice(1) : 'Unknown'}</span>
+                </div>
 
                 {/* Handles de salida (derecha) */}
                 <Handle
@@ -57,19 +71,31 @@ function Canvas({ onCanvasClick }) {
         {
             id: '1',
             type: 'custom',
-            data: { label: 'Start Node' },
+            data: {
+                label: 'start',
+                icon: 'fa-play',
+                category: 'base'
+            },
             position: { x: 50, y: 100 },
         },
         {
             id: '2',
             type: 'custom',
-            data: { label: 'Process Node' },
+            data: {
+                label: 'add',
+                icon: 'fa-plus',
+                category: 'math'
+            },
             position: { x: 300, y: 100 },
         },
         {
             id: '3',
             type: 'custom',
-            data: { label: 'End Node' },
+            data: {
+                label: 'return',
+                icon: 'fa-flag-checkered',
+                category: 'base'
+            },
             position: { x: 550, y: 100 },
         },
     ];
@@ -220,7 +246,9 @@ function Canvas({ onCanvasClick }) {
                 data: {
                     label: nodeData.name,
                     path: nodeData.type,
-                    nodeType: nodeData.nodeType
+                    nodeType: nodeData.nodeType,
+                    icon: nodeData.icon,
+                    category: nodeData.category
                 },
             };
 

@@ -8,6 +8,11 @@ from rayflow import RayflowNode
 class MathAddNode(RayflowNode):
     """Add two numbers together."""
 
+    # Metadata for UI
+    icon = "fa-plus"
+    category = "math"
+    description = "Adds two numbers together and returns the result."
+
     inputs = {
         "x": int,
         "y": int

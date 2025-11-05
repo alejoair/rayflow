@@ -8,6 +8,11 @@ from rayflow import RayflowNode
 class MathMultiplyNode(RayflowNode):
     """Multiply two numbers together."""
 
+    # Metadata for UI
+    icon = "fa-times"
+    category = "math"
+    description = "Multiplies two numbers together and returns the result."
+
     inputs = {
         "x": int,
         "y": int

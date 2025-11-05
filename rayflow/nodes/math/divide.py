@@ -8,6 +8,11 @@ from rayflow import RayflowNode
 class MathDivideNode(RayflowNode):
     """Divide two numbers with error handling."""
 
+    # Metadata for UI
+    icon = "fa-divide"
+    category = "math"
+    description = "Divides two numbers with error handling for division by zero."
+
     inputs = {
         "x": float,
         "y": float
