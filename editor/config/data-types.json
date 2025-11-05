@@ -1,0 +1,70 @@
+{
+  "dataTypes": {
+    "int": {
+      "color": "#4CAF50",
+      "description": "Integer numbers",
+      "fieldType": "number",
+      "inputProps": { "step": 1 }
+    },
+    "float": {
+      "color": "#2196F3",
+      "description": "Floating point numbers",
+      "fieldType": "number",
+      "inputProps": { "step": 0.1 }
+    },
+    "str": {
+      "color": "#FF9800",
+      "description": "Text strings",
+      "fieldType": "text",
+      "inputProps": {}
+    },
+    "bool": {
+      "color": "#E91E63",
+      "description": "Boolean values (true/false)",
+      "fieldType": "switch",
+      "inputProps": {}
+    },
+    "dict": {
+      "color": "#9C27B0",
+      "description": "Dictionary/object data",
+      "fieldType": "textarea",
+      "inputProps": { "rows": 3, "placeholder": "JSON object" }
+    },
+    "list": {
+      "color": "#00BCD4",
+      "description": "Array/list data",
+      "fieldType": "textarea",
+      "inputProps": { "rows": 3, "placeholder": "JSON array" }
+    },
+    "any": {
+      "color": "#607D8B",
+      "description": "Any data type",
+      "fieldType": "text",
+      "inputProps": {}
+    },
+    "exec": {
+      "color": "#FFFFFF",
+      "description": "Execution flow signal",
+      "fieldType": "none",
+      "inputProps": {}
+    }
+  },
+  "settings": {
+    "handleSize": {
+      "exec": 12,
+      "data": 10
+    },
+    "connectionWidth": {
+      "exec": 3,
+      "data": 2
+    },
+    "defaultOpacity": 1.0,
+    "hoverOpacity": 0.8,
+    "customNodeIndicator": {
+      "color": "#FF6B35",
+      "iconColor": "#FF6B35",
+      "borderColor": "#FF6B35",
+      "badgeText": "CUSTOM"
+    }
+  }
+}

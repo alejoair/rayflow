@@ -28,11 +28,14 @@ Sistema de ejecución de flujos visuales basado en nodos, inspirado en Blueprint
 
 ### Componentes Principales
 
-1. **Editor Visual** (Frontend - React + Vite)
-   - Interface gráfica para construir flujos
+1. **Editor Visual** (Frontend - React + Ant Design)
+   - Interface gráfica profesional con Ant Design 5.12.8
    - Lee nodos disponibles desde `nodes/*.py`
    - Permite instanciar múltiples veces el mismo nodo
    - Editor de código integrado (Monaco/Ace) para modificar nodos
+   - Sistema de layout collapsible con Sider components
+   - Tree component para navegación de nodos con search integrado
+   - Inspector con Cards y Descriptions para propiedades
    - Genera/guarda `miflujo.json`
 
 2. **Orquestador** (Backend - Ray)
@@ -1002,16 +1005,14 @@ rayflow/
 │   ├── graph.py                # Parser del JSON
 │   └── cli.py                  # CLI (create, run)
 │
-├── editor/                     # Frontend React + Vite
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── NodeEditor.jsx  # Canvas de nodos
-│   │   │   ├── NodeLibrary.jsx # Lista de nodos disponibles
-│   │   │   └── CodeEditor.jsx  # Monaco/Ace para editar .py
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── package.json
-│   └── vite.config.js
+├── editor/                     # Frontend React + Ant Design (CDN)
+│   ├── components/
+│   │   ├── Canvas.js          # Área de trabajo canvas
+│   │   ├── NodeList.js        # Tree component con search integrado
+│   │   ├── Inspector.js       # Cards y Descriptions para propiedades
+│   │   └── Header.js          # Header component con controles
+│   ├── app.js                 # App principal con Layout de Ant Design
+│   └── index.html             # HTML con CDNs de React y Ant Design
 │
 ├── nodes/                      # Nodos del usuario
 │   ├── math_add.py
@@ -1065,25 +1066,40 @@ rayflow/
 ### Comandos
 
 ```bash
-# Iniciar editor visual
-rayflow create
+# Iniciar editor visual (lanza servidor backend + frontend)
+rayflow create                    # Usa puerto 8000 por defecto
+rayflow create --port 8080        # Puerto personalizado
+rayflow create --working-path ./my-project  # Directorio de trabajo personalizado
 
-# Ejecutar un flujo
-rayflow run miflujo.json
+# La implementación actual incluye:
+# - FastAPI backend en puerto especificado
+# - Editor React + Ant Design servido desde el backend
+# - API REST en /api/nodes para listar nodos disponibles
+# - Servir archivos estáticos (components/*.js, app.js, index.html)
 
-# Listar nodos disponibles
-rayflow list-nodes
-
-# Crear template de nodo nuevo
-rayflow new-node my_custom_node
+# Comandos futuros (planificados):
+# rayflow run miflujo.json         # Ejecutar un flujo
+# rayflow list-nodes               # Listar nodos disponibles
+# rayflow new-node my_custom_node  # Crear template de nodo nuevo
 ```
 
 ## Editor Visual - Features
 
-### Vista Principal
-- **Canvas:** Área de trabajo con zoom/pan
-- **Librería de Nodos:** Sidebar izquierdo con nodos de `nodes/`
-- **Inspector:** Sidebar derecho con propiedades del nodo seleccionado
+### Vista Principal (Implementación Actual con Ant Design)
+- **Layout:** Ant Design Layout system con Header, Sider, Content
+- **Canvas:** Área de trabajo central con patrón de puntos de fondo
+- **Node Library:** Sidebar izquierdo collapsible con:
+  - Tree component para navegación jerárquica de nodos
+  - Select dropdown para filtrar por categoría (builtin/user)
+  - Input.Search integrado para búsqueda en tiempo real
+  - Tags para identificar tipos de nodos
+  - Tooltips en vista colapsada
+- **Inspector:** Sidebar derecho collapsible con:
+  - Cards organizadas por secciones
+  - Descriptions component para propiedades detalladas
+  - Avatar component para identificación visual
+  - Empty state cuando no hay nodo seleccionado
+  - Editor de código placeholder integrado
 
 ### Instanciación de Nodos
 1. Usuario ve lista de archivos `.py` en `nodes/`
@@ -1154,51 +1170,90 @@ rayflow new-node my_custom_node
 - Personalizar orquestador: subclasear y override
 - Integrar con sistemas externos: crear nodos de I/O
 
-## Próximos Pasos (Implementación)
+## Estado Actual de Implementación
 
-### MVP (Minimum Viable Product)
+### ✅ Completado
+
+1. **Arquitectura del Proyecto:**
+   - [x] Estructura de directorios rayflow/
+   - [x] CLI básico con Click
+   - [x] FastAPI backend con rutas API
+   - [x] Servidor de archivos estáticos integrado
+
+2. **CLI y Backend:**
+   - [x] `rayflow create` comando funcional
+   - [x] Opciones --port y --working-path
+   - [x] FastAPI backend con CORS
+   - [x] API /api/nodes para listar nodos built-in y user
+   - [x] Servir editor desde backend
+   - [x] Environment variables para paths
+
+3. **Editor Visual con Ant Design:**
+   - [x] Layout principal con Ant Design Layout/Sider/Header
+   - [x] Node Library con Tree component y search
+   - [x] Inspector con Cards y Descriptions
+   - [x] Canvas básico con patrón de puntos
+   - [x] Sidebars collapsibles nativos de Ant Design
+   - [x] React 18 + Ant Design 5.12.8 via CDN
+   - [x] Componentes distribuidos en archivos separados
+
+4. **Nodos Built-in:**
+   - [x] Estructura rayflow/nodes/math/
+   - [x] Nodos matemáticos básicos (add, multiply, divide)
+   - [x] Clasificación automática built-in vs user nodes
+
+### 🚧 En Progreso / Pendiente
 
 1. **Librería Core:**
-   - [ ] Clase `RayflowNode` base
-   - [ ] Orquestador simple (ejecución secuencial)
-   - [ ] Parser de JSON
+   - [ ] Clase `RayflowNode` base funcional
+   - [ ] Orquestador Ray
+   - [ ] Parser de JSON de grafos
+   - [ ] Sistema de señales exec + data
 
-2. **CLI Básico:**
-   - [ ] `rayflow run` funcional
-   - [ ] Carga dinámica de nodos
+2. **Editor Visual - Funcionalidad:**
+   - [ ] Canvas interactivo con drag & drop
+   - [ ] Crear instancias de nodos en canvas
+   - [ ] Sistema de conexiones entre nodos
+   - [ ] Guardar/cargar flujos JSON
+   - [ ] Editor de código integrado (Monaco)
 
-3. **Editor Visual:**
-   - [ ] Canvas básico con react-flow o similar
-   - [ ] Instanciar nodos desde `nodes/`
-   - [ ] Guardar/cargar JSON
+3. **Orquestación y Ejecución:**
+   - [ ] `rayflow run` comando
+   - [ ] Integración con Ray para distribución
+   - [ ] Sistema de variables globales
+   - [ ] Nodos START y RETURN
+   - [ ] Modo API server para flujos
 
-4. **Nodos Ejemplo:**
-   - [ ] Math (add, multiply, etc.)
-   - [ ] String operations
-   - [ ] Print/Debug
+## Próximos Pasos Inmediatos
 
-### Fase 2
+### Fase 1: Canvas Interactivo
+1. Integrar react-flow o librería similar para canvas
+2. Implementar drag & drop desde Node Library
+3. Sistema básico de conexiones
+4. Guardar estado en JSON
 
-- [ ] Editor de código integrado (Monaco)
-- [ ] Validación de tipos en conexiones
-- [ ] Ejecución en tiempo real desde editor
-- [ ] Hot reload de nodos modificados
+### Fase 2: Backend de Ejecución
+1. Implementar clase RayflowNode
+2. Orquestador simple (secuencial)
+3. Comando `rayflow run`
+4. Integración básica con Ray
 
-### Fase 3
+### Fase 3: Características Avanzadas
+1. Editor de código Monaco integrado
+2. Sistema exec + data completo
+3. Debugging visual
+4. Modo API server
 
-- [ ] Sistema exec + data separado (como UE Blueprint)
-- [ ] Nodos de control de flujo (if/else, loops)
-- [ ] Debugging visual (breakpoints, inspección de datos)
-- [ ] Exportar flujo a Python ejecutable standalone
 
 ## Tecnologías
 
-- **Backend:** Python 3.10+, Ray 2.x
-- **Frontend:** React 18, Vite, TypeScript
-- **Editor de Nodos:** react-flow, reactflow o xyflow
-- **Editor de Código:** Monaco Editor (VSCode engine)
-- **Serialización:** JSON estándar
-- **CLI:** Click o Typer
+- **Backend:** Python 3.10+, FastAPI, Uvicorn
+- **Frontend:** React 18 (CDN), Ant Design 5.12.8, Tailwind CSS (para Canvas)
+- **UI Framework:** Ant Design para componentes profesionales
+- **Editor de Código:** Placeholder (futuro: Monaco Editor)
+- **Serialización:** JSON estándar, Pydantic models
+- **CLI:** Click (implementado)
+- **Distribución:** Ray 2.x (planificado para orquestador)
 
 ## Consideraciones Técnicas
 
