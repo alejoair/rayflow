@@ -293,7 +293,8 @@ function NodeComponent({ data, selected }) {
                     border: '2px solid #1a1a1a',
                     zIndex: 10,
                     textShadow: '0 1px 2px rgba(0,0,0,0.7)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    pointerEvents: 'none'
                 }}>
                     {customIndicator.badgeText}
                 </div>
