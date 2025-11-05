@@ -143,7 +143,7 @@ function RayFlowEditor() {
                 </antd.Space>
             </antd.Layout.Header>
 
-            <antd.Layout>
+            <antd.Layout style={{ height: 'calc(100vh - 64px)' }}>
                 {/* Left Sidebar - Node Library */}
                 <antd.Layout.Sider
                     width={320}
@@ -162,7 +162,7 @@ function RayFlowEditor() {
                 </antd.Layout.Sider>
 
                 {/* Main Content - Canvas */}
-                <antd.Layout.Content style={{ background: '#f5f5f5', height: 'calc(100vh - 64px)', display: 'flex' }}>
+                <antd.Layout.Content style={{ background: '#f5f5f5', display: 'flex' }}>
                     <Canvas onNodeSelect={handleNodeSelect} />
                 </antd.Layout.Content>
 

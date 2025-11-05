@@ -1,7 +1,7 @@
 // Node Library Component
 function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
-    const [searchText, setSearchText] = useState('');
-    const [activeCategories, setActiveCategories] = useState(['base', 'math', 'variables', 'logic', 'string', 'io', 'data']);
+    const [searchText, setSearchText] = React.useState('');
+    const [activeCategories, setActiveCategories] = React.useState(['base', 'math', 'variables', 'logic', 'string', 'io', 'data']);
 
     // Group nodes by category
     const nodesByCategory = nodes.reduce((acc, node) => {
@@ -183,7 +183,7 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                 />
             </antd.Flex>
 
-            <antd.Flex flex={1} style={{ padding: '4px 8px', overflow: 'hidden', width: '100%' }}>
+            <antd.Flex flex={1} style={{ padding: '4px 8px', overflow: 'auto' }}>
                 {loading && (
                     <antd.Flex
                         vertical
@@ -209,7 +209,7 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                 )}
 
                 {!loading && !error && (
-                    <>
+                    <antd.Space direction="vertical" style={{ width: '100%' }} size="small">
                         {Object.keys(filteredNodesByCategory).length === 0 ? (
                             <antd.Empty
                                 description="No nodes found. Create .py files in the nodes/ directory."
@@ -230,7 +230,7 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                                 expandIconPosition="end"
                             />
                         )}
-                    </>
+                    </antd.Space>
                 )}
             </antd.Flex>
         </antd.Flex>
