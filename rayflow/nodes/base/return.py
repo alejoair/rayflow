@@ -21,14 +21,15 @@ class ReturnNode(RayflowNode):
     category = "base"
     description = "Exit point that terminates workflow execution and returns results."
 
-    # RETURN nodes accept any inputs
-    inputs = {
-        "exec": "execution_flow",  # Execution flow input
-        "data": "any"  # Any data to return
-    }
+    # RETURN nodes accept any inputs (dynamic based on config)
+    inputs = {}
 
     # RETURN nodes don't output to other nodes (they terminate the flow)
     outputs = {}
+
+    # Execution flow configuration
+    exec_input = True    # RETURN nodes need exec input to be triggered
+    exec_output = False  # RETURN nodes don't provide exec output (they terminate)
 
     def __init__(self, config=None):
         super().__init__(config)

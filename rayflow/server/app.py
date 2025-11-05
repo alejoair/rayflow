@@ -38,6 +38,15 @@ async def serve_app_js():
         return FileResponse(app_file, media_type="application/javascript")
     raise HTTPException(status_code=404, detail="App file not found")
 
+
+@app.get("/config/{filename}")
+async def serve_config(filename: str):
+    """Serve configuration files"""
+    config_file = EDITOR_PATH / "config" / filename
+    if config_file.exists() and config_file.suffix == ".json":
+        return FileResponse(config_file, media_type="application/json")
+    raise HTTPException(status_code=404, detail="Config file not found")
+
 # Include routes
 app.include_router(router, prefix="/api")
 

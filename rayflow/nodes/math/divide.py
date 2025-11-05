@@ -23,6 +23,10 @@ class MathDivideNode(RayflowNode):
         "message": str
     }
 
+    # Execution flow configuration
+    exec_input = True    # Math nodes need exec input to be triggered
+    exec_output = True   # Math nodes provide exec output to continue flow
+
     def process(self, **inputs):
         """Divide x by y."""
         x = inputs["x"]

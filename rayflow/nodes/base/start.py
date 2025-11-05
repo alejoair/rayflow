@@ -24,9 +24,11 @@ class StartNode(RayflowNode):
     inputs = {}
 
     # START nodes always output what they receive
-    outputs = {
-        "exec": "execution_flow"  # Execution flow output
-    }
+    outputs = {}
+
+    # Execution flow configuration
+    exec_input = False   # START nodes don't need exec input (they start the flow)
+    exec_output = True   # START nodes always provide exec output
 
     def __init__(self, config=None):
         super().__init__(config)

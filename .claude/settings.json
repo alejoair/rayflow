@@ -4,5 +4,12 @@
     "ANTHROPIC_BASE_URL": "http://192.168.59.102:8123/",
     "ANTHROPIC_MODEL": "claude-sonnet-4",
     "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-5-haiku"
+  },
+  "permissions": {
+    "deny": [
+      "Read",
+      "Search",
+      "Explore"
+    ]
   }
 }

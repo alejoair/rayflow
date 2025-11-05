@@ -62,7 +62,11 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                     name: node.name,
                     nodeType: node.type,
                     icon: node.icon,
-                    category: node.category
+                    category: node.category,
+                    inputs: node.inputs || {},
+                    outputs: node.outputs || {},
+                    exec_input: node.exec_input !== undefined ? node.exec_input : true,
+                    exec_output: node.exec_output !== undefined ? node.exec_output : true
                 }));
                 e.dataTransfer.effectAllowed = 'move';
             }}

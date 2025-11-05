@@ -1,0 +1,48 @@
+{
+  "dataTypes": {
+    "int": {
+      "color": "#4CAF50",
+      "description": "Integer numbers"
+    },
+    "float": {
+      "color": "#2196F3",
+      "description": "Floating point numbers"
+    },
+    "str": {
+      "color": "#FF9800",
+      "description": "Text strings"
+    },
+    "bool": {
+      "color": "#E91E63",
+      "description": "Boolean values (true/false)"
+    },
+    "dict": {
+      "color": "#9C27B0",
+      "description": "Dictionary/object data"
+    },
+    "list": {
+      "color": "#00BCD4",
+      "description": "Array/list data"
+    },
+    "any": {
+      "color": "#607D8B",
+      "description": "Any data type"
+    },
+    "exec": {
+      "color": "#FFFFFF",
+      "description": "Execution flow signal"
+    }
+  },
+  "settings": {
+    "handleSize": {
+      "exec": 12,
+      "data": 10
+    },
+    "connectionWidth": {
+      "exec": 3,
+      "data": 2
+    },
+    "defaultOpacity": 1.0,
+    "hoverOpacity": 0.8
+  }
+}

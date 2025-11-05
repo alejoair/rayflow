@@ -11,11 +11,17 @@ class RayflowNode:
     Users must:
     - Define `inputs` dict (name: type)
     - Define `outputs` dict (name: type)
+    - Define `exec_input` bool (default: True) - whether node needs exec input
+    - Define `exec_output` bool (default: True) - whether node provides exec output
     - Implement `process(**inputs)` method that returns dict of outputs
     """
 
     inputs = {}
     outputs = {}
+
+    # Execution flow configuration
+    exec_input = True    # Whether this node needs execution signal input
+    exec_output = True   # Whether this node provides execution signal output
 
     def __init__(self, store_ref=None, config=None):
         """

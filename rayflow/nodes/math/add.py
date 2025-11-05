@@ -22,6 +22,10 @@ class MathAddNode(RayflowNode):
         "result": int
     }
 
+    # Execution flow configuration
+    exec_input = True    # Math nodes need exec input to be triggered
+    exec_output = True   # Math nodes provide exec output to continue flow
+
     def process(self, **inputs):
         """Add x and y."""
         result = inputs["x"] + inputs["y"]
