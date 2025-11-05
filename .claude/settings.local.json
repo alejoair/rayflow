@@ -7,6 +7,9 @@
       "mcp__mcp-code-editor__check_console_tool"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\Users\\Usuario\\Documents\\test-rayflow\\"
+    ]
   }
 }
