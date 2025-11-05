@@ -391,26 +391,29 @@ def generate_variable_python_code(request: CreateVariableRequest) -> str:
     if request.is_readonly:
         code_lines.append('    is_readonly = True')
 
+    return '\n'.join(code_lines)
+
+
 @router.get("/variables", response_model=List[VariableFile])
 def list_variables():
     """List all variables from the variables directory with metadata"""
     variables = []
-    
+
     # Get working directory
     cwd = get_working_directory()
     variables_dir = cwd / "variables"
-    
+
     if not variables_dir.exists():
         # Create variables directory if it doesn't exist
         variables_dir.mkdir(parents=True, exist_ok=True)
         return variables
-    
+
     # Scan all Python files in variables directory
     for py_file in variables_dir.glob("*.py"):
         if py_file.name != "__init__.py":
             try:
                 metadata = extract_variable_metadata(py_file)
-                
+
                 # Only include if variable_name was successfully extracted
                 if metadata.get('variable_name'):
                     variables.append(VariableFile(
@@ -431,10 +434,8 @@ def list_variables():
             except Exception as e:
                 print(f"Warning: Failed to process variable file {py_file}: {e}")
                 continue
-    
-    return variables
 
-    return '\n'.join(code_lines)
+    return variables
 
 
 @router.post("/variables/create", response_model=CreateVariableResponse)

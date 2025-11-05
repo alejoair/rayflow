@@ -333,47 +333,58 @@ function FlowProvider({ children }) {
         async function loadNodesAndVariables() {
             try {
                 dispatch({ type: ActionTypes.SET_LOADING, payload: { loading: true } });
-                
-                // Load nodes
+
+                // Load nodes (critical - must succeed)
                 const nodesResponse = await fetch('/api/nodes');
                 if (!nodesResponse.ok) throw new Error('Failed to fetch nodes');
                 const nodesData = await nodesResponse.json();
-                
-                // Load variables
-                const variablesResponse = await fetch('/api/variables');
-                if (!variablesResponse.ok) throw new Error('Failed to fetch variables');
-                const variablesData = await variablesResponse.json();
-                
-                // Convert variables to UI format and generate Set/Get nodes
-                const variables = variablesData.map(varFile => ({
-                    id: `var_${varFile.variable_name}_${Date.now()}`,
-                    name: varFile.variable_name,
-                    type: varFile.value_type,
-                    defaultValue: varFile.default_value,
-                    isCustom: varFile.is_custom,
-                    customImport: varFile.custom_import,
-                    createdAt: new Date().toISOString(),
-                    filePath: varFile.file_path,
-                    description: varFile.description,
-                    icon: varFile.icon,
-                    category: varFile.category
-                }));
-                
-                // Generate Set/Get nodes for each variable
-                const variableNodes = [];
-                variables.forEach(variable => {
-                    const [setNode, getNode] = generateVariableNodes(variable);
-                    variableNodes.push(setNode, getNode);
-                });
-                
+
+                // Load variables (optional - can fail gracefully)
+                let variables = [];
+                let variableNodes = [];
+                try {
+                    const variablesResponse = await fetch('/api/variables');
+                    if (variablesResponse.ok) {
+                        const variablesData = await variablesResponse.json();
+
+                        // Convert variables to UI format and generate Set/Get nodes
+                        variables = variablesData.map(varFile => ({
+                            id: `var_${varFile.variable_name}_${Date.now()}`,
+                            name: varFile.variable_name,
+                            type: varFile.value_type,
+                            defaultValue: varFile.default_value,
+                            isCustom: varFile.is_custom,
+                            customImport: varFile.custom_import,
+                            createdAt: new Date().toISOString(),
+                            filePath: varFile.file_path,
+                            description: varFile.description,
+                            icon: varFile.icon,
+                            category: varFile.category
+                        }));
+
+                        // Generate Set/Get nodes for each variable
+                        variables.forEach(variable => {
+                            const [setNode, getNode] = generateVariableNodes(variable);
+                            variableNodes.push(setNode, getNode);
+                        });
+
+                        console.log('Variables loaded successfully:', variables.length);
+                    } else {
+                        console.log('No variables endpoint available or no variables found');
+                    }
+                } catch (varErr) {
+                    console.log('Variables loading failed (continuing without variables):', varErr.message);
+                }
+
                 // Combine regular nodes with variable nodes
                 const allNodes = [...nodesData, ...variableNodes];
-                
+
                 // Dispatch updates
                 dispatch({ type: ActionTypes.SET_AVAILABLE_NODES, payload: { nodes: allNodes } });
                 dispatch({ type: ActionTypes.SET_VARIABLES, payload: { variables } });
-                
+
             } catch (err) {
+                console.error('Critical error loading nodes:', err);
                 dispatch({ type: ActionTypes.SET_ERROR, payload: { error: err.message } });
             }
         }

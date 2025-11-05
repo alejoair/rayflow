@@ -51,15 +51,22 @@
   },
   "settings": {
     "handleSize": {
-      "exec": 12,
-      "data": 10
+      "exec": 14,
+      "data": 12
     },
     "connectionWidth": {
-      "exec": 3,
-      "data": 2
+      "exec": 4,
+      "data": 3
     },
     "defaultOpacity": 1.0,
-    "hoverOpacity": 0.8,
+    "hoverOpacity": 0.9,
+    "node": {
+      "borderRadius": 12,
+      "headerHeight": 50,
+      "portSpacing": 40,
+      "minWidth": 240,
+      "padding": 20
+    },
     "customNodeIndicator": {
       "color": "#FF6B35",
       "iconColor": "#FF6B35",

@@ -35,3 +35,6 @@ rayflow = "rayflow.cli.main:cli"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rayflow*"]
+
+[tool.setuptools.package-data]
+"*" = ["**/*.html", "**/*.js", "**/*.json", "**/*.css", "**/*.md"]
