@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcp-code-editor__create_file_tool",
+      "mcp__mcp-code-editor__send_to_console_tool",
+      "mcp__mcp-code-editor__start_console_process_tool",
+      "mcp__mcp-code-editor__check_console_tool"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

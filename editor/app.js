@@ -122,7 +122,7 @@ function RayFlowEditor() {
 
                 {/* Main Content - Canvas */}
                 <antd.Layout.Content style={{ background: '#f5f5f5', height: 'calc(100vh - 64px)', display: 'flex' }}>
-                    <Canvas onCanvasClick={handleCanvasClick} />
+                    <Canvas onNodeSelect={handleNodeSelect} />
                 </antd.Layout.Content>
 
                 {/* Right Sidebar - Inspector */}

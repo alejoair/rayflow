@@ -66,7 +66,8 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
                     inputs: node.inputs || {},
                     outputs: node.outputs || {},
                     exec_input: node.exec_input !== undefined ? node.exec_input : true,
-                    exec_output: node.exec_output !== undefined ? node.exec_output : true
+                    exec_output: node.exec_output !== undefined ? node.exec_output : true,
+                    constants: node.constants || {}
                 }));
                 e.dataTransfer.effectAllowed = 'move';
             }}
@@ -82,13 +83,26 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
             <antd.Space style={{ width: '100%', justifyContent: 'space-between' }}>
                 <antd.Space size="small">
                     <i className={`fas ${node.icon || 'fa-cube'}`} style={{
-                        color: '#1890ff',
+                        color: node.type === 'user' ? '#FF6B35' : '#1890ff',
                         fontSize: '14px',
                         minWidth: '16px'
                     }}></i>
                     <antd.Typography.Text strong style={{ fontSize: '13px' }}>
                         {node.name}
                     </antd.Typography.Text>
+                    {node.type === 'user' && (
+                        <antd.Badge
+                            count="CUSTOM"
+                            style={{
+                                backgroundColor: '#FF6B35',
+                                fontSize: '9px',
+                                height: '16px',
+                                lineHeight: '16px',
+                                minWidth: '40px',
+                                borderRadius: '8px'
+                            }}
+                        />
+                    )}
                 </antd.Space>
                 {node.description && (
                     <antd.Popover

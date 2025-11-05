@@ -21,6 +21,7 @@ class NodeFile(BaseModel):
     outputs: Optional[dict] = None
     exec_input: Optional[bool] = True
     exec_output: Optional[bool] = True
+    constants: Optional[dict] = None  # Class constants (uppercase variables)
 
 
 def get_working_directory() -> Path:
@@ -40,7 +41,8 @@ def extract_node_metadata(py_file: Path) -> dict:
         'inputs': {},
         'outputs': {},
         'exec_input': True,
-        'exec_output': True
+        'exec_output': True,
+        'constants': {}
     }
 
     try:
@@ -99,6 +101,41 @@ def extract_node_metadata(py_file: Path) -> dict:
                                                 parsed_dict[key] = value_type
 
                                         metadata[attr_name] = parsed_dict
+
+                                # Extract constants (uppercase variables)
+                                elif attr_name.isupper() and not attr_name.startswith('_'):
+                                    constant_value = None
+                                    constant_type = None
+                                    
+                                    # Get the value
+                                    if isinstance(item.value, ast.Constant):
+                                        constant_value = item.value.value
+                                        # Infer type from Python type
+                                        if isinstance(constant_value, bool):
+                                            constant_type = 'bool'
+                                        elif isinstance(constant_value, int):
+                                            constant_type = 'int'
+                                        elif isinstance(constant_value, float):
+                                            constant_type = 'float'
+                                        elif isinstance(constant_value, str):
+                                            constant_type = 'str'
+                                        else:
+                                            constant_type = 'any'
+                                    elif isinstance(item.value, ast.Str):  # Python < 3.8
+                                        constant_value = item.value.s
+                                        constant_type = 'str'
+                                    elif isinstance(item.value, ast.Num):  # Python < 3.8
+                                        constant_value = item.value.n
+                                        if isinstance(constant_value, int):
+                                            constant_type = 'int'
+                                        else:
+                                            constant_type = 'float'
+                                    
+                                    if constant_value is not None and constant_type:
+                                        metadata['constants'][attr_name] = {
+                                            'value': constant_value,
+                                            'type': constant_type
+                                        }
     except Exception as e:
         # If parsing fails, just return default metadata
         pass
@@ -129,7 +166,8 @@ def list_nodes():
                             inputs=metadata.get('inputs', {}),
                             outputs=metadata.get('outputs', {}),
                             exec_input=metadata.get('exec_input', True),
-                            exec_output=metadata.get('exec_output', True)
+                            exec_output=metadata.get('exec_output', True),
+                            constants=metadata.get('constants', {})
                         ))
 
     # 2. User nodes from the working directory
@@ -149,7 +187,8 @@ def list_nodes():
                     inputs=metadata.get('inputs', {}),
                     outputs=metadata.get('outputs', {}),
                     exec_input=metadata.get('exec_input', True),
-                    exec_output=metadata.get('exec_output', True)
+                    exec_output=metadata.get('exec_output', True),
+                    constants=metadata.get('constants', {})
                 ))
     else:
         # Create nodes directory if it doesn't exist
