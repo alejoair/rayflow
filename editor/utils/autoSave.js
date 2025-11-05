@@ -23,10 +23,10 @@ function saveCanvasState(state) {
         const canvasState = getCanvasState(state);
         const serialized = JSON.stringify(canvasState);
         localStorage.setItem(AUTOSAVE_KEY, serialized);
-        console.log('✅ Canvas auto-saved:', canvasState.nodes.length, 'nodes,', canvasState.edges.length, 'edges');
+        console.log('Canvas auto-saved:', canvasState.nodes.length, 'nodes,', canvasState.edges.length, 'edges');
         return true;
     } catch (error) {
-        console.error('❌ Failed to auto-save canvas:', error);
+        console.error('Failed to auto-save canvas:', error);
         return false;
     }
 }

@@ -185,7 +185,6 @@ function Canvas({ onNodeSelect }) {
         event.preventDefault();
         console.log('NODE DROP: Event triggered');
 
-        const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
         const nodeData = JSON.parse(event.dataTransfer.getData('application/reactflow'));
         console.log('NODE DROP: nodeData parsed:', nodeData);
 
@@ -194,9 +193,10 @@ function Canvas({ onNodeSelect }) {
             return;
         }
 
-        const position = reactFlowInstance.project({
-            x: event.clientX - reactFlowBounds.left,
-            y: event.clientY - reactFlowBounds.top,
+        // Use screenToFlowPosition instead of deprecated project()
+        const position = reactFlowInstance.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
         });
 
         const nodeDataForFlow = {
