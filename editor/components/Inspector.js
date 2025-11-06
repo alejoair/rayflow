@@ -238,41 +238,35 @@ function Inspector() {
                             </antd.Card>
                         )}
 
-                        <antd.Card
-                            title="Code Editor"
-                            size="small"
-                            style={{ width: '100%' }}
-                            extra={
-                                <antd.Button
-                                    type="primary"
-                                    size="small"
-                                    icon={<i className="fas fa-edit"></i>}
-                                >
-                                    Edit Code
-                                </antd.Button>
-                            }
-                        >
-                            <antd.Typography.Paragraph
-                                code
-                                style={{
-                                    background: '#1f1f1f',
-                                    color: '#52c41a',
-                                    padding: '12px',
-                                    borderRadius: '4px',
-                                    fontFamily: 'monospace',
-                                    fontSize: '12px',
-                                    lineHeight: '1.4',
-                                    margin: 0,
-                                    whiteSpace: 'pre-line'
-                                }}
+                        {/* Code Editor - Only for custom nodes */}
+                        {selectedNode.data.nodeType === 'user' && (
+                            <antd.Card
+                                title={
+                                    <antd.Space>
+                                        <i className="fas fa-code" style={{ color: '#FF6B35' }}></i>
+                                        <span>Source Code Editor</span>
+                                        <antd.Tag color="orange" size="small">
+                                            CUSTOM NODE
+                                        </antd.Tag>
+                                    </antd.Space>
+                                }
+                                size="small"
+                                style={{ width: '100%', minHeight: '400px' }}
                             >
-                                <antd.Typography.Text style={{ color: '#8c8c8c', display: 'block', marginBottom: '8px' }}>
-                                    # Code editor placeholder
+                                <antd.Typography.Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '12px' }}>
+                                    Edit the Python source code for this custom node. Changes are validated and automatically backed up.
                                 </antd.Typography.Text>
-                                # Double-click node to edit code{'\n'}
-                                # File: {selectedNode.data.path}
-                            </antd.Typography.Paragraph>
-                        </antd.Card>
+                                <div style={{ height: '500px' }}>
+                                    <CodeEditor
+                                        filePath={selectedNode.data.path}
+                                        onSave={() => {
+                                            // Reload nodes list after save to refresh metadata
+                                            antd.message.info('Node updated. Refresh the canvas to see changes.');
+                                        }}
+                                    />
+                                </div>
+                            </antd.Card>
+                        )}
                     </antd.Space>
                 ) : (
                     <antd.Empty
