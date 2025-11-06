@@ -222,9 +222,18 @@ function NodeLibrary({ nodes, loading, error, onNodeSelect }) {
     return (
         <antd.Flex vertical style={{ height: '100%', background: '#fff' }}>
             <antd.Flex vertical style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
-                <antd.Typography.Title level={4} style={{ margin: '0 0 12px 0' }}>
-                    Node Library
-                </antd.Typography.Title>
+                <antd.Flex justify="space-between" align="center" style={{ marginBottom: '12px' }}>
+                    <antd.Typography.Title level={4} style={{ margin: 0 }}>
+                        Node Library
+                    </antd.Typography.Title>
+                    <antd.Button
+                        type="text"
+                        size="small"
+                        icon={<i className="fas fa-chevron-left"></i>}
+                        onClick={actions.toggleLeftSidebar}
+                        title="Collapse sidebar"
+                    />
+                </antd.Flex>
 
                 <antd.Input.Search
                     placeholder="Search nodes..."

@@ -62,6 +62,11 @@ const initialState = {
     // Variables system (future)
     variables: [],
 
+    // Editor tabs system
+    openEditorTabs: [],      // [{id, filePath, fileName, isDirty}]
+    activeEditorTabId: null, // ID of active tab
+    editorPanelVisible: true, // Whether editor panel is visible
+
     // UI state
     leftSidebarCollapsed: false,
     rightSidebarCollapsed: false,
@@ -111,7 +116,15 @@ const ActionTypes = {
 
     // UI
     TOGGLE_LEFT_SIDEBAR: 'TOGGLE_LEFT_SIDEBAR',
-    TOGGLE_RIGHT_SIDEBAR: 'TOGGLE_RIGHT_SIDEBAR'
+    TOGGLE_RIGHT_SIDEBAR: 'TOGGLE_RIGHT_SIDEBAR',
+
+    // Editor Tabs
+    OPEN_EDITOR_TAB: 'OPEN_EDITOR_TAB',
+    CLOSE_EDITOR_TAB: 'CLOSE_EDITOR_TAB',
+    SET_ACTIVE_EDITOR_TAB: 'SET_ACTIVE_EDITOR_TAB',
+    UPDATE_EDITOR_TAB_DIRTY: 'UPDATE_EDITOR_TAB_DIRTY',
+    SET_EDITOR_TABS: 'SET_EDITOR_TABS',
+    TOGGLE_EDITOR_PANEL: 'TOGGLE_EDITOR_PANEL'
 };
 
 // Reducer
@@ -319,6 +332,89 @@ function flowReducer(state, action) {
                 rightSidebarCollapsed: !state.rightSidebarCollapsed
             };
 
+        case ActionTypes.OPEN_EDITOR_TAB:
+            const { filePath, fileName } = action.payload;
+
+            // Check if tab already exists
+            const existingTab = state.openEditorTabs.find(tab => tab.filePath === filePath);
+            if (existingTab) {
+                // Just activate the existing tab and show panel
+                return {
+                    ...state,
+                    activeEditorTabId: existingTab.id,
+                    editorPanelVisible: true
+                };
+            }
+
+            // Create new tab
+            const newTabId = `editor_tab_${Date.now()}`;
+            const newTab = {
+                id: newTabId,
+                filePath: filePath,
+                fileName: fileName,
+                isDirty: false
+            };
+
+            return {
+                ...state,
+                openEditorTabs: [...state.openEditorTabs, newTab],
+                activeEditorTabId: newTabId,
+                editorPanelVisible: true
+            };
+
+        case ActionTypes.CLOSE_EDITOR_TAB:
+            const tabIdToClose = action.payload.tabId;
+            const remainingTabs = state.openEditorTabs.filter(tab => tab.id !== tabIdToClose);
+
+            // If closing active tab, activate another one
+            let newActiveTab = state.activeEditorTabId;
+            if (state.activeEditorTabId === tabIdToClose) {
+                // Activate the next tab, or previous, or null
+                const closedIndex = state.openEditorTabs.findIndex(tab => tab.id === tabIdToClose);
+                if (remainingTabs.length > 0) {
+                    // Try next tab, or previous
+                    const nextIndex = Math.min(closedIndex, remainingTabs.length - 1);
+                    newActiveTab = remainingTabs[nextIndex].id;
+                } else {
+                    newActiveTab = null;
+                }
+            }
+
+            return {
+                ...state,
+                openEditorTabs: remainingTabs,
+                activeEditorTabId: newActiveTab
+            };
+
+        case ActionTypes.SET_ACTIVE_EDITOR_TAB:
+            return {
+                ...state,
+                activeEditorTabId: action.payload.tabId
+            };
+
+        case ActionTypes.UPDATE_EDITOR_TAB_DIRTY:
+            return {
+                ...state,
+                openEditorTabs: state.openEditorTabs.map(tab =>
+                    tab.id === action.payload.tabId
+                        ? { ...tab, isDirty: action.payload.isDirty }
+                        : tab
+                )
+            };
+
+        case ActionTypes.SET_EDITOR_TABS:
+            return {
+                ...state,
+                openEditorTabs: action.payload.tabs,
+                activeEditorTabId: action.payload.activeTabId
+            };
+
+        case ActionTypes.TOGGLE_EDITOR_PANEL:
+            return {
+                ...state,
+                editorPanelVisible: !state.editorPanelVisible
+            };
+
         default:
             return state;
     }
@@ -427,12 +523,14 @@ function FlowProvider({ children }) {
                 const stateToSave = {
                     nodes: state.nodes,
                     edges: state.edges,
-                    nodeIdCounter: state.nodeIdCounter
+                    nodeIdCounter: state.nodeIdCounter,
+                    openEditorTabs: state.openEditorTabs,
+                    activeEditorTabId: state.activeEditorTabId
                 };
 
                 if (window.AutoSave?.save) {
                     window.AutoSave.save(stateToSave);
-                    console.log('AUTO-SAVE: Save completed');
+                    console.log('AUTO-SAVE: Save completed (including editor tabs)');
                 }
             }, 2000); // 2 second debounce
         }
@@ -485,6 +583,19 @@ function FlowProvider({ children }) {
                         dispatch({ type: ActionTypes.SET_NODES, payload: { nodes: savedState.nodes } });
                         dispatch({ type: ActionTypes.SET_EDGES, payload: { edges: savedState.edges } });
                         dispatch({ type: ActionTypes.SET_NODE_COUNTER, payload: { counter: savedState.nodeIdCounter } });
+
+                        // Restore editor tabs if present
+                        if (savedState.openEditorTabs) {
+                            dispatch({
+                                type: ActionTypes.SET_EDITOR_TABS,
+                                payload: {
+                                    tabs: savedState.openEditorTabs,
+                                    activeTabId: savedState.activeEditorTabId
+                                }
+                            });
+                            console.log('AUTO-LOAD: Editor tabs restored:', savedState.openEditorTabs.length);
+                        }
+
                         console.log('AUTO-LOAD: State restored successfully');
 
                         // Show a discrete success message
@@ -619,6 +730,39 @@ function FlowProvider({ children }) {
                 type: ActionTypes.DELETE_VARIABLE,
                 payload: { variableId }
             });
+        },
+
+        // Editor tabs actions
+        openEditorTab: (filePath, fileName) => {
+            dispatch({
+                type: ActionTypes.OPEN_EDITOR_TAB,
+                payload: { filePath, fileName }
+            });
+        },
+
+        closeEditorTab: (tabId) => {
+            dispatch({
+                type: ActionTypes.CLOSE_EDITOR_TAB,
+                payload: { tabId }
+            });
+        },
+
+        setActiveEditorTab: (tabId) => {
+            dispatch({
+                type: ActionTypes.SET_ACTIVE_EDITOR_TAB,
+                payload: { tabId }
+            });
+        },
+
+        updateEditorTabDirty: (tabId, isDirty) => {
+            dispatch({
+                type: ActionTypes.UPDATE_EDITOR_TAB_DIRTY,
+                payload: { tabId, isDirty }
+            });
+        },
+
+        toggleEditorPanel: () => {
+            dispatch({ type: ActionTypes.TOGGLE_EDITOR_PANEL });
         },
 
         // UI actions

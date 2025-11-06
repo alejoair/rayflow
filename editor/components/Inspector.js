@@ -123,15 +123,25 @@ function Inspector() {
                 <antd.Typography.Title level={4} style={{ margin: 0 }}>
                     Inspector
                 </antd.Typography.Title>
-                {selectedNode && (
+                <antd.Space size="small">
+                    {selectedNode && (
+                        <antd.Button
+                            type="text"
+                            size="small"
+                            icon={<i className="fas fa-times"></i>}
+                            onClick={actions.deselectNode}
+                            style={{ color: '#8c8c8c' }}
+                            title="Deselect node"
+                        />
+                    )}
                     <antd.Button
                         type="text"
                         size="small"
-                        icon={<i className="fas fa-times"></i>}
-                        onClick={actions.deselectNode}
-                        style={{ color: '#8c8c8c' }}
+                        icon={<i className="fas fa-chevron-right"></i>}
+                        onClick={actions.toggleRightSidebar}
+                        title="Collapse sidebar"
                     />
-                )}
+                </antd.Space>
             </antd.Flex>
 
             <antd.Flex flex={1} style={{ padding: '16px', overflow: 'auto' }}>
@@ -192,23 +202,13 @@ function Inspector() {
                                         >
                                             {selectedNode.data.nodeType === 'user' ? 'CUSTOM' : 'BUILTIN'}
                                         </antd.Tag>
+                                        <antd.Tag color="green" size="small">
+                                            Auto-save
+                                        </antd.Tag>
                                     </antd.Space>
                                 }
                                 size="small"
                                 style={{ width: '100%' }}
-                                extra={
-                                    <antd.Button
-                                        type="primary"
-                                        size="small"
-                                        icon={<i className="fas fa-save"></i>}
-                                        onClick={() => {
-                                            // TODO: Implement save functionality
-                                            antd.message.success('Configuration saved successfully!');
-                                        }}
-                                    >
-                                        Save Config
-                                    </antd.Button>
-                                }
                             >
                                 <antd.Space direction="vertical" style={{ width: '100%' }} size="middle">
                                     <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
@@ -238,33 +238,37 @@ function Inspector() {
                             </antd.Card>
                         )}
 
-                        {/* Code Editor - Only for custom nodes */}
+                        {/* Source Code - Only for custom nodes */}
                         {selectedNode.data.nodeType === 'user' && (
                             <antd.Card
                                 title={
                                     <antd.Space>
                                         <i className="fas fa-code" style={{ color: '#FF6B35' }}></i>
-                                        <span>Source Code Editor</span>
+                                        <span>Source Code</span>
                                         <antd.Tag color="orange" size="small">
                                             CUSTOM NODE
                                         </antd.Tag>
                                     </antd.Space>
                                 }
                                 size="small"
-                                style={{ width: '100%', minHeight: '400px' }}
+                                style={{ width: '100%' }}
                             >
-                                <antd.Typography.Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '12px' }}>
-                                    Edit the Python source code for this custom node. Changes are validated and automatically backed up.
-                                </antd.Typography.Text>
-                                <div style={{ height: '500px' }}>
-                                    <CodeEditor
-                                        filePath={selectedNode.data.path}
-                                        onSave={() => {
-                                            // Reload nodes list after save to refresh metadata
-                                            antd.message.info('Node updated. Refresh the canvas to see changes.');
-                                        }}
-                                    />
-                                </div>
+                                <antd.Space direction="vertical" style={{ width: '100%' }} size="middle">
+                                    <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                                        Edit the Python source code for this custom node. Opens in a tab on the canvas.
+                                    </antd.Typography.Text>
+                                    <antd.Button
+                                        type="primary"
+                                        icon={<i className="fas fa-code"></i>}
+                                        onClick={() => actions.openEditorTab(selectedNode.data.path, selectedNode.data.label)}
+                                        block
+                                    >
+                                        Edit Source Code
+                                    </antd.Button>
+                                    <antd.Typography.Text type="secondary" style={{ fontSize: '11px', fontStyle: 'italic' }}>
+                                        File: {selectedNode.data.path}
+                                    </antd.Typography.Text>
+                                </antd.Space>
                             </antd.Card>
                         )}
                     </antd.Space>

@@ -13,7 +13,7 @@
 const { useState, useEffect, useRef } = React;
 const { Button, message, Spin, Alert } = antd;
 
-function CodeEditor({ filePath, onSave }) {
+function CodeEditor({ filePath, onSave, onChange }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
@@ -65,6 +65,9 @@ function CodeEditor({ filePath, onSave }) {
             // Track changes
             editor.on('change', () => {
                 setHasChanges(true);
+                if (onChange) {
+                    onChange();
+                }
             });
 
             aceEditorRef.current = editor;

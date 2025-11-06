@@ -56,6 +56,7 @@
     <script type="text/babel" src="components/ShortcutsModal.js"></script>
     <script type="text/babel" src="components/Canvas.js"></script>
     <script type="text/babel" src="components/CodeEditor.js"></script>
+    <script type="text/babel" src="components/EditorTabs.js"></script>
     <script type="text/babel" src="components/Inspector.js"></script>
 
     <!-- Load Main App -->
@@ -98,6 +99,25 @@
 
         .react-flow__edge-path {
             cursor: pointer;
+        }
+
+        /* Ant Design Tabs - Full height content */
+        .ant-tabs {
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        .ant-tabs-content-holder {
+            flex: 1 !important;
+            overflow: hidden !important;
+        }
+
+        .ant-tabs-content {
+            height: 100% !important;
+        }
+
+        .ant-tabs-tabpane {
+            height: 100% !important;
         }
     </style>
 </body>

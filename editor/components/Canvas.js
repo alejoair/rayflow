@@ -332,6 +332,9 @@ function Canvas({ onNodeSelect }) {
                 <Controls />
                 <Background variant="dots" gap={12} size={1} />
             </ReactFlow>
+
+            {/* Editor Tabs Overlay */}
+            <EditorTabs />
         </div>
     );
 }

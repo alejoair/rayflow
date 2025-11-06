@@ -179,13 +179,6 @@ function RayFlowEditor() {
                 justifyContent: 'space-between'
             }}>
                 <antd.Space align="center" size="large">
-                    <antd.Button
-                        type="text"
-                        icon={<i className={state.leftSidebarCollapsed ? 'fas fa-bars' : 'fas fa-chevron-left'}></i>}
-                        onClick={actions.toggleLeftSidebar}
-                        style={{ color: 'white' }}
-                        title={state.leftSidebarCollapsed ? "Show Node Library" : "Hide Node Library"}
-                    />
                     <antd.Typography.Title level={3} style={{ color: 'white', margin: 0 }}>
                         RayFlow Editor
                     </antd.Typography.Title>
@@ -212,13 +205,6 @@ function RayFlowEditor() {
                     <antd.Button type="primary" style={{ background: '#52c41a' }} onClick={handleRun}>
                         Run Flow
                     </antd.Button>
-                    <antd.Button
-                        type="text"
-                        icon={<i className={state.rightSidebarCollapsed ? 'fas fa-bars' : 'fas fa-chevron-right'}></i>}
-                        onClick={actions.toggleRightSidebar}
-                        style={{ color: 'white' }}
-                        title={state.rightSidebarCollapsed ? "Show Inspector" : "Hide Inspector"}
-                    />
                 </antd.Space>
             </antd.Layout.Header>
 
@@ -226,18 +212,47 @@ function RayFlowEditor() {
                 {/* Left Sidebar - Node Library */}
                 <antd.Layout.Sider
                     width={320}
+                    collapsedWidth={50}
                     collapsible
                     collapsed={state.leftSidebarCollapsed}
                     onCollapse={actions.toggleLeftSidebar}
                     trigger={null}
-                    style={{ background: '#fff' }}
+                    style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}
                 >
-                    <NodeLibrary
-                        nodes={state.availableNodes}
-                        loading={state.loading}
-                        error={state.error}
-                        onNodeSelect={handleNodeSelect}
-                    />
+                    {state.leftSidebarCollapsed ? (
+                        <div style={{
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            paddingTop: '16px',
+                            gap: '16px'
+                        }}>
+                            <antd.Button
+                                type="text"
+                                icon={<i className="fas fa-chevron-right"></i>}
+                                onClick={actions.toggleLeftSidebar}
+                                title="Show Node Library"
+                                style={{ fontSize: '16px' }}
+                            />
+                            <div style={{
+                                writingMode: 'vertical-rl',
+                                transform: 'rotate(180deg)',
+                                fontSize: '12px',
+                                color: '#8c8c8c',
+                                marginTop: '8px'
+                            }}>
+                                NODES
+                            </div>
+                        </div>
+                    ) : (
+                        <NodeLibrary
+                            nodes={state.availableNodes}
+                            loading={state.loading}
+                            error={state.error}
+                            onNodeSelect={handleNodeSelect}
+                        />
+                    )}
                 </antd.Layout.Sider>
 
                 {/* Main Content - Canvas */}
@@ -248,14 +263,43 @@ function RayFlowEditor() {
                 {/* Right Sidebar - Inspector */}
                 <antd.Layout.Sider
                     width={320}
+                    collapsedWidth={50}
                     collapsible
                     collapsed={state.rightSidebarCollapsed}
                     onCollapse={actions.toggleRightSidebar}
                     trigger={null}
                     reverseArrow
-                    style={{ background: '#fff' }}
+                    style={{ background: '#fff', borderLeft: '1px solid #f0f0f0' }}
                 >
-                    <Inspector />
+                    {state.rightSidebarCollapsed ? (
+                        <div style={{
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            paddingTop: '16px',
+                            gap: '16px'
+                        }}>
+                            <antd.Button
+                                type="text"
+                                icon={<i className="fas fa-chevron-left"></i>}
+                                onClick={actions.toggleRightSidebar}
+                                title="Show Inspector"
+                                style={{ fontSize: '16px' }}
+                            />
+                            <div style={{
+                                writingMode: 'vertical-rl',
+                                transform: 'rotate(180deg)',
+                                fontSize: '12px',
+                                color: '#8c8c8c',
+                                marginTop: '8px'
+                            }}>
+                                INSPECTOR
+                            </div>
+                        </div>
+                    ) : (
+                        <Inspector />
+                    )}
                 </antd.Layout.Sider>
             </antd.Layout>
         </antd.Layout>
