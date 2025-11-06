@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 
@@ -23,6 +23,28 @@ class NodeFile(BaseModel):
     exec_input: Optional[bool] = True
     exec_output: Optional[bool] = True
     constants: Optional[dict] = None  # Class constants (uppercase variables)
+
+
+class NodeSourceResponse(BaseModel):
+    """Response model for getting node source code."""
+    content: str
+    path: str
+    writable: bool
+    file_name: str
+
+
+class NodeSourceUpdateRequest(BaseModel):
+    """Request model for updating node source code."""
+    file_path: str
+    content: str
+
+
+class NodeSourceUpdateResponse(BaseModel):
+    """Response model for node source update."""
+    success: bool
+    message: str
+    errors: List[str] = []
+    backup_path: Optional[str] = None
 
 
 def extract_node_metadata(py_file: Path) -> dict:
@@ -187,3 +209,146 @@ def list_nodes(working_dir: Path):
         user_nodes_dir.mkdir(parents=True, exist_ok=True)
 
     return nodes
+
+
+@router.get("/nodes/source", response_model=NodeSourceResponse)
+def get_node_source(file_path: str, working_dir: Path):
+    """Get the source code of a node file."""
+    try:
+        # Security: Validate that the file is within allowed directories
+        requested_path = Path(file_path)
+
+        # Check if it's a relative path from working directory (user nodes)
+        if not requested_path.is_absolute():
+            full_path = working_dir / requested_path
+            is_user_node = True
+        else:
+            full_path = requested_path
+            # Check if it's a builtin node
+            builtin_nodes_dir = Path(__file__).parent.parent.parent / "nodes"
+            is_user_node = not full_path.is_relative_to(builtin_nodes_dir)
+
+        # Validate file exists and is a Python file
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        if full_path.suffix != ".py":
+            raise HTTPException(status_code=400, detail="Only Python files are allowed")
+
+        # Security: Prevent path traversal outside allowed directories
+        if is_user_node:
+            user_nodes_dir = working_dir / "nodes"
+            if not full_path.is_relative_to(user_nodes_dir):
+                raise HTTPException(status_code=403, detail="Access denied: File is outside nodes directory")
+
+        # Read the file content
+        with open(full_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        return NodeSourceResponse(
+            content=content,
+            path=str(full_path.relative_to(working_dir) if is_user_node else full_path),
+            writable=is_user_node,  # Only user nodes are writable
+            file_name=full_path.name
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+@router.post("/nodes/source", response_model=NodeSourceUpdateResponse)
+def update_node_source(request: NodeSourceUpdateRequest, working_dir: Path):
+    """Update the source code of a custom (user) node file."""
+    try:
+        # Parse the file path
+        requested_path = Path(request.file_path)
+
+        # Resolve to full path
+        if not requested_path.is_absolute():
+            full_path = working_dir / requested_path
+        else:
+            full_path = requested_path
+
+        # Security: Only allow editing user nodes in the nodes directory
+        user_nodes_dir = working_dir / "nodes"
+        if not full_path.is_relative_to(user_nodes_dir):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: Can only edit custom nodes in the nodes directory"
+            )
+
+        # Validate file exists
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        if full_path.suffix != ".py":
+            raise HTTPException(status_code=400, detail="Only Python files are allowed")
+
+        # Validate Python syntax
+        errors = []
+        try:
+            ast.parse(request.content)
+        except SyntaxError as e:
+            errors.append(f"Syntax error at line {e.lineno}: {e.msg}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid Python syntax: {e.msg} at line {e.lineno}"
+            )
+
+        # Validate that the file contains a class that inherits from RayflowNode
+        try:
+            tree = ast.parse(request.content)
+            has_rayflow_node = False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    # Check if any base class is RayflowNode
+                    for base in node.bases:
+                        if isinstance(base, ast.Name) and base.id == "RayflowNode":
+                            has_rayflow_node = True
+                            break
+                    if has_rayflow_node:
+                        break
+
+            if not has_rayflow_node:
+                errors.append("File must contain a class that inherits from RayflowNode")
+                raise HTTPException(
+                    status_code=400,
+                    detail="File must contain a class that inherits from RayflowNode"
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            errors.append(f"Validation error: {str(e)}")
+
+        # Create backup before saving
+        backup_path = full_path.with_suffix('.py.backup')
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(original_content)
+        except Exception as e:
+            # Backup failure should not prevent save, but warn
+            backup_path = None
+            print(f"Warning: Failed to create backup: {e}")
+
+        # Write the new content
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(request.content)
+
+        return NodeSourceUpdateResponse(
+            success=True,
+            message=f"Successfully updated {full_path.name}",
+            errors=errors,
+            backup_path=str(backup_path.relative_to(working_dir)) if backup_path else None
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update file: {str(e)}"
+        )
