@@ -81,11 +81,3 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-def get_working_directory() -> Path:
-    """Get the working directory where rayflow was called"""
-    cwd = os.environ.get("RAYFLOW_CWD")
-    if cwd:
-        return Path(cwd)
-    return Path.cwd()
