@@ -19,19 +19,28 @@ function CodeEditor({ filePath, onSave }) {
     const [error, setError] = useState(null);
     const [sourceCode, setSourceCode] = useState('');
     const [hasChanges, setHasChanges] = useState(false);
+    const [editorInitialized, setEditorInitialized] = useState(false);
     const editorRef = useRef(null);
     const aceEditorRef = useRef(null);
 
     // Load source code when component mounts or filePath changes
     useEffect(() => {
         if (filePath) {
+            // Reset editor when file changes
+            if (aceEditorRef.current) {
+                aceEditorRef.current.destroy();
+                aceEditorRef.current = null;
+            }
+            setEditorInitialized(false);
             loadSourceCode();
         }
     }, [filePath]);
 
-    // Initialize Ace Editor
+    // Initialize Ace Editor after loading is complete
     useEffect(() => {
-        if (editorRef.current && !aceEditorRef.current) {
+        if (editorRef.current && !editorInitialized && !loading && sourceCode) {
+            console.log('🎨 Initializing Ace Editor with', sourceCode.length, 'characters');
+
             // Initialize Ace Editor
             const editor = window.ace.edit(editorRef.current);
             editor.setTheme('ace/theme/monokai');
@@ -45,15 +54,27 @@ function CodeEditor({ filePath, onSave }) {
                 showGutter: true
             });
 
+            // Set initial content
+            editor.setValue(sourceCode, -1); // -1 moves cursor to start
+
+            // Force resize to ensure proper display
+            setTimeout(() => {
+                editor.resize();
+            }, 100);
+
             // Track changes
             editor.on('change', () => {
                 setHasChanges(true);
             });
 
             aceEditorRef.current = editor;
+            setEditorInitialized(true);
+            console.log('✅ Ace Editor initialized successfully');
         }
+    }, [loading, sourceCode, editorInitialized]);
 
-        // Cleanup
+    // Cleanup on unmount
+    useEffect(() => {
         return () => {
             if (aceEditorRef.current) {
                 aceEditorRef.current.destroy();
@@ -61,17 +82,6 @@ function CodeEditor({ filePath, onSave }) {
             }
         };
     }, []);
-
-    // Update editor content when sourceCode changes
-    useEffect(() => {
-        if (aceEditorRef.current && sourceCode !== null) {
-            const currentValue = aceEditorRef.current.getValue();
-            if (currentValue !== sourceCode) {
-                aceEditorRef.current.setValue(sourceCode, -1); // -1 moves cursor to start
-                setHasChanges(false);
-            }
-        }
-    }, [sourceCode]);
 
     const loadSourceCode = async () => {
         setLoading(true);
