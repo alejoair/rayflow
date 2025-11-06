@@ -8,6 +8,12 @@ function Canvas({ onNodeSelect }) {
     const [showShortcuts, setShowShortcuts] = React.useState(false);
     const [reactFlowInstance, setReactFlowInstance] = React.useState(null);
     const reactFlowWrapper = React.useRef(null);
+    const onNodeSelectRef = React.useRef(onNodeSelect);
+
+    // Update ref when prop changes
+    React.useEffect(() => {
+        onNodeSelectRef.current = onNodeSelect;
+    }, [onNodeSelect]);
 
     // Load type configuration
     React.useEffect(() => {
@@ -42,16 +48,28 @@ function Canvas({ onNodeSelect }) {
 
     // Custom handlers for React Flow events
     const onNodesChange = React.useCallback((changes) => {
-        // Handle React Flow nodes changes and sync with global state
-        const updatedNodes = applyNodeChanges(changes, state.nodes);
+        // Filter only significant changes that need to update global state
+        // Ignore 'dimensions' changes which are internal to React Flow rendering
+        const significantChanges = changes.filter(change => change.type !== 'dimensions');
+
+        if (significantChanges.length === 0) {
+            // Don't log or do anything for dimensions-only changes
+            return;
+        }
+
+        console.log('📊 NODES CHANGE (significant):', significantChanges.map(c => ({ type: c.type, id: c.id })));
+
+        // Apply changes using the current state from context
+        // We access state.nodes directly here but don't include it in dependencies
+        const updatedNodes = applyNodeChanges(significantChanges, state.nodes);
         actions.setNodes(updatedNodes);
-    }, [state.nodes, actions]);
+    }, [actions]);
 
     const onEdgesChange = React.useCallback((changes) => {
-        // Handle React Flow edges changes and sync with global state
+        // Apply edge changes
         const updatedEdges = applyEdgeChanges(changes, state.edges);
         actions.setEdges(updatedEdges);
-    }, [state.edges, actions]);
+    }, [actions]);
 
 
     // Helper functions
@@ -112,7 +130,7 @@ function Canvas({ onNodeSelect }) {
         );
 
         return !existingConnection;
-    }, [state.edges, state.nodes]);
+    }, [state.nodes, state.edges]);
 
     // Connection creation
     const onConnect = React.useCallback((params) => {
@@ -146,27 +164,87 @@ function Canvas({ onNodeSelect }) {
         };
 
         actions.addEdge(newEdge);
-    }, [actions, typeConfig, state.nodes, getTypeColor]);
+    }, [actions, typeConfig, getTypeColor, state.nodes]);
 
-    // Selection change handling (replaces onNodeClick to avoid drag conflicts)
+    // Add additional React Flow event debugging
+    const onNodeMouseEnter = React.useCallback((event, node) => {
+        console.log('🖱️ MOUSE ENTER NODE:', { nodeId: node.id, label: node.data?.label });
+    }, []);
+
+    const onNodeMouseLeave = React.useCallback((event, node) => {
+        console.log('🖱️ MOUSE LEAVE NODE:', { nodeId: node.id, label: node.data?.label });
+    }, []);
+
+    // Track drag timing to detect clicks (short drags)
+    const dragStartTimeRef = React.useRef(null);
+    const dragStartPosRef = React.useRef(null);
+
+    const onNodeDragStart = React.useCallback((event, node) => {
+        dragStartTimeRef.current = Date.now();
+        dragStartPosRef.current = { x: event.clientX, y: event.clientY };
+        console.log('🔄 NODE DRAG START:', { nodeId: node.id, label: node.data?.label });
+    }, []);
+
+    const onNodeDragStop = React.useCallback((event, node) => {
+        const dragDuration = Date.now() - (dragStartTimeRef.current || 0);
+        const dragDistance = dragStartPosRef.current ? Math.sqrt(
+            Math.pow(event.clientX - dragStartPosRef.current.x, 2) +
+            Math.pow(event.clientY - dragStartPosRef.current.y, 2)
+        ) : 0;
+
+        console.log('🔄 NODE DRAG STOP:', {
+            nodeId: node.id,
+            label: node.data?.label,
+            duration: dragDuration,
+            distance: Math.round(dragDistance)
+        });
+
+        // Treat as click if drag was very short and minimal movement
+        if (dragDuration < 200 && dragDistance < 5) {
+            console.log('🎯 CLICK DETECTED (via short drag):', { nodeId: node.id, label: node.data?.label });
+            // The selection already happened via onSelectionChange, no need to call onNodeSelect again
+        }
+
+        dragStartTimeRef.current = null;
+        dragStartPosRef.current = null;
+    }, []);
+
+    const onPaneClick = React.useCallback((event) => {
+        // Deselect when clicking on empty canvas
+        if (onNodeSelectRef.current) {
+            onNodeSelectRef.current(null);
+        }
+    }, []);
+
+    // Node selection handling
+    const onNodeClick = React.useCallback((event, node) => {
+        console.log('🎯 NODE CLICK:', { nodeId: node.id, label: node.data?.label });
+        if (onNodeSelectRef.current) {
+            onNodeSelectRef.current(node);  // Pasar nodo completo para Inspector
+        }
+    }, []);
+
+    // Selection change handling - con protección contra bucles
+    const lastSelectionRef = React.useRef(null);
     const onSelectionChange = React.useCallback(({ nodes: selectedNodes }) => {
-        if (selectedNodes.length === 1) {
-            // Single node selected - pass complete node
-            const selectedNode = selectedNodes[0];
-            const currentSelectedId = state.selectedNode?.id;
-            const newSelectedId = selectedNode?.id;
+        const newSelectionId = selectedNodes.length === 1 ? selectedNodes[0].id : null;
 
-            // Only call if the selection actually changed
-            if (onNodeSelect && currentSelectedId !== newSelectedId) {
-                onNodeSelect(selectedNode);
-            }
-        } else {
-            // No nodes or multiple nodes selected - only call if we currently have a selection
-            if (onNodeSelect && state.selectedNode !== null) {
-                onNodeSelect(null);
+        // Solo llamar si la selección realmente cambió
+        if (lastSelectionRef.current !== newSelectionId) {
+            lastSelectionRef.current = newSelectionId;
+            console.log('🔄 SELECTION CHANGE:', { count: selectedNodes.length, id: newSelectionId });
+
+            if (selectedNodes.length === 1) {
+                if (onNodeSelectRef.current) {
+                    onNodeSelectRef.current(selectedNodes[0]);
+                }
+            } else {
+                if (onNodeSelectRef.current) {
+                    onNodeSelectRef.current(null);
+                }
             }
         }
-    }, [onNodeSelect, state.selectedNode]);
+    }, []);
 
     // Drag and drop
     const onDragOver = React.useCallback((event) => {
@@ -244,6 +322,7 @@ function Canvas({ onNodeSelect }) {
                 onInit={setReactFlowInstance}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
+                onNodeClick={onNodeClick}
                 onSelectionChange={onSelectionChange}
                 nodeTypes={nodeTypes}
                 defaultEdgeOptions={{ type: 'smoothstep' }}

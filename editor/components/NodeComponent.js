@@ -310,20 +310,23 @@ function NodeComponent({ data, selected }) {
                 padding: '0 20px',
                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                 background: 'linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
-                borderRadius: '10px 10px 0 0'
+                borderRadius: '10px 10px 0 0',
+                pointerEvents: 'auto'
             }}>
                 {data.icon && (
                     <i className={`fas ${data.icon}`} style={{
                         color: isCustomNode ? customIndicator.iconColor : '#1890ff',
                         fontSize: '18px',
-                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))'
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+                        pointerEvents: 'none'
                     }}></i>
                 )}
                 <span style={{
                     fontSize: '15px',
                     fontWeight: '600',
                     textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                    letterSpacing: '0.3px'
+                    letterSpacing: '0.3px',
+                    pointerEvents: 'none'
                 }}>
                     {data.label ? data.label.charAt(0).toUpperCase() + data.label.slice(1) : 'Unknown'}
                 </span>
