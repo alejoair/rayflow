@@ -27,8 +27,10 @@ class ReturnNode(RayflowNode):
     FORMAT_JSON_OUTPUT = True  # Whether to format JSON output nicely
     ENABLE_RESPONSE_VALIDATION = True  # Whether to validate response structure
 
-    # RETURN nodes accept any inputs (dynamic based on config)
-    inputs = {}
+    # RETURN nodes accept result input by default
+    inputs = {
+        "result": "any"  # Default input for return value
+    }
 
     # RETURN nodes don't output to other nodes (they terminate the flow)
     outputs = {}

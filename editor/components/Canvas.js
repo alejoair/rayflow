@@ -289,22 +289,199 @@ function Canvas({ onNodeSelect }) {
         console.log('NODE DROP: actions.addNode called successfully');
     }, [reactFlowInstance, actions]);
 
+    // Helper function to convert file path to class name
+    const pathToClassName = (path) => {
+        if (!path) return null;
+
+        // Handle built-in nodes: convert file path to class name
+        if (path.includes('rayflow\\nodes\\') || path.includes('rayflow/nodes/')) {
+            // Extract the part after rayflow/nodes/ - handle multiple 'rayflow' in path
+            const parts = path.split(/[\\\/]/);
+
+            // Find the 'rayflow' that has 'nodes' immediately after it
+            let rayflowIndex = -1;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (parts[i] === 'rayflow' && parts[i + 1] === 'nodes') {
+                    rayflowIndex = i;
+                    break;
+                }
+            }
+
+            if (rayflowIndex !== -1) {
+                const category = parts[rayflowIndex + 2]; // base, math, etc.
+                const fileName = parts[rayflowIndex + 3]; // start.py
+                const baseName = fileName.replace('.py', ''); // start
+
+                // Convert to PascalCase and add Node suffix
+                const className = baseName.charAt(0).toUpperCase() + baseName.slice(1) +
+                    (baseName.toLowerCase().includes('node') ? '' : 'Node');
+
+                return `rayflow.nodes.${category}.${baseName}.${className}`;
+            }
+        }
+
+        // Fallback: return the path as-is for custom nodes
+        return path;
+    };
+
+    // Flow validation function
+    const validateFlow = React.useCallback(async () => {
+        try {
+            console.log('🔍 FRONTEND: Starting validation with', state.nodes.length, 'nodes and', state.edges.length, 'edges');
+
+            // Prepare flow data in the format expected by the API
+            const flowData = {
+                nodes: state.nodes.map(node => {
+                    // Convert file path to class name for validation
+                    const originalPath = node.data.path;
+                    const convertedType = pathToClassName(originalPath);
+                    const finalType = convertedType || node.data.nodeClass || node.data.type;
+
+                    // DETAILED DEBUG: Log every step of conversion process
+                    console.log(`🔍 NODE CONVERSION for ${node.id}:`, {
+                        id: node.id,
+                        label: node.data.label,
+                        originalPath: originalPath,
+                        convertedType: convertedType,
+                        finalType: finalType,
+                        nodeData: node.data,
+                        fallbacks: {
+                            nodeClass: node.data.nodeClass,
+                            type: node.data.type
+                        }
+                    });
+
+                    const processedNode = {
+                        id: node.id,
+                        type: finalType,
+                        data: {
+                            label: node.data.label,
+                            constantValues: node.data.constantValues || {}
+                        },
+                        position: node.position
+                    };
+
+                    console.log(`🔍 PROCESSED NODE ${node.id}:`, processedNode);
+                    return processedNode;
+                }),
+                edges: state.edges.map(edge => {
+                    const processedEdge = {
+                        id: edge.id,
+                        source: edge.source,
+                        target: edge.target,
+                        sourceHandle: edge.sourceHandle,
+                        targetHandle: edge.targetHandle
+                    };
+                    console.log(`🔍 PROCESSED EDGE ${edge.id}:`, processedEdge);
+                    return processedEdge;
+                })
+            };
+
+            console.log('📤 FRONTEND SENDING:', JSON.stringify(flowData, null, 2));
+
+            const response = await fetch('/api/flows/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(flowData)
+            });
+
+            console.log('📡 FRONTEND: Response status:', response.status, response.statusText);
+            console.log('📡 FRONTEND: Response headers:', Object.fromEntries(response.headers.entries()));
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('📡 FRONTEND: Error response body:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('📥 FRONTEND RECEIVED:', JSON.stringify(result, null, 2));
+
+            if (result.valid) {
+                console.log('✅ VALIDATION SUCCESS:', `${result.nodes_validated} nodes validated`);
+
+                // Show success message
+                let successMessage = `✅ Flow is valid! (${result.nodes_validated} nodes validated)`;
+                antd.message.success(successMessage, 3);
+
+                // Show warnings if any
+                if (result.warnings && result.warnings.length > 0) {
+                    console.log('⚠️ VALIDATION WARNINGS:', result.warnings);
+                    result.warnings.forEach(warning => {
+                        antd.message.warning(warning, 4);
+                    });
+                }
+            } else {
+                console.error('❌ VALIDATION ERRORS DETAIL:', {
+                    errorCount: result.errors.length,
+                    errors: result.errors,
+                    warningCount: result.warnings ? result.warnings.length : 0,
+                    warnings: result.warnings,
+                    nodes_validated: result.nodes_validated,
+                    metadata: result.metadata
+                });
+                const errorText = result.errors.join(', ');
+                antd.message.error(
+                    `❌ Validation errors: ${errorText}`,
+                    5
+                );
+                console.error('VALIDATION: Errors found:', result.errors);
+
+                // Show warnings even when there are errors
+                if (result.warnings && result.warnings.length > 0) {
+                    result.warnings.forEach(warning => {
+                        antd.message.warning(warning, 4);
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error('VALIDATION: Request failed:', error);
+            antd.message.error(
+                `❌ Validation failed: ${error.message}`,
+                5
+            );
+        }
+    }, [state.nodes, state.edges]);
+
     return (
         <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%', position: 'relative' }}>
-            {/* Shortcuts Button */}
-            <antd.Button
-                type="default"
-                size="small"
-                icon={<i className="fas fa-keyboard"></i>}
-                onClick={() => setShowShortcuts(true)}
-                style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    zIndex: 10,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                }}
-            />
+            {/* Flow Control Buttons */}
+            <div style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                zIndex: 10,
+                display: 'flex',
+                gap: '8px'
+            }}>
+                {/* Validate Flow Button */}
+                <antd.Button
+                    type="primary"
+                    size="small"
+                    icon={<i className="fas fa-check-circle"></i>}
+                    onClick={validateFlow}
+                    disabled={state.nodes.length === 0}
+                    style={{
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                    }}
+                >
+                    Validate
+                </antd.Button>
+
+                {/* Shortcuts Button */}
+                <antd.Button
+                    type="default"
+                    size="small"
+                    icon={<i className="fas fa-keyboard"></i>}
+                    onClick={() => setShowShortcuts(true)}
+                    style={{
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                    }}
+                />
+            </div>
 
             {/* Shortcuts Modal */}
             <ShortcutsModal

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from .nodes import router as nodes_router, NodeSourceUpdateRequest
 from .variables import router as variables_router, CreateVariableRequest
+from .flows import FlowValidationRequest
 
 
 # Create main router that combines all sub-routers
@@ -62,6 +63,16 @@ def update_node_source_endpoint(
     """Update the source code of a custom (user) node file."""
     from .nodes import update_node_source
     return update_node_source(request, working_dir)
+
+
+@router.post("/flows/validate")
+def validate_flow_endpoint(
+    request: FlowValidationRequest,
+    working_dir: Path = Depends(get_working_directory)
+):
+    """Validate a flow without executing it."""
+    from .flows import validate_flow
+    return validate_flow(request, working_dir)
 
 
 __all__ = ["router", "get_working_directory"]

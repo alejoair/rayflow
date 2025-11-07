@@ -21,9 +21,7 @@ class SetVariableNode(RayflowNode):
         "value": "any"  # Input type depends on variable
     }
 
-    outputs = {
-        "success": "bool"  # Whether operation succeeded
-    }
+    outputs = {}  # SET Variable doesn't output data (following Unreal paradigm)
 
     # Execution flow
     exec_input = True
@@ -37,7 +35,7 @@ class SetVariableNode(RayflowNode):
             value: Value to store
 
         Returns:
-            dict: {"success": bool}
+            dict: Empty dict (no outputs in Unreal paradigm)
         """
         variable_name = self.VARIABLE_NAME
         value = inputs.get("value")
@@ -52,7 +50,7 @@ class SetVariableNode(RayflowNode):
             # Set the variable value
             success = ray.get(store.set_variable.remote(variable_name, value))
 
-            return {"success": success}
+            return {}  # No outputs in Unreal paradigm
 
         except Exception as e:
             raise RuntimeError(f"Failed to set variable '{variable_name}': {e}")

@@ -23,9 +23,9 @@ class GetVariableNode(RayflowNode):
         "value": "any"  # Output type depends on variable
     }
 
-    # Execution flow
-    exec_input = True
-    exec_output = True
+    # Execution flow - Pure node (no side effects, executes when value needed)
+    exec_input = False
+    exec_output = False
 
     def process(self, **inputs):
         """

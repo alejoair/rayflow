@@ -11,7 +11,7 @@ from .exceptions import ValidationError
 class FlowValidator:
     """Validates flow structure before execution"""
 
-    def validate(self, flow_data: dict) -> Tuple[bool, List[str]]:
+    def validate(self, flow_data: dict) -> Tuple[bool, List[str], List[str]]:
         """
         Validate the flow structure
 
@@ -19,11 +19,13 @@ class FlowValidator:
             flow_data: Raw flow JSON from frontend
 
         Returns:
-            (is_valid, errors)
+            (is_valid, errors, warnings)
             - is_valid: True if valid, False otherwise
-            - errors: List of validation error messages
+            - errors: List of validation error messages (cause is_valid = False)
+            - warnings: List of validation warning messages (don't affect is_valid)
         """
         errors = []
+        warnings = []
 
         # Run all validation checks
         errors.extend(self._check_single_start(flow_data))
@@ -33,13 +35,30 @@ class FlowValidator:
         errors.extend(self._check_no_cycles(flow_data))
         errors.extend(self._check_type_compatibility(flow_data))
 
+        # Multiple return paths is a warning, not an error
+        warnings.extend(self._check_multiple_return_paths(flow_data))
+
         is_valid = len(errors) == 0
-        return is_valid, errors
+        return is_valid, errors, warnings
 
     def _check_single_start(self, flow_data: dict) -> List[str]:
         """Ensure exactly one START node exists"""
         errors = []
         nodes = flow_data.get('nodes', [])
+
+        # COMPREHENSIVE DEBUG: Log what we're searching for
+        print(f"[VALIDATOR] Searching for START nodes in {len(nodes)} nodes:")
+        start_nodes_found = []
+        for i, node in enumerate(nodes):
+            node_type = node.get('type', '')
+            node_id = node.get('id', 'unknown')
+            node_label = node.get('data', {}).get('label', 'N/A')
+            is_start = 'StartNode' in node_type
+            if is_start:
+                start_nodes_found.append(f"{node_label} ({node_id})")
+            print(f"  Node {i+1}: id='{node_id}', label='{node_label}', type='{node_type}', contains 'StartNode': {is_start}")
+
+        print(f"[VALIDATOR] START nodes found: {start_nodes_found}")
 
         start_nodes = [
             node for node in nodes
@@ -299,3 +318,69 @@ class FlowValidator:
 
         # Otherwise, types must match exactly
         return source_type == target_type
+
+    def _check_multiple_return_paths(self, flow_data: dict) -> List[str]:
+        """Check for multiple reachable RETURN paths and warn user"""
+        errors = []
+        nodes = flow_data.get('nodes', [])
+        edges = flow_data.get('edges', [])
+
+        if not nodes:
+            return errors
+
+        # Find START and RETURN nodes
+        start_nodes = [n for n in nodes if 'StartNode' in n.get('type', '')]
+        return_nodes = [n for n in nodes if 'ReturnNode' in n.get('type', '')]
+
+        if not start_nodes or len(return_nodes) <= 1:
+            return errors  # No issue if 0 or 1 RETURN nodes
+
+        start_id = start_nodes[0]['id']
+        return_ids = {node['id'] for node in return_nodes}
+
+        # Build adjacency list (only exec connections)
+        graph = {node['id']: [] for node in nodes}
+        for edge in edges:
+            if edge.get('type') == 'exec' or 'exec' in edge.get('sourceHandle', ''):
+                source = edge['source']
+                target = edge['target']
+                if source in graph:
+                    graph[source].append(target)
+
+        # Find all RETURN nodes reachable from START using DFS
+        def find_all_reachable_returns(start_id: str) -> Set[str]:
+            visited = set()
+            reachable_returns = set()
+
+            def dfs(node_id: str):
+                if node_id in visited:
+                    return
+                visited.add(node_id)
+
+                if node_id in return_ids:
+                    reachable_returns.add(node_id)
+                    # Continue DFS even from RETURN nodes (in case there are more paths)
+
+                for neighbor in graph.get(node_id, []):
+                    dfs(neighbor)
+
+            dfs(start_id)
+            return reachable_returns
+
+        reachable_returns = find_all_reachable_returns(start_id)
+
+        if len(reachable_returns) > 1:
+            # Create warning message with node names
+            return_names = []
+            for return_id in reachable_returns:
+                node = next((n for n in nodes if n['id'] == return_id), None)
+                if node:
+                    label = node.get('data', {}).get('label', return_id)
+                    return_names.append(f"{label} ({return_id})")
+
+            warning_msg = (
+                f"Flow has {len(reachable_returns)} exit points - whichever executes first will complete the flow."
+            )
+            errors.append(warning_msg)
+
+        return errors
