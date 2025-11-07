@@ -1,0 +1,1 @@
+"""Variables nodes for global variable access"""
