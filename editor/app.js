@@ -170,28 +170,38 @@ function RayFlowEditor() {
 
     return (
         <antd.Layout style={{ height: '100vh' }}>
-            {/* Header with Ant Design */}
+            {/* Header with consistent gray styling */}
             <antd.Layout.Header style={{
                 padding: '0 24px',
-                background: '#001529',
+                background: '#fff',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                borderBottom: '1px solid #f0f0f0',
+                boxShadow: '0 1px 4px rgba(0,21,41,.08)'
             }}>
                 <antd.Space align="center" size="large">
-                    <antd.Typography.Title level={3} style={{ color: 'white', margin: 0 }}>
+                    <antd.Typography.Title level={3} style={{ color: '#262626', margin: 0 }}>
                         RayFlow Editor
                     </antd.Typography.Title>
-                    <antd.Typography.Text style={{ color: '#rgba(255,255,255,0.65)' }}>
+                    <antd.Typography.Text style={{ color: '#8c8c8c' }}>
                         Visual Flow Editor
                     </antd.Typography.Text>
                 </antd.Space>
 
                 <antd.Space>
-                    <antd.Button type="default" onClick={handleManualSave}>
+                    <antd.Button
+                        type="default"
+                        icon={<i className="fas fa-save"></i>}
+                        onClick={handleManualSave}
+                    >
                         Save Canvas
                     </antd.Button>
-                    <antd.Button type="primary" onClick={handleExportFlow}>
+                    <antd.Button
+                        type="primary"
+                        icon={<i className="fas fa-download"></i>}
+                        onClick={handleExportFlow}
+                    >
                         Export Flow
                     </antd.Button>
                     <antd.Button
@@ -201,9 +211,6 @@ function RayFlowEditor() {
                         onClick={handleClearCanvas}
                     >
                         Clear Canvas
-                    </antd.Button>
-                    <antd.Button type="primary" style={{ background: '#52c41a' }} onClick={handleRun}>
-                        Run Flow
                     </antd.Button>
                 </antd.Space>
             </antd.Layout.Header>

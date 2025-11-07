@@ -144,13 +144,30 @@ function Inspector() {
                 </antd.Space>
             </antd.Flex>
 
-            <antd.Flex flex={1} style={{ padding: '16px', overflow: 'auto' }}>
+            <antd.Flex
+                flex={1}
+                style={{
+                    padding: '16px',
+                    overflow: 'auto',
+                    flexDirection: 'column'
+                }}
+            >
                 {selectedNode ? (
-                    <antd.Space direction="vertical" style={{ width: '100%' }} size="large">
+                    <antd.Space
+                        direction="vertical"
+                        style={{
+                            width: '100%',
+                            flex: 1
+                        }}
+                        size="large"
+                    >
                         <antd.Card
                             title="Node Properties"
                             size="small"
-                            style={{ width: '100%' }}
+                            style={{
+                                width: '100%',
+                                marginBottom: 0
+                            }}
                         >
                             <antd.Descriptions
                                 column={1}
@@ -208,7 +225,10 @@ function Inspector() {
                                     </antd.Space>
                                 }
                                 size="small"
-                                style={{ width: '100%' }}
+                                style={{
+                                    width: '100%',
+                                    marginBottom: 0
+                                }}
                             >
                                 <antd.Space direction="vertical" style={{ width: '100%' }} size="middle">
                                     <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>
@@ -251,7 +271,10 @@ function Inspector() {
                                     </antd.Space>
                                 }
                                 size="small"
-                                style={{ width: '100%' }}
+                                style={{
+                                    width: '100%',
+                                    marginBottom: 0
+                                }}
                             >
                                 <antd.Space direction="vertical" style={{ width: '100%' }} size="middle">
                                     <antd.Typography.Text type="secondary" style={{ fontSize: '12px' }}>

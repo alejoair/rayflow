@@ -23,6 +23,11 @@ class DataNotAvailableError(Exception):
     pass
 
 
+class ExecutionError(Exception):
+    """General execution error"""
+    pass
+
+
 class NodeExecutionError(Exception):
     """Node execution failed"""
 

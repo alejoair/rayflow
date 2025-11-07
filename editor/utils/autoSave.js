@@ -23,7 +23,7 @@ function saveCanvasState(state) {
         const canvasState = getCanvasState(state);
         const serialized = JSON.stringify(canvasState);
         localStorage.setItem(AUTOSAVE_KEY, serialized);
-        console.log('Canvas auto-saved:', canvasState.nodes.length, 'nodes,', canvasState.edges.length, 'edges');
+        // console.log('Canvas auto-saved:', canvasState.nodes.length, 'nodes,', canvasState.edges.length, 'edges');
         return true;
     } catch (error) {
         console.error('Failed to auto-save canvas:', error);
@@ -38,7 +38,7 @@ function loadCanvasState() {
     try {
         const saved = localStorage.getItem(AUTOSAVE_KEY);
         if (!saved) {
-            console.log('💭 No auto-saved canvas found');
+            // console.log('💭 No auto-saved canvas found');
             return null;
         }
 
@@ -53,7 +53,7 @@ function loadCanvasState() {
         // Check if save is too old (more than 24 hours)
         const maxAge = 24 * 60 * 60 * 1000; // 24 hours
         if (parsed.timestamp && (Date.now() - parsed.timestamp) > maxAge) {
-            console.log('🗑️ Auto-save too old, clearing');
+            // console.log('🗑️ Auto-save too old, clearing');
             clearCanvasState();
             return null;
         }
@@ -146,8 +146,8 @@ window.AutoSave = {
 };
 
 // Debug logging
-console.log('AutoSave system initialized');
-console.log('AutoSave available at window.AutoSave:', window.AutoSave);
+// console.log('AutoSave system initialized');
+// console.log('AutoSave available at window.AutoSave:', window.AutoSave);
 
 // Test function for manual debugging
 window.AutoSave.test = function() {

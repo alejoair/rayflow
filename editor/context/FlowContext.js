@@ -464,9 +464,9 @@ function FlowProvider({ children }) {
                             variableNodes.push(setNode, getNode);
                         });
 
-                        console.log('Variables loaded successfully:', variables.length);
+                        // console.log('Variables loaded successfully:', variables.length);
                     } else {
-                        console.log('No variables endpoint available or no variables found');
+                        // console.log('No variables endpoint available or no variables found');
                     }
                 } catch (varErr) {
                     console.log('Variables loading failed (continuing without variables):', varErr.message);
@@ -510,7 +510,7 @@ function FlowProvider({ children }) {
         );
 
         if (hasChanged && (currentCounts.nodeCount > 0 || currentCounts.edgeCount > 0)) {
-            console.log('AUTO-SAVE: State changed, triggering save', currentCounts);
+            // console.log('AUTO-SAVE: State changed, triggering save', currentCounts);
             lastSaveRef.current = currentCounts;
 
             // Clear previous timeout
@@ -530,7 +530,7 @@ function FlowProvider({ children }) {
 
                 if (window.AutoSave?.save) {
                     window.AutoSave.save(stateToSave);
-                    console.log('AUTO-SAVE: Save completed (including editor tabs)');
+                    // console.log('AUTO-SAVE: Save completed (including editor tabs)');
                 }
             }, 2000); // 2 second debounce
         }
@@ -540,17 +540,17 @@ function FlowProvider({ children }) {
     React.useEffect(() => {
         async function loadAutoSave() {
             try {
-                console.log('AUTO-LOAD: Checking for auto-saved data...');
+                // console.log('AUTO-LOAD: Checking for auto-saved data...');
 
                 // Check if AutoSave is available
                 if (!window.AutoSave) {
-                    console.log('AUTO-LOAD: AutoSave system not available');
+                    // console.log('AUTO-LOAD: AutoSave system not available');
                     return;
                 }
 
                 // Check if there's auto-saved data
                 if (!window.AutoSave.hasAutoSave()) {
-                    console.log('AUTO-LOAD: No auto-saved data found');
+                    // console.log('AUTO-LOAD: No auto-saved data found');
                     return;
                 }
 

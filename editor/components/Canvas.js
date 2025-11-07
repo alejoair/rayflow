@@ -57,7 +57,7 @@ function Canvas({ onNodeSelect }) {
             return;
         }
 
-        console.log('📊 NODES CHANGE (significant):', significantChanges.map(c => ({ type: c.type, id: c.id })));
+        // console.log('📊 NODES CHANGE (significant):', significantChanges.map(c => ({ type: c.type, id: c.id })));
 
         // Apply changes using the current state from context
         // We access state.nodes directly here but don't include it in dependencies
@@ -142,6 +142,7 @@ function Canvas({ onNodeSelect }) {
         if (sourceHandle && sourceHandle.includes('exec')) {
             const execWidth = typeConfig?.settings?.connectionWidth?.exec || 3;
             style = { stroke: getTypeColor('exec'), strokeWidth: execWidth };
+            animated = true; // Exec connections are now animated too
         } else if (sourceHandle && sourceHandle.startsWith('output-')) {
             const sourceNode = state.nodes.find(node => node.id === sourceNodeId);
             if (sourceNode) {
@@ -168,11 +169,11 @@ function Canvas({ onNodeSelect }) {
 
     // Add additional React Flow event debugging
     const onNodeMouseEnter = React.useCallback((event, node) => {
-        console.log('🖱️ MOUSE ENTER NODE:', { nodeId: node.id, label: node.data?.label });
+        // console.log('🖱️ MOUSE ENTER NODE:', { nodeId: node.id, label: node.data?.label });
     }, []);
 
     const onNodeMouseLeave = React.useCallback((event, node) => {
-        console.log('🖱️ MOUSE LEAVE NODE:', { nodeId: node.id, label: node.data?.label });
+        // console.log('🖱️ MOUSE LEAVE NODE:', { nodeId: node.id, label: node.data?.label });
     }, []);
 
     // Track drag timing to detect clicks (short drags)
@@ -182,7 +183,7 @@ function Canvas({ onNodeSelect }) {
     const onNodeDragStart = React.useCallback((event, node) => {
         dragStartTimeRef.current = Date.now();
         dragStartPosRef.current = { x: event.clientX, y: event.clientY };
-        console.log('🔄 NODE DRAG START:', { nodeId: node.id, label: node.data?.label });
+        // console.log('🔄 NODE DRAG START:', { nodeId: node.id, label: node.data?.label });
     }, []);
 
     const onNodeDragStop = React.useCallback((event, node) => {
@@ -192,16 +193,16 @@ function Canvas({ onNodeSelect }) {
             Math.pow(event.clientY - dragStartPosRef.current.y, 2)
         ) : 0;
 
-        console.log('🔄 NODE DRAG STOP:', {
-            nodeId: node.id,
-            label: node.data?.label,
-            duration: dragDuration,
-            distance: Math.round(dragDistance)
-        });
+        // console.log('🔄 NODE DRAG STOP:', {
+        //     nodeId: node.id,
+        //     label: node.data?.label,
+        //     duration: dragDuration,
+        //     distance: Math.round(dragDistance)
+        // });
 
         // Treat as click if drag was very short and minimal movement
         if (dragDuration < 200 && dragDistance < 5) {
-            console.log('🎯 CLICK DETECTED (via short drag):', { nodeId: node.id, label: node.data?.label });
+            // console.log('🎯 CLICK DETECTED (via short drag):', { nodeId: node.id, label: node.data?.label });
             // The selection already happened via onSelectionChange, no need to call onNodeSelect again
         }
 
@@ -218,7 +219,7 @@ function Canvas({ onNodeSelect }) {
 
     // Node selection handling
     const onNodeClick = React.useCallback((event, node) => {
-        console.log('🎯 NODE CLICK:', { nodeId: node.id, label: node.data?.label });
+        // console.log('🎯 NODE CLICK:', { nodeId: node.id, label: node.data?.label });
         if (onNodeSelectRef.current) {
             onNodeSelectRef.current(node);  // Pasar nodo completo para Inspector
         }
@@ -232,7 +233,7 @@ function Canvas({ onNodeSelect }) {
         // Solo llamar si la selección realmente cambió
         if (lastSelectionRef.current !== newSelectionId) {
             lastSelectionRef.current = newSelectionId;
-            console.log('🔄 SELECTION CHANGE:', { count: selectedNodes.length, id: newSelectionId });
+            // console.log('🔄 SELECTION CHANGE:', { count: selectedNodes.length, id: newSelectionId });
 
             if (selectedNodes.length === 1) {
                 if (onNodeSelectRef.current) {
@@ -254,13 +255,13 @@ function Canvas({ onNodeSelect }) {
 
     const onDrop = React.useCallback((event) => {
         event.preventDefault();
-        console.log('NODE DROP: Event triggered');
+        // console.log('NODE DROP: Event triggered');
 
         const nodeData = JSON.parse(event.dataTransfer.getData('application/reactflow'));
-        console.log('NODE DROP: nodeData parsed:', nodeData);
+        // console.log('NODE DROP: nodeData parsed:', nodeData);
 
         if (!nodeData || !reactFlowInstance) {
-            console.log('NODE DROP: Missing nodeData or reactFlowInstance');
+            // console.log('NODE DROP: Missing nodeData or reactFlowInstance');
             return;
         }
 
@@ -284,9 +285,9 @@ function Canvas({ onNodeSelect }) {
             type: nodeData.nodeType
         };
 
-        console.log('NODE DROP: Calling actions.addNode with position:', position, 'data:', nodeDataForFlow);
+        // console.log('NODE DROP: Calling actions.addNode with position:', position, 'data:', nodeDataForFlow);
         actions.addNode(position, nodeDataForFlow);
-        console.log('NODE DROP: actions.addNode called successfully');
+        // console.log('NODE DROP: actions.addNode called successfully');
     }, [reactFlowInstance, actions]);
 
     // Helper function to convert file path to class name
@@ -338,18 +339,18 @@ function Canvas({ onNodeSelect }) {
                     const finalType = convertedType || node.data.nodeClass || node.data.type;
 
                     // DETAILED DEBUG: Log every step of conversion process
-                    console.log(`🔍 NODE CONVERSION for ${node.id}:`, {
-                        id: node.id,
-                        label: node.data.label,
-                        originalPath: originalPath,
-                        convertedType: convertedType,
-                        finalType: finalType,
-                        nodeData: node.data,
-                        fallbacks: {
-                            nodeClass: node.data.nodeClass,
-                            type: node.data.type
-                        }
-                    });
+                    // console.log(`🔍 NODE CONVERSION for ${node.id}:`, {
+                    //     id: node.id,
+                    //     label: node.data.label,
+                    //     originalPath: originalPath,
+                    //     convertedType: convertedType,
+                    //     finalType: finalType,
+                    //     nodeData: node.data,
+                    //     fallbacks: {
+                    //         nodeClass: node.data.nodeClass,
+                    //         type: node.data.type
+                    //     }
+                    // });
 
                     const processedNode = {
                         id: node.id,
@@ -361,7 +362,7 @@ function Canvas({ onNodeSelect }) {
                         position: node.position
                     };
 
-                    console.log(`🔍 PROCESSED NODE ${node.id}:`, processedNode);
+                    // console.log(`🔍 PROCESSED NODE ${node.id}:`, processedNode);
                     return processedNode;
                 }),
                 edges: state.edges.map(edge => {
@@ -372,12 +373,12 @@ function Canvas({ onNodeSelect }) {
                         sourceHandle: edge.sourceHandle,
                         targetHandle: edge.targetHandle
                     };
-                    console.log(`🔍 PROCESSED EDGE ${edge.id}:`, processedEdge);
+                    // console.log(`🔍 PROCESSED EDGE ${edge.id}:`, processedEdge);
                     return processedEdge;
                 })
             };
 
-            console.log('📤 FRONTEND SENDING:', JSON.stringify(flowData, null, 2));
+            // console.log('📤 FRONTEND SENDING:', JSON.stringify(flowData, null, 2));
 
             const response = await fetch('/api/flows/validate', {
                 method: 'POST',
@@ -387,8 +388,8 @@ function Canvas({ onNodeSelect }) {
                 body: JSON.stringify(flowData)
             });
 
-            console.log('📡 FRONTEND: Response status:', response.status, response.statusText);
-            console.log('📡 FRONTEND: Response headers:', Object.fromEntries(response.headers.entries()));
+            // console.log('📡 FRONTEND: Response status:', response.status, response.statusText);
+            // console.log('📡 FRONTEND: Response headers:', Object.fromEntries(response.headers.entries()));
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -397,7 +398,7 @@ function Canvas({ onNodeSelect }) {
             }
 
             const result = await response.json();
-            console.log('📥 FRONTEND RECEIVED:', JSON.stringify(result, null, 2));
+            // console.log('📥 FRONTEND RECEIVED:', JSON.stringify(result, null, 2));
 
             if (result.valid) {
                 console.log('✅ VALIDATION SUCCESS:', `${result.nodes_validated} nodes validated`);
@@ -446,6 +447,133 @@ function Canvas({ onNodeSelect }) {
         }
     }, [state.nodes, state.edges]);
 
+    // Flow execution function
+    const runFlow = React.useCallback(async () => {
+        try {
+            console.log('[FRONTEND] Starting flow execution with', state.nodes.length, 'nodes and', state.edges.length, 'edges');
+
+            // Check if there are nodes to execute
+            if (state.nodes.length === 0) {
+                antd.message.warning('No nodes to execute. Create some nodes first!');
+                return;
+            }
+
+            // Prepare flow data in the format expected by the API
+            const flowData = {
+                nodes: state.nodes.map(node => {
+                    // Convert file path to class name for execution
+                    const originalPath = node.data.path;
+                    const convertedType = pathToClassName(originalPath);
+                    const finalType = convertedType || node.data.nodeClass || node.data.type;
+
+                    console.log(`[FRONTEND] EXEC NODE CONVERSION for ${node.id}:`, {
+                        id: node.id,
+                        label: node.data.label,
+                        originalPath: originalPath,
+                        convertedType: convertedType,
+                        finalType: finalType
+                    });
+
+                    const processedNode = {
+                        id: node.id,
+                        type: finalType,
+                        data: {
+                            label: node.data.label,
+                            constantValues: node.data.constantValues || {}
+                        },
+                        position: node.position
+                    };
+
+                    return processedNode;
+                }),
+                edges: state.edges.map(edge => ({
+                    id: edge.id,
+                    source: edge.source,
+                    target: edge.target,
+                    sourceHandle: edge.sourceHandle,
+                    targetHandle: edge.targetHandle
+                })),
+                initial_variables: {
+                    inter: 10  // Default value for the 'inter' variable
+                }
+            };
+
+            console.log('[FRONTEND] EXECUTE FLOW SENDING:', JSON.stringify(flowData, null, 2));
+
+            // Show loading message
+            const loadingMessage = antd.message.loading('Executing flow...', 0);
+
+            const response = await fetch('/api/flows/execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(flowData)
+            });
+
+            // Hide loading message
+            loadingMessage();
+
+            console.log('[FRONTEND] EXECUTE Response status:', response.status, response.statusText);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[FRONTEND] EXECUTE Error response body:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('[FRONTEND] EXECUTE RESULT:', JSON.stringify(result, null, 2));
+
+            if (result.success) {
+                console.log('[FRONTEND] EXECUTION SUCCESS:', `Result: ${JSON.stringify(result.result)}, Time: ${result.execution_time}s`);
+
+                // Show success message with result
+                antd.Modal.success({
+                    title: 'Flow Execution Successful!',
+                    content: (
+                        <div>
+                            <p><strong>Result:</strong> {JSON.stringify(result.result)}</p>
+                            <p><strong>Execution time:</strong> {result.execution_time?.toFixed(3)}s</p>
+                            <p><strong>Nodes executed:</strong> {result.nodes_executed}</p>
+                        </div>
+                    ),
+                    okText: 'Great!',
+                    width: 500
+                });
+            } else {
+                console.error('[FRONTEND] EXECUTION ERRORS:', result.error);
+
+                antd.Modal.error({
+                    title: 'Flow Execution Failed',
+                    content: (
+                        <div>
+                            <p><strong>Error:</strong> {result.error}</p>
+                            <p><strong>Execution time:</strong> {result.execution_time?.toFixed(3)}s</p>
+                        </div>
+                    ),
+                    okText: 'OK',
+                    width: 600
+                });
+            }
+
+        } catch (error) {
+            console.error('[FRONTEND] EXECUTION Request failed:', error);
+
+            antd.Modal.error({
+                title: 'Execution Request Failed',
+                content: (
+                    <div>
+                        <p><strong>Error:</strong> {error.message}</p>
+                        <p>Please check the server logs for more details.</p>
+                    </div>
+                ),
+                okText: 'OK',
+                width: 500
+            });
+        }
+    }, [state.nodes, state.edges]);
+
     return (
         <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%', position: 'relative' }}>
             {/* Flow Control Buttons */}
@@ -469,6 +597,23 @@ function Canvas({ onNodeSelect }) {
                     }}
                 >
                     Validate
+                </antd.Button>
+
+                {/* Run Flow Button */}
+                <antd.Button
+                    type="default"
+                    size="small"
+                    icon={<i className="fas fa-play"></i>}
+                    onClick={runFlow}
+                    disabled={state.nodes.length === 0}
+                    style={{
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        backgroundColor: '#52c41a',
+                        color: 'white',
+                        borderColor: '#52c41a'
+                    }}
+                >
+                    Run Flow
                 </antd.Button>
 
                 {/* Shortcuts Button */}
