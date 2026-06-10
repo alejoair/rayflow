@@ -1,1 +1,0 @@
-"""Graph and type validation."""
