@@ -128,15 +128,16 @@ La compatibilidad es estricta: no hay coerción implícita. `int` y `float` son 
 
 ## Engine — ciclo de ejecución
 
-`FlowExecutor._run_loop()` mantiene una cola BFS de `node_id`s a disparar.
+`FlowEngine` es una clase Python local (no actor Ray). `FlowExecutor` es un wrapper fino para compatibilidad con la API pública. `_run_loop()` mantiene una cola BFS de `node_id`s a disparar.
 
 ```
 _fire(node_id)
-  ├─ is_engine_node → _fire_engine_node()  (local, ctx.fire() bloqueante)
-  └─ @ray_node      → _fire_ray_node()     (actor Ray, ctx acumula pins)
+  ├─ is_parallel    → _fire_parallel_node() (fork/join vía _run_subgraph_task)
+  ├─ is_engine_node → _fire_engine_node()   (local, ctx.fire() bloqueante)
+  └─ @ray_node      → _fire_ray_node()      (actor Ray, ctx acumula pins)
 ```
 
-- **`_fire_engine_node()`**: instancia el nodo, crea `ExecContext` con callbacks locales, llama `run(ctx, **inputs)`. Cada `ctx.fire(pin)` llama `_run_loop(target)` síncronamente. Devuelve `[]` al BFS externo (los subgrafos ya se ejecutaron).
+- **`_fire_engine_node()`**: instancia el nodo, crea `ExecContext` con callbacks locales, llama `run(ctx, **inputs)`. Cada `ctx.fire(pin)` llama `_run_loop(target)` síncronamente. Los outputs se guardan en `GraphState` **después** de que `run()` retorna. Para outputs que deben estar disponibles antes del `fire()` (como en `CallFlow`), usar `ctx.set_output(pin, value)` dentro de `run()`.
 - **`_fire_ray_node()`**: llama `actor.run_with_ctx.remote(ctx, **inputs)`, hace `ray.get()`, recoge `fired_pins` del ctx devuelto, los traduce a `node_id`s via `exec_targets` y los encola en el BFS.
 
 Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen bajo demanda al resolver inputs de nodos posteriores.
@@ -158,6 +159,15 @@ class Get:
 El engine lo detecta en `_resolve_pin` (path 2a) y llama `_eval_pure_engine_node()` en el momento en que el nodo consumidor necesita ese valor. El mismo mecanismo aplica a cualquier `@engine_node` sin exec pins que el usuario defina — no hay configuración especial.
 
 Un `@ray_node` sin exec pins también es lazy (path 2b), pero se ejecuta como task Ray.
+
+### Ciclo de vida de actores @ray_node
+
+Los actores se crean **una sola vez** al inicio del flow en `FlowEngine._spawn_actors()`, con nombre único `{node_id}_{graph_id}` en namespace `"rayflow"`. Los handles se guardan en `self._actors` y se pasan directamente a las ramas paralelas (`_run_subgraph_task`) y al `_SubgraphExecutor`.
+
+- Los actores **no** se crean en tiempo de ejecución ni por cada rama — son singleton por flow.
+- `CallFlow` crea un `FlowEngine` nuevo con sus propios actores y `graph_id` (o comparte el `GraphState` del padre en modo no-aislado).
+- `NodeMeta.__getstate__/__setstate__` excluye `ray_handle` del pickle y lo reconstruye en el worker a partir de `py_class` — evita problemas de serialización de handles Ray.
+- **Restricción**: clases `@ray_node` definidas localmente (ej. en tests) deben registrarse en el catálogo antes de compilar el flow. Son serializables porque `py_class` viaja en el `BuiltFlow`.
 
 ---
 
@@ -212,6 +222,7 @@ Las ramas reciben el `graph_id` (string), no el handle del `GraphState`. Cada wo
 | `ForEach` | `@engine_node` | sí | Itera array, dispara loop_body por elemento |
 | `Get` | `@engine_node` | **no** | Lee variable — pure node, evaluado bajo demanda |
 | `Set` | `@engine_node` | sí | Escribe variable via `ctx.set_variable()` |
+| `CallFlow` | `@engine_node` | sí | Ejecuta otro flow como subgrafo. `isolated=True`: GraphState propio. `isolated=False`: comparte GraphState del padre. Output `result: dict` contiene los outputs del subflow. Inputs extra se pasan al subflow. |
 | `Add` | `@ray_node` | sí | Suma dos enteros |
 | `GreaterThan` | `@ray_node` | sí | Compara dos enteros, devuelve bool |
 | `ToInt/ToFloat/ToStr/ToBool` | `@ray_node` | sí | Casteos explícitos |
@@ -283,10 +294,11 @@ Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
 | Archivo | Responsabilidad |
 |---|---|
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, `_SerializableExecContext`, descriptores de pin, `NodeMeta` |
-| `rayflow/engine/executor.py` | `FlowExecutor` — ciclo BFS, `_fire_engine_node`, `_fire_ray_node`, `_eval_pure_engine_node` |
-| `rayflow/build/validator.py` | Valida el flow y produce `BuiltFlow` con `exec_targets` resueltos |
+| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local) + `FlowExecutor` (wrapper), `_SubgraphExecutor`, `_run_subgraph_task` |
+| `rayflow/build/validator.py` | Valida el flow y produce `BuiltFlow` con `exec_targets` resueltos; pins dinámicos de CallFlow |
 | `rayflow/schema/models.py` | `FlowDef`, `NodeDef`, `PinKind` |
 | `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
 | `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
 | `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |
+| `rayflow/nodes/builtin/flow.py` | `CallFlow` — subgrafos compartidos e isolados |
 | `rayflow/api.py` | API pública: `run`, `run_async`, `serve`, `stop` |

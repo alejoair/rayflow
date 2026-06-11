@@ -29,6 +29,25 @@ class NodeDef:
     inputs: dict[str, Any] = field(default_factory=dict)
     # exec input: None si OnStart/OnEvent, o "node_id" si viene de otro nodo
     exec_in: str | list[str] | None = None
+    # Ruta del GraphState al que pertenece este nodo. None = el del flow raíz.
+    # Asignado por flatten() al expandir un CallFlow isolated: los nodos del
+    # subgrafo aislado apuntan a su propio segmento de estado.
+    state_path: str | None = None
+    # CallFlow shell de empalme inmediato (un solo salto hacia arriba, como
+    # parentNode en el DOM). Solo lo llevan los FlowInput/FlowOutput de frontera
+    # de un subgrafo spliced. None = nodo del flow raíz. Asignado por flatten().
+    subflow_of: str | None = None
+    # Interfaz declarada del flow al que pertenece este nodo de frontera:
+    # {"inputs": {...}, "outputs": {...}}. Permite que _with_dynamic_pins genere
+    # los pins correctos de un FlowInput/FlowOutput spliced (que ya no coinciden
+    # con la interfaz del flow raíz). None = usar la interfaz del flow raíz.
+    iface: dict | None = None
+    # Solo en un CallFlow shell: id del nodo de entrada del subgrafo inline y del
+    # FlowOutput de retorno. El shell los orquesta en runtime: dispara
+    # subflow_entry (bloqueante), lee los outputs de subflow_exit como 'result',
+    # y luego sigue su propio exec_out (la continuación del padre).
+    subflow_entry: str | None = None
+    subflow_exit: str | None = None
 
 
 @dataclass

@@ -97,12 +97,14 @@ class ExecContext:
         get_variable_fn: Callable[[str], Any] | None = None,
         set_variable_fn: Callable[[str, Any], None] | None = None,
         emit_event_fn: Callable[[str, Any], None] | None = None,
+        graph_id: str | None = None,
     ):
         self._fire_fn = fire_fn
         self._set_output_fn = set_output_fn
         self._get_variable_fn = get_variable_fn
         self._set_variable_fn = set_variable_fn
         self._emit_event_fn = emit_event_fn
+        self.graph_id = graph_id
 
     def fire(self, pin_name: str) -> None:
         """Dispara el exec output indicado."""

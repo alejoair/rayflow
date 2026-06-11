@@ -8,7 +8,7 @@ from rayflow.nodes.registry import reset_catalog
 @pytest.fixture(autouse=True)
 def ray_init():
     if not ray.is_initialized():
-        ray.init(ignore_reinit_error=True)
+        ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
     yield
 

@@ -88,4 +88,4 @@ def _run_event_flow(flow_path: str, event_name: str, payload: Any) -> None:
 
 def _ensure_ray() -> None:
     if not ray.is_initialized():
-        ray.init(ignore_reinit_error=True)
+        ray.init(ignore_reinit_error=True, namespace="rayflow")
