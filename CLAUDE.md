@@ -1,193 +1,211 @@
-# CLAUDE.md
+# Rayflow — Contexto del proyecto
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Rayflow es un motor de ejecución de grafos de nodos al estilo Unreal Engine Blueprints, construido sobre Ray. Los flows se definen como JSON y se ejecutan distribuyendo nodos como actores/tasks de Ray.
 
-## Development Commands
+---
 
-### Start Development Server
-```bash
-# Install dependencies
-pip install -e .
+## Tipos de nodo
 
-# Start the visual editor (serves both API and frontend)
-rayflow create --port 8000
+### `@ray_node`
+Ejecutado como actor o task de Ray (proceso remoto, distribuido).
 
-# Or with specific working directory
-rayflow create --port 8000 --working-path /path/to/project
-```
+- **Con exec pins** → actor Ray (estado persistente entre llamadas).
+- **Sin exec pins** → task Ray (función pura sin estado).
+- `ctx.fire(pin)` acumula los pins disparados; el engine los encola al terminar `run()`.
+- El decorador genera automáticamente `run_with_ctx(ctx, **inputs)` que devuelve `(fired_pins, outputs_dict)`.
 
-This command sets `RAYFLOW_CWD` environment variable and launches uvicorn with `rayflow.server.app:app`. The server serves the React-based visual editor at the root URL and provides API endpoints at `/api/*`.
-
-### Testing
-```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/
-```
-
-### Manual Server Control
-If you need to manually start the server:
-```bash
-# From project root, with working directory set
-RAYFLOW_CWD=/path/to/working/dir python -m uvicorn rayflow.server.app:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## Architecture Overview
-
-RayFlow is a **visual flow editor with Ray distributed execution** that follows this architecture:
-
-```
-Visual Editor (React/Ant Design) ←→ FastAPI Server ←→ Ray Actors (Nodes)
-                ↓
-         flow.json files                    nodes/*.py files
-```
-
-### Key Design Principles
-
-1. **One Node = One Python File**: Each node is a separate `.py` file with a Ray remote class
-2. **AST-Based Metadata Extraction**: Server uses Python AST parsing to extract node metadata (inputs, outputs, constants, UI info)
-3. **Dynamic Discovery**: Nodes are discovered from both `rayflow/nodes/` (built-in) and `./nodes/` (user-defined)
-4. **Type-Safe Connections**: Visual editor enforces type compatibility between node connections
-5. **Configurable Node Constants**: Uppercase class variables become editable UI controls
-
-## Visual Editor Architecture
-
-### Frontend Stack
-- **React 18** + **Ant Design 5.28.0**: UI framework and components
-- **React Flow 11.11.4**: Visual node graph editor with custom node rendering
-- **CDN-based loading**: All libraries loaded from CDN (no build process)
-
-### Key Components
-- **`editor/app.js`**: Main application with collapsible sidebars
-- **`editor/components/Canvas.js`**: React Flow integration with drag-drop and type validation
-- **`editor/components/NodeList.js`**: Categorized node library with search
-- **`editor/components/Inspector.js`**: Property editor with dynamic form generation
-- **`editor/components/NodeComponent.js`**: Custom React Flow node renderer
-
-### Configuration System
-- **`editor/config/data-types.json`**: Data type definitions with colors, UI field types, and visual settings
-- Type configuration maps Python types to UI components (int→number input, str→text input, bool→switch)
-
-## Node System
-
-### Node Base Class Structure
 ```python
-@ray.remote
-class YourNode(RayflowNode):
-    # UI Metadata (extracted by AST parser)
-    icon = "fa-icon-name"           # Font Awesome icon
-    category = "category_name"       # For organization in UI
-    description = "What this node does"
+@ray_node
+class Add:
+    exec_in = ExecInput()
+    a = Input("int", default=0)
+    b = Input("int", default=0)
+    result = Output("int")
+    exec_out = ExecOutput()
 
-    # Configurable Constants (uppercase = editable in UI)
-    MAX_VALUE = 100                 # int → number input
-    ENABLE_LOGGING = True           # bool → switch
-    DEFAULT_MESSAGE = "Hello"       # str → text input
-
-    # Type Definitions
-    inputs = {"x": int, "y": str}   # Input port types
-    outputs = {"result": float}     # Output port types
-
-    # Execution Flow
-    exec_input = True               # Needs execution signal
-    exec_output = True              # Provides execution signal
-
-    def process(self, **inputs):
-        # Implementation here
-        return {"result": some_value}
+    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
+        ctx.fire("exec_out")
+        return {"result": a + b}
 ```
 
-### Special Node Types
+### `@engine_node`
+Ejecutado localmente por el engine (mismo proceso, sin Ray).
 
-**START Node** (`rayflow/nodes/base/start.py`):
-- Entry points for workflows
-- `exec_input = False`, `exec_output = True`
-- No input handles visible (starts the flow)
+- `ctx.fire(pin)` es **bloqueante**: ejecuta el subgrafo conectado completo antes de retornar.
+- `ctx.set_output(pin, value)` expone data outputs intermedios (usado en ForEach, etc.).
+- Habilita: control de flujo (Branch, ForEach, Sequence), TryCatch, While, CallFlow, depuración, y cualquier nodo que necesite razonar sobre la ejecución.
+- Los subgrafos disparados por `ctx.fire()` pueden contener `@ray_node` normales.
 
-**RETURN Node** (`rayflow/nodes/base/return.py`):
-- Exit points for workflows
-- `exec_input = True`, `exec_output = False`
-- Terminates workflow execution
+```python
+@engine_node
+class Branch:
+    exec_in = ExecInput()
+    condition = Input("bool", default=False)
+    true = ExecOutput()
+    false = ExecOutput()
 
-### Node Discovery and Metadata
-The server scans two directories:
-1. **`rayflow/nodes/`**: Built-in nodes (part of package)
-2. **`./nodes/`**: User-defined nodes (in working directory)
+    def run(self, ctx: ExecContext, condition: bool) -> dict:
+        ctx.fire("true" if condition else "false")
+        return {}
 
-AST parser extracts from each `.py` file:
-- Class metadata (icon, category, description)
-- Input/output type definitions
-- Configurable constants (uppercase class variables)
-- Execution flow configuration
+@engine_node
+class ForEach:
+    exec_in = ExecInput()
+    array = Input("list", default=None)
+    loop_body = ExecOutput()
+    completed = ExecOutput()
+    element = Output("Any")
+    index = Output("int")
 
-## Server Architecture
+    def run(self, ctx: ExecContext, array: list) -> dict:
+        for i, element in enumerate(array or []):
+            ctx.set_output("element", element)
+            ctx.set_output("index", i)
+            ctx.fire("loop_body")   # bloquea; el subgrafo puede tener @ray_node
+        ctx.fire("completed")
+        return {}
+```
 
-### FastAPI Application (`rayflow/server/app.py`)
-- Serves visual editor at `/` from `editor/index.html`
-- Serves components at `/components/{filename}`
-- Serves config files at `/config/{filename}`
-- API routes at `/api/*` (defined in `routes.py`)
-- Uses `RAYFLOW_CWD` environment variable for working directory
+---
 
-### Key API Endpoints
-- **`GET /api/nodes`**: Returns all discovered nodes with metadata
-- **`GET /`**: Serves the visual editor
-- **`GET /health`**: Health check
+## ExecContext
 
-## Important File Patterns
+Pasado como primer argumento a `run()` en ambos tipos de nodo.
 
-### Adding New Built-in Nodes
-1. Create `rayflow/nodes/{category}/{name}.py`
-2. Follow the node base class pattern
-3. Add configurable constants as uppercase class variables
-4. Server will automatically discover via AST parsing
+```python
+class ExecContext:
+    def fire(self, pin_name: str) -> None: ...
+    def set_output(self, pin_name: str, value: Any) -> None: ...
+```
 
-### Adding User Nodes
-1. Create `./nodes/{name}.py` in working directory
-2. Follow same pattern as built-in nodes
-3. Will appear in node library with "CUSTOM" badge
+En `@ray_node` viaja serializado al proceso del actor (`_SerializableExecContext`).
+En `@engine_node` es local con callbacks al engine.
 
-### Visual Editor Customization
-- **`editor/config/data-types.json`**: Modify type colors, UI field mappings, handle sizes
-- **`editor/index.html`**: Add new CDN dependencies or custom CSS
-- **Component files**: Modify React components (require server restart for changes)
+---
 
-## Type System
+## Pin implícito `meta`
 
-### Supported Python Types
-- `int`, `float`, `str`, `bool`, `dict`, `list`, `any`
-- Special type: `exec` (execution flow signal, white colored)
+Todos los nodos (tanto `@ray_node` como `@engine_node`) exponen automáticamente un data output `meta` de tipo `dict`, inyectado por el engine tras cada ejecución. No se declara en el nodo — siempre está disponible.
 
-### UI Field Mappings (in data-types.json)
-- `int`/`float` → `"fieldType": "number"` → Ant Design InputNumber
-- `str` → `"fieldType": "text"` → Ant Design Input
-- `bool` → `"fieldType": "switch"` → Ant Design Switch
-- `dict`/`list` → `"fieldType": "textarea"` → JSON editor
+```python
+{
+    "id": "add_1",        # id de la instancia en el grafo (definido por el usuario en el JSON)
+    "type": "Add",        # nombre de la clase del nodo
+    "flow": "mi_flow",    # nombre del flow que contiene el nodo
+    "started_at": 1718100000.123,  # unix timestamp de inicio
+    "duration_ms": 45.2,           # duración de run() en milisegundos
+}
+```
 
-### Connection Rules
-- **Exec connections** (white): Only connect exec-to-exec
-- **Data connections** (colored): Type must match exactly (no auto-conversion)
-- **Each input**: Can only receive one connection
-- **Outputs**: Can connect to multiple inputs
+Se puede conectar como cualquier data output:
+```json
+{ "id": "logger", "type": "Log", "inputs": { "data": "add_1.meta" } }
+```
 
-## Common Development Patterns
+El validator reconoce `"node_id.meta"` como referencia válida aunque no esté declarado en el nodo. En `build/validator.py` hay un caso especial para `src_pin == "meta"` que asigna tipo `"dict"`.
 
-### Testing Node Changes
-1. Modify node file in `rayflow/nodes/` or `./nodes/`
-2. Restart server (uvicorn auto-reload should work)
-3. Refresh editor to see changes in node library
-4. Drag updated node to canvas to test
+---
 
-### Debugging Visual Editor
-1. Open browser dev tools (F12)
-2. Check console for JavaScript errors
-3. Inspect network tab for API call failures
-4. Use React DevTools if available
+## Tipos de pines
 
-### Adding New Data Types
-1. Update `editor/config/data-types.json` with new type definition
-2. Add color, fieldType, and inputProps
-3. Restart server and refresh editor
-4. New type will be available for node inputs/outputs
+| Descriptor | Tipo | Descripción |
+|---|---|---|
+| `Input("int", default=0)` | data input | Recibe un valor. Tipo canónico string. |
+| `Output("str")` | data output | Produce un valor. |
+| `ExecInput()` | exec input | Recibe señal de ejecución. |
+| `ExecOutput()` | exec output | Dispara señal de ejecución. |
+
+**Tipos permitidos**: `int`, `float`, `str`, `bool`, `list`, `dict`, `Any`, `list[T]`, `dict[str, T]`.
+La compatibilidad es estricta: no hay coerción implícita. `int` y `float` son incompatibles. Usar nodos `ToInt`, `ToFloat`, `ToStr`, `ToBool` para casteos.
+
+---
+
+## Engine — ciclo de ejecución
+
+`FlowExecutor._run_loop()` mantiene una cola BFS de `node_id`s a disparar.
+
+```
+_fire(node_id)
+  ├─ is_engine_node → _fire_engine_node()  (local, ctx.fire() bloqueante)
+  └─ @ray_node      → _fire_ray_node()     (actor Ray, ctx acumula pins)
+```
+
+- **`_fire_engine_node()`**: instancia el nodo, crea `ExecContext` con callbacks locales, llama `run(ctx, **inputs)`. Cada `ctx.fire(pin)` llama `_run_loop(target)` síncronamente. Devuelve `[]` al BFS externo (los subgrafos ya se ejecutaron).
+- **`_fire_ray_node()`**: llama `actor.run_with_ctx.remote(ctx, **inputs)`, hace `ray.get()`, recoge `fired_pins` del ctx devuelto, los traduce a `node_id`s via `exec_targets` y los encola en el BFS.
+
+Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen bajo demanda al resolver inputs de nodos posteriores.
+
+---
+
+## Nodos builtin
+
+| Nodo | Tipo | Descripción |
+|---|---|---|
+| `OnStart` | `@engine_node` | Punto de entrada sin parámetros |
+| `FlowInput` | `@engine_node` | Punto de entrada con parámetros |
+| `FlowOutput` | `@engine_node` | Punto de salida del flow |
+| `OnEvent` | `@engine_node` | Entrada por evento externo |
+| `EmitEvent` | `@engine_node` | Emite evento al bus global |
+| `Branch` | `@engine_node` | Desvío condicional true/false |
+| `Sequence` | `@engine_node` | Dispara then_0/then_1/then_2 en orden |
+| `ForEach` | `@engine_node` | Itera array, dispara loop_body por elemento |
+| `Get` | `@engine_node` | Lee variable del GraphState |
+| `Set` | `@engine_node` | Escribe variable en el GraphState |
+| `Add` | `@ray_node` | Suma dos enteros |
+| `ToInt/ToFloat/ToStr/ToBool` | `@ray_node` | Casteos explícitos |
+
+---
+
+## Schema de un flow (JSON)
+
+```json
+{
+  "name": "mi_flow",
+  "version": "1",
+  "inputs": { "x": "int" },
+  "outputs": { "result": "int" },
+  "variables": [{ "name": "contador", "type": "int", "default": 0 }],
+  "events": [],
+  "nodes": [
+    { "id": "entry", "type": "FlowInput" },
+    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
+    { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
+  ]
+}
+```
+
+`exec_in` acepta `"node_id"` (exec output por defecto) o `"node_id.pin_name"` (exec output específico, ej. `"branch.true"`).
+
+---
+
+## API pública
+
+```python
+import rayflow
+
+# Síncrono
+outputs = rayflow.run("flow.json", x=5, y=3)
+
+# Asíncrono (devuelve ObjectRef de Ray)
+ref = rayflow.run_async("flow.json", x=5)
+outputs = ray.get(ref)
+
+# Flow residente por eventos
+graph_id = rayflow.serve("flow.json")
+rayflow.stop(graph_id, ["mi_evento"])
+```
+
+---
+
+## Archivos clave
+
+| Archivo | Responsabilidad |
+|---|---|
+| `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, descriptores de pin, `NodeMeta` |
+| `rayflow/engine/executor.py` | `FlowExecutor` — ciclo BFS, `_fire_engine_node`, `_fire_ray_node` |
+| `rayflow/build/validator.py` | Valida el flow y produce `BuiltFlow` con `exec_targets` resueltos |
+| `rayflow/schema/models.py` | `FlowDef`, `NodeDef`, `PinKind` |
+| `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
+| `rayflow/state/actor.py` | `GraphState` — actor Ray con variables y outputs de nodos |
+| `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |
+| `rayflow/api.py` | API pública: `run`, `run_async`, `serve`, `stop` |
