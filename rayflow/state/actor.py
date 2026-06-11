@@ -45,7 +45,8 @@ class GraphState:
     # ------------------------------------------------------------------
 
     def set_node_outputs(self, node_id: str, outputs: dict[str, Any]) -> None:
-        self._node_outputs[node_id] = outputs
+        existing = self._node_outputs.get(node_id, {})
+        self._node_outputs[node_id] = {**existing, **outputs}
 
     def get_node_output(self, node_id: str, pin_name: str) -> Any | None:
         node_outs = self._node_outputs.get(node_id)

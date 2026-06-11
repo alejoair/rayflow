@@ -13,3 +13,17 @@ class Add:
     def run(self, ctx: ExecContext, a: int, b: int) -> dict:
         ctx.fire("exec_out")
         return {"result": a + b}
+
+
+@ray_node
+class GreaterThan:
+    """True si a > b."""
+    exec_in = ExecInput()
+    a = Input("int", default=0)
+    b = Input("int", default=0)
+    result = Output("bool")
+    exec_out = ExecOutput()
+
+    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
+        ctx.fire("exec_out")
+        return {"result": a > b}
