@@ -52,6 +52,10 @@ class NodeDef:
     # con clave prefijada por el state_path del subgrafo al entrar. Lista de
     # (nombre, default). Vacío si el subflow comparte estado con el padre.
     subflow_vars: list = field(default_factory=list)
+    # Nombre del flow que DECLARÓ este nodo. Para nodos del flow raíz es el flow
+    # raíz; para nodos de un CallFlow spliced es el nombre del subflow. Lo usa
+    # _build_meta para meta['flow']. None = flow raíz (resuelto en el engine).
+    flow_name: str | None = None
 
 
 @dataclass

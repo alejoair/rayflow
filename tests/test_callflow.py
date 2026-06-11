@@ -60,6 +60,35 @@ def test_callflow_aislado_inputs_outputs():
     assert result["respuesta"]["total"] == 10
 
 
+def test_callflow_meta_flow_es_el_subflow_declarante():
+    """meta['flow'] refleja el flow que DECLARÓ el nodo, no el flow raíz.
+
+    Un nodo del subflow reporta el nombre del subflow; uno del raíz, el del raíz.
+    meta['id'] es la ruta plana ("sub/add").
+    """
+    result = rayflow.run({
+        "name": "mipadre",
+        "inputs": {"x": "int"},
+        "outputs": {"sub_meta": "dict", "root_meta": "dict"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "sub", "type": "CallFlow", "exec_in": "entry",
+             "inputs": {"flow": SUBFLOW_SUMA, "isolated": True,
+                        "a": "entry.x", "b": "entry.x"}},
+            {"id": "dbl", "type": "Add", "exec_in": "sub",
+             "inputs": {"a": "entry.x", "b": "entry.x"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "dbl",
+             "inputs": {"sub_meta": "sub/add.meta", "root_meta": "dbl.meta"}},
+        ],
+    }, x=5)
+    # El nodo 'add' vive dentro del subflow → flow del subflow, id con ruta.
+    assert result["sub_meta"]["flow"] == "subflow_suma"
+    assert result["sub_meta"]["id"] == "sub/add"
+    # El nodo 'dbl' es del flow raíz.
+    assert result["root_meta"]["flow"] == "mipadre"
+    assert result["root_meta"]["id"] == "dbl"
+
+
 def test_callflow_aislado_no_contamina_estado_padre():
     """CallFlow aislado no puede ver ni modificar variables del padre."""
     result = rayflow.run({

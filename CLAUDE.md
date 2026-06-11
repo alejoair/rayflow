@@ -95,9 +95,9 @@ Todos los nodos (tanto `@ray_node` como `@engine_node`) exponen automáticamente
 
 ```python
 {
-    "id": "add_1",        # id de la instancia en el grafo (ruta plana: "sub/add_1" si viene de un CallFlow)
+    "id": "add_1",        # id de la instancia (ruta plana: "sub/add_1" si viene de un CallFlow)
     "type": "Add",        # nombre de la clase del nodo
-    "flow": "mi_flow",    # nombre del flow que contiene el nodo
+    "flow": "mi_flow",    # nombre del flow que DECLARÓ el nodo (el subflow si viene de un CallFlow, no el raíz)
     "started_at": 1718100000.123,  # unix timestamp de inicio
     "duration_ms": 45.2,           # duración de run() en milisegundos
 }
@@ -187,7 +187,7 @@ padre/sub/sub2/add_1     ← CallFlow anidado (un salto por nivel)
 - El `CallFlow` shell guarda `subflow_entry`/`subflow_exit` (ids del entry/exit del subgrafo) y `subflow_vars` (variables del subflow aislado a sembrar). El engine lo orquesta en `_fire_callflow_node`.
 - **Subflow estático**: el input `flow` debe ser un dict inline o ruta conocida en build. No se soporta elegir el subflow en runtime.
 
-Campos en `NodeDef` que produce el flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`, `subflow_exit`, `subflow_vars`.
+Campos en `NodeDef` que produce el flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`, `subflow_exit`, `subflow_vars`, `flow_name` (nombre del flow declarante, usado en `meta['flow']`).
 
 ---
 
@@ -330,7 +330,7 @@ Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, `_SerializableExecContext`, descriptores de pin, `NodeMeta` |
 | `rayflow/engine/executor.py` | `FlowEngine` (clase Python local) + `FlowExecutor` (wrapper), `_run_subgraph_task` (ramas de Parallel, reusa `FlowEngine` en modo subgrafo) |
 | `rayflow/build/validator.py` | `flatten()` (aplana CallFlow inline a namespace plano), valida el flow y produce `BuiltFlow` con `exec_targets` resueltos |
-| `rayflow/schema/models.py` | `FlowDef`, `NodeDef` (incl. campos del flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`/`subflow_exit`, `subflow_vars`), `PinKind` |
+| `rayflow/schema/models.py` | `FlowDef`, `NodeDef` (incl. campos del flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`/`subflow_exit`, `subflow_vars`, `flow_name`), `PinKind` |
 | `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
 | `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
 | `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |

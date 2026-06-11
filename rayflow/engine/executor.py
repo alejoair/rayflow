@@ -381,7 +381,9 @@ class FlowEngine:
         return {
             "id": node_id,
             "type": rnode.meta.name,
-            "flow": self._built.flow_def.name,
+            # Nombre del flow que DECLARÓ el nodo: el subflow si viene de un
+            # CallFlow spliced, o el flow raíz. flow_name lo anota flatten().
+            "flow": rnode.node_def.flow_name or self._built.flow_def.name,
             "started_at": started_at,
             "duration_ms": round(duration_ms, 3),
         }

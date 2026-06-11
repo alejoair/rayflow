@@ -108,7 +108,7 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
         full_id = _join(prefix, nd.id)
 
         if nd.type != "CallFlow":
-            out_nodes.append(_reparent_node(nd, prefix, full_id, state_path))
+            out_nodes.append(_reparent_node(nd, prefix, full_id, state_path, flow.name))
             continue
 
         # --- Splice de un CallFlow ---
@@ -148,6 +148,7 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
             subflow_entry=entry_id,
             subflow_exit=exit_id,
             subflow_vars=sub_vars,
+            flow_name=flow.name,
         )
         out_nodes.append(shell)
         out_nodes.extend(sub_nodes)
@@ -200,7 +201,7 @@ def _reparent_exec_in(exec_in, prefix: str):
 
 
 def _reparent_node(nd: NodeDef, prefix: str, full_id: str,
-                   state_path: str | None) -> NodeDef:
+                   state_path: str | None, flow_name: str | None) -> NodeDef:
     return NodeDef(
         id=full_id,
         type=nd.type,
@@ -208,6 +209,12 @@ def _reparent_node(nd: NodeDef, prefix: str, full_id: str,
         exec_in=_reparent_exec_in(nd.exec_in, prefix),
         state_path=nd.state_path if nd.state_path is not None else state_path,
         subflow_of=nd.subflow_of,
+        # Preserva el flow_name de una recursión más profunda; si no, el de este nivel.
+        flow_name=nd.flow_name if nd.flow_name is not None else flow_name,
+        subflow_entry=nd.subflow_entry,
+        subflow_exit=nd.subflow_exit,
+        subflow_vars=nd.subflow_vars,
+        iface=nd.iface,
     )
 
 
