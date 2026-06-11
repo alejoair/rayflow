@@ -162,10 +162,10 @@ Un `@ray_node` sin exec pins también es lazy (path 2b), pero se ejecuta como ta
 
 ### Ciclo de vida de actores @ray_node
 
-Los actores se crean **una sola vez** al inicio del flow en `FlowEngine._spawn_actors()`, con nombre único `{node_id}_{graph_id}` en namespace `"rayflow"`. Los handles se guardan en `self._actors` y se pasan directamente a las ramas paralelas (`_run_subgraph_task`) y al `_SubgraphExecutor`.
+Los actores se crean **una sola vez** al inicio del flow en `FlowEngine._spawn_actors()`, con nombre único `{node_id}_{graph_id}` en namespace `"rayflow"`. Los handles se guardan en `self._actors` y se pasan directamente a las ramas paralelas (`_run_subgraph_task`), que reusan el mismo `FlowEngine` en modo subgrafo.
 
 - Los actores **no** se crean en tiempo de ejecución ni por cada rama — son singleton por flow.
-- `CallFlow` crea un `FlowEngine` nuevo con sus propios actores y `graph_id` (o comparte el `GraphState` del padre en modo no-aislado).
+- `CallFlow` **no** crea engines: el subflow se aplana inline en build time (ver "Flatten" abajo) y el engine lo orquesta como un subgrafo del mismo flow.
 - `NodeMeta.__getstate__/__setstate__` excluye `ray_handle` del pickle y lo reconstruye en el worker a partir de `py_class` — evita problemas de serialización de handles Ray.
 - **Restricción**: clases `@ray_node` definidas localmente (ej. en tests) deben registrarse en el catálogo antes de compilar el flow. Son serializables porque `py_class` viaja en el `BuiltFlow`.
 
@@ -294,8 +294,8 @@ Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
 | Archivo | Responsabilidad |
 |---|---|
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, `_SerializableExecContext`, descriptores de pin, `NodeMeta` |
-| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local) + `FlowExecutor` (wrapper), `_SubgraphExecutor`, `_run_subgraph_task` |
-| `rayflow/build/validator.py` | Valida el flow y produce `BuiltFlow` con `exec_targets` resueltos; pins dinámicos de CallFlow |
+| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local) + `FlowExecutor` (wrapper), `_run_subgraph_task` (ramas de Parallel, reusa `FlowEngine` en modo subgrafo) |
+| `rayflow/build/validator.py` | `flatten()` (aplana CallFlow inline a namespace plano), valida el flow y produce `BuiltFlow` con `exec_targets` resueltos |
 | `rayflow/schema/models.py` | `FlowDef`, `NodeDef`, `PinKind` |
 | `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
 | `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |

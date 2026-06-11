@@ -12,6 +12,16 @@ from rayflow.nodes.decorators import ExecContext
 from rayflow.state.actor import GraphState
 
 
+def _var_key(state_path: str | None, var_name: str) -> str:
+    """Clave de variable en el GraphState, namespaced por state_path (estilo S3).
+
+    Un solo GraphState por flow guarda todas las variables; el aislamiento de
+    un subflow isolated se logra prefijando la clave con su state_path. None =
+    namespace raíz (clave sin prefijo).
+    """
+    return f"{state_path}/{var_name}" if state_path else var_name
+
+
 class FlowEngine:
     """Motor de ejecución de un flow ya construido (BuiltFlow).
 
@@ -22,11 +32,15 @@ class FlowEngine:
     """
 
     def __init__(self, built: BuiltFlow, flow_inputs: dict[str, Any] | None = None,
-                 actors: dict[str, Any] | None = None):
+                 actors: dict[str, Any] | None = None,
+                 state: GraphState | None = None, graph_id: str | None = None):
         self._built = built
         self._flow_inputs = flow_inputs or {}
-        self._state: GraphState | None = None
-        self._graph_id: str | None = None
+        # state/graph_id inyectados → modo subgrafo (rama de Parallel): el engine
+        # reutiliza el GraphState y los actores del flow padre, no los crea ni
+        # destruye. Si son None, execute() los crea.
+        self._state: GraphState | None = state
+        self._graph_id: str | None = graph_id
         self._output_refs: dict[str, Any] = {}
         # Handles de actores @ray_node — pasados desde el driver donde la clase es conocida
         self._actors: dict[str, Any] = actors or {}
@@ -49,20 +63,14 @@ class FlowEngine:
         ray.kill(self._state)
         return self._output_refs
 
-    def execute_with_state(self, graph_id: str) -> dict[str, Any]:
-        """Ejecuta compartiendo GraphState y actores de un engine padre.
+    def run_subgraph(self, entry_id: str) -> None:
+        """Ejecuta un subgrafo (rama de Parallel) desde entry_id.
 
-        Usado por CallFlow modo compartido. El subflow tiene sus propios
-        actores (nombrados con su propio graph_id) pero comparte el GraphState.
-        NO destruye el GraphState al terminar.
+        Reutiliza el GraphState y los actores del flow padre (inyectados en el
+        constructor). No crea ni destruye estado ni actores, ni siembra inputs
+        del flow. Comparte toda la lógica de _fire_* con execute().
         """
-        self._graph_id = graph_id
-        self._state = ray.get_actor(f"gs_{graph_id}", namespace="rayflow")
-
-        self._spawn_actors()
-        self._run_and_collect()
-        self._teardown_actors()
-        return self._output_refs
+        self._run_loop(entry_id)
 
     # ------------------------------------------------------------------
     # Gestión de actores @ray_node — creados una vez por flow
@@ -143,6 +151,17 @@ class FlowEngine:
         entry_id = rnode.node_def.subflow_entry
         exit_id = rnode.node_def.subflow_exit
 
+        # Siembra (lazy) las variables del subflow isolated con clave prefijada
+        # por el state_path del subgrafo. El entry del subgrafo lleva ese
+        # state_path. Sin subflow_vars (subflow compartido), no hay nada que
+        # sembrar — usa las variables del namespace del padre.
+        if rnode.node_def.subflow_vars:
+            sub_state = self._built.nodes[entry_id].state_path
+            for var_name, default in rnode.node_def.subflow_vars:
+                ray.get(self._state.set_variable.remote(
+                    _var_key(sub_state, var_name), ray.put(default)
+                ))
+
         # Corre el subgrafo inline, bloqueante.
         self._run_loop(entry_id)
 
@@ -221,13 +240,15 @@ class FlowEngine:
             self._write_node_outputs(node_id, {pin_name: ray.put(value)})
 
         def _get_variable_fn(var_name: str) -> Any:
-            value = ray.get(self._state.get_variable.remote(var_name))
+            key = _var_key(rnode.state_path, var_name)
+            value = ray.get(self._state.get_variable.remote(key))
             if isinstance(value, ray.ObjectRef):
                 value = ray.get(value)
             return value
 
         def _set_variable_fn(var_name: str, value: Any) -> None:
-            ray.get(self._state.set_variable.remote(var_name, value))
+            key = _var_key(rnode.state_path, var_name)
+            ray.get(self._state.set_variable.remote(key, value))
 
         def _emit_event_fn(event_name: str, payload: Any) -> None:
             try:
@@ -335,7 +356,8 @@ class FlowEngine:
         inputs = {k: ray.get(v) for k, v in resolved.items()}
 
         def _get_variable_fn(var_name: str) -> Any:
-            value = ray.get(self._state.get_variable.remote(var_name))
+            key = _var_key(rnode.state_path, var_name)
+            value = ray.get(self._state.get_variable.remote(key))
             if isinstance(value, ray.ObjectRef):
                 value = ray.get(value)
             return value
@@ -398,209 +420,13 @@ def _run_subgraph_task(
 ) -> None:
     """Ejecuta un subgrafo (rama de Parallel) en un worker Ray.
 
-    Recibe el GraphState y los handles de actores del flow padre directamente —
-    los handles son serializables por Ray y funcionan desde cualquier proceso
-    del cluster sin reimportar las clases Python.
+    Reutiliza el mismo FlowEngine que el flow padre, en modo subgrafo: recibe
+    el GraphState y los actores ya creados (serializables por Ray) y corre desde
+    entry_id sin crear ni destruir estado. Toda la lógica de _fire_* es la misma
+    que en la ejecución principal — sin duplicación.
     """
-    executor = _SubgraphExecutor(built, graph_id, state, actors)
-    executor.run(entry_id)
-
-
-class _SubgraphExecutor:
-    """Ejecutor liviano para ramas de Parallel — objeto Python puro, sin actor Ray.
-
-    Reutiliza el GraphState y los actores @ray_node del flow padre.
-    Se instancia dentro del worker de _run_subgraph_task.
-    """
-
-    def __init__(self, built: BuiltFlow, graph_id: str, state: Any, actors: dict[str, Any]):
-        self._built = built
-        self._graph_id = graph_id
-        self._state = state
-        self._actors = actors
-        self._output_refs: dict[str, Any] = {}
-
-    def run(self, entry_id: str) -> None:
-        queue: deque[str] = deque([entry_id])
-        while queue:
-            node_id = queue.popleft()
-            next_ids = self._fire(node_id)
-            queue.extend(next_ids)
-
-    def _fire(self, node_id: str) -> list[str]:
-        rnode = self._built.nodes[node_id]
-        if rnode.meta.is_parallel:
-            return self._fire_parallel_node(node_id, rnode)
-        if rnode.meta.is_engine_node:
-            return self._fire_engine_node(node_id, rnode)
-        return self._fire_ray_node(node_id, rnode)
-
-    def _fire_parallel_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
-        branch_ids = []
-        for pin in rnode.meta.exec_outputs:
-            if pin != "joined":
-                branch_ids.extend(rnode.exec_targets.get(pin, []))
-
-        started_at = time.time()
-        if branch_ids:
-            refs = [
-                _run_subgraph_task.remote(self._built, self._graph_id, self._state, self._actors, eid)
-                for eid in branch_ids
-            ]
-            ray.get(refs)
-        duration_ms = (time.time() - started_at) * 1000
-
-        self._write_node_outputs(node_id, {
-            "meta": ray.put(self._build_meta(node_id, rnode, started_at, duration_ms))
-        })
-        return rnode.exec_targets.get("joined", [])
-
-    def _fire_engine_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
-        name = rnode.meta.name
-        resolved = self._resolve_inputs(rnode)
-        inputs = {k: ray.get(v) for k, v in resolved.items()}
-
-        if name == "FlowOutput":
-            self._output_refs.update(resolved)
-            return []
-
-        def _fire_fn(pin_name: str) -> None:
-            for target in rnode.exec_targets.get(pin_name, []):
-                self.run(target)
-
-        def _set_output_fn(pin_name: str, value: Any) -> None:
-            self._write_node_outputs(node_id, {pin_name: ray.put(value)})
-
-        def _get_variable_fn(var_name: str) -> Any:
-            value = ray.get(self._state.get_variable.remote(var_name))
-            if isinstance(value, ray.ObjectRef):
-                value = ray.get(value)
-            return value
-
-        def _set_variable_fn(var_name: str, value: Any) -> None:
-            ray.get(self._state.set_variable.remote(var_name, value))
-
-        def _emit_event_fn(event_name: str, payload: Any) -> None:
-            try:
-                from rayflow.events.bus import get_event_bus
-                bus = get_event_bus()
-                bus.emit.remote(event_name, ray.put(payload))
-            except Exception:
-                pass
-
-        ctx = ExecContext(
-            _fire_fn, _set_output_fn,
-            _get_variable_fn, _set_variable_fn, _emit_event_fn,
-            graph_id=self._graph_id,
-        )
-
-        started_at = time.time()
-        run_fn = getattr(rnode.meta.py_class, "run", None)
-        if run_fn is not None:
-            instance = rnode.meta.py_class()
-            outputs = instance.run(ctx, **inputs) or {}
-            if outputs:
-                self._write_node_outputs(node_id, {
-                    k: ray.put(v) for k, v in outputs.items()
-                })
-        duration_ms = (time.time() - started_at) * 1000
-
-        self._write_node_outputs(node_id, {
-            "meta": ray.put(self._build_meta(node_id, rnode, started_at, duration_ms))
-        })
-        return []
-
-    def _fire_ray_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
-        actor = self._actors[node_id]
-        resolved = self._resolve_inputs(rnode)
-
-        ctx = _SerializableExecContext(self._graph_id)
-        started_at = time.time()
-        result_ref = actor.run_with_ctx.remote(ctx, **resolved)
-        fired, outputs = ray.get(result_ref)
-        duration_ms = (time.time() - started_at) * 1000
-
-        out_refs = {pin: ray.put(value) for pin, value in outputs.items()}
-        out_refs["meta"] = ray.put(self._build_meta(node_id, rnode, started_at, duration_ms))
-        self._write_node_outputs(node_id, out_refs)
-
-        result = []
-        for pin in fired:
-            result.extend(rnode.exec_targets.get(pin, []))
-        return result
-
-    def _resolve_inputs(self, rnode: ResolvedNode) -> dict[str, Any]:
-        return {
-            pin_name: self._resolve_pin(rnode, pin_name)
-            for pin_name in rnode.resolved_inputs
-        }
-
-    def _resolve_pin(self, rnode: ResolvedNode, pin_name: str) -> Any:
-        res_pin = rnode.resolved_inputs[pin_name]
-
-        if not res_pin.is_ref:
-            return ray.put(res_pin.literal)
-
-        src_id = res_pin.source_node
-        src_pin = res_pin.source_pin
-        src_rnode = self._built.nodes.get(src_id)
-
-        ref = ray.get(self._state.get_node_output.remote(src_id, src_pin))
-        if ref is not None:
-            if isinstance(ref, ray.ObjectRef):
-                ref = ray.get(ref)
-            return ray.put(ref)
-
-        if src_rnode and src_rnode.meta.is_engine_node and not src_rnode.meta.is_exec_node:
-            value = self._eval_pure_engine_node(src_rnode, src_pin)
-            return ray.put(value)
-
-        if src_rnode and not src_rnode.meta.is_exec_node and not src_rnode.meta.is_engine_node:
-            data_inputs = self._resolve_inputs(src_rnode)
-            result_ref = src_rnode.meta.ray_handle.remote(**data_inputs)
-            result = ray.get(result_ref)
-            value = result.get(src_pin) if isinstance(result, dict) else result
-            return ray.put(value)
-
-        consumer_pin = next(
-            (p for p in rnode.meta.inputs if p.name == pin_name), None
-        )
-        default = consumer_pin.default if consumer_pin and consumer_pin.has_default else None
-        return ray.put(default)
-
-    def _eval_pure_engine_node(self, rnode: ResolvedNode, src_pin: str) -> Any:
-        resolved = self._resolve_inputs(rnode)
-        inputs = {k: ray.get(v) for k, v in resolved.items()}
-
-        def _get_variable_fn(var_name: str) -> Any:
-            value = ray.get(self._state.get_variable.remote(var_name))
-            if isinstance(value, ray.ObjectRef):
-                value = ray.get(value)
-            return value
-
-        ctx = ExecContext(
-            lambda pin: None, lambda pin, val: None,
-            _get_variable_fn, lambda n, v: None,
-            graph_id=self._graph_id,
-        )
-        run_fn = getattr(rnode.meta.py_class, "run", None)
-        if run_fn is None:
-            return None
-        outputs = rnode.meta.py_class().run(ctx, **inputs) or {}
-        return outputs.get(src_pin)
-
-    def _build_meta(self, node_id: str, rnode: ResolvedNode, started_at: float, duration_ms: float) -> dict:
-        return {
-            "id": node_id,
-            "type": rnode.meta.name,
-            "flow": self._built.flow_def.name,
-            "started_at": started_at,
-            "duration_ms": round(duration_ms, 3),
-        }
-
-    def _write_node_outputs(self, node_id: str, ref_dict: dict[str, Any]) -> None:
-        materialized = {pin: ray.get(ref) for pin, ref in ref_dict.items()}
-        ray.get(self._state.set_node_outputs.remote(node_id, materialized))
+    engine = FlowEngine(built, actors=actors, state=state, graph_id=graph_id)
+    engine.run_subgraph(entry_id)
 
 
 # ---------------------------------------------------------------------------

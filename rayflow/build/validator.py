@@ -134,6 +134,11 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
         # En runtime dispara subflow_entry (bloqueante), lee subflow_exit como
         # 'result', y luego sigue exec_out. El subgrafo NO se cablea al exec_out
         # del shell: el shell lo orquesta explícitamente vía subflow_entry.
+        # Si es aislado, el shell siembra (lazy) las variables del subflow con
+        # clave prefijada por sub_state. Si comparte, las variables ya están en
+        # el namespace del padre — nada que sembrar.
+        sub_vars = [(v.name, v.default) for v in sub_flow.variables] if isolated else []
+
         shell = NodeDef(
             id=full_id,
             type="CallFlow",
@@ -142,6 +147,7 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
             state_path=state_path,
             subflow_entry=entry_id,
             subflow_exit=exit_id,
+            subflow_vars=sub_vars,
         )
         out_nodes.append(shell)
         out_nodes.extend(sub_nodes)

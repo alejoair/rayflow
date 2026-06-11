@@ -48,6 +48,10 @@ class NodeDef:
     # y luego sigue su propio exec_out (la continuación del padre).
     subflow_entry: str | None = None
     subflow_exit: str | None = None
+    # Solo en un CallFlow shell isolated: variables del subflow a sembrar (lazy)
+    # con clave prefijada por el state_path del subgrafo al entrar. Lista de
+    # (nombre, default). Vacío si el subflow comparte estado con el padre.
+    subflow_vars: list = field(default_factory=list)
 
 
 @dataclass
