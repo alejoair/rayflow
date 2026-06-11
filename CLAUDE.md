@@ -137,6 +137,40 @@ Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen 
 
 ---
 
+## Paralelismo
+
+### Fan-out exec
+Un exec output puede conectarse a múltiples nodos destino — todos se disparan en secuencia desde el engine. Se declara con múltiples nodos apuntando al mismo origen:
+
+```json
+{ "id": "nodo_a", "exec_in": "origen" },
+{ "id": "nodo_b", "exec_in": "origen" }
+```
+
+`exec_targets` en `ResolvedNode` es `dict[str, list[str]]` — cada pin puede tener uno o varios destinos.
+
+### Nodo `Parallel` — fork/join real
+Fork/join con paralelismo real vía Ray. Cada rama corre en su propio `FlowExecutor` parcial lanzado como task Ray (`_run_subgraph_task`), compartiendo el mismo `GraphState` actor.
+
+```json
+{ "id": "par", "type": "Parallel", "exec_in": "entry" },
+{ "id": "rama_a", "type": "ProcessA", "exec_in": "par.branch_0" },
+{ "id": "rama_b", "type": "ProcessB", "exec_in": "par.branch_1" },
+{ "id": "merge",  "type": "Merge",    "exec_in": "par.joined" }
+```
+
+- `branch_0`, `branch_1`, `branch_2` — se lanzan simultáneamente.
+- `joined` — se dispara cuando **todas** las ramas terminan (ray.get sobre todos los refs).
+- Las ramas pueden contener `@engine_node` y `@ray_node` normales.
+- El aislamiento es por proceso Ray — los `@engine_node` de ramas distintas no comparten estado Python.
+- El `GraphState` es el único punto de sincronización compartido — accesos serializados por ser actor Ray.
+- **Condición de carrera**: si dos ramas escriben la misma variable con `Set`, el resultado es no determinista. Es un error de diseño del flow, no del engine.
+
+### Modelo de serialización para ramas paralelas
+`BuiltFlow` se serializa por Ray para pasar a cada task de rama. `NodeMeta.ray_handle` se excluye del pickle (`__getstate__`) y se reconstruye en el worker destino (`__setstate__`).
+
+---
+
 ## Nodos builtin
 
 | Nodo | Tipo | Descripción |
@@ -148,6 +182,7 @@ Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen 
 | `EmitEvent` | `@engine_node` | Emite evento al bus global |
 | `Branch` | `@engine_node` | Desvío condicional true/false |
 | `Sequence` | `@engine_node` | Dispara then_0/then_1/then_2 en orden |
+| `Parallel` | `@parallel_node` | Fork/join — lanza branch_0/1/2 en paralelo, joined al terminar |
 | `ForEach` | `@engine_node` | Itera array, dispara loop_body por elemento |
 | `Get` | `@engine_node` | Lee variable del GraphState |
 | `Set` | `@engine_node` | Escribe variable en el GraphState |

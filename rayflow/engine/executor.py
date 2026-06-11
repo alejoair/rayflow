@@ -64,9 +64,37 @@ class FlowExecutor:
     def _fire(self, node_id: str) -> list[str]:
         """Dispara un nodo y devuelve los node_ids a encolar a continuación."""
         rnode = self._built.nodes[node_id]
+        if rnode.meta.is_parallel:
+            return self._fire_parallel_node(node_id, rnode)
         if rnode.meta.is_engine_node:
             return self._fire_engine_node(node_id, rnode)
         return self._fire_ray_node(node_id, rnode)
+
+    # ------------------------------------------------------------------
+    # Nodo Parallel — fork/join mediante tasks Ray
+    # ------------------------------------------------------------------
+
+    def _fire_parallel_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
+        """Lanza cada branch_N como task Ray independiente y espera fork/join."""
+        branch_ids = []
+        for pin in rnode.meta.exec_outputs:
+            if pin != "joined":
+                branch_ids.extend(rnode.exec_targets.get(pin, []))
+
+        started_at = time.time()
+        if branch_ids:
+            refs = [
+                _run_subgraph_task.remote(self._built, self._state, eid)
+                for eid in branch_ids
+            ]
+            ray.get(refs)
+        duration_ms = (time.time() - started_at) * 1000
+
+        self._write_node_outputs(node_id, {
+            "meta": ray.put(self._build_meta(node_id, rnode, started_at, duration_ms))
+        })
+
+        return rnode.exec_targets.get("joined", [])
 
     # ------------------------------------------------------------------
     # @engine_node — ejecutado localmente, ctx.fire() bloqueante
@@ -98,8 +126,7 @@ class FlowExecutor:
         next_ids: list[str] = []
 
         def _fire_fn(pin_name: str) -> None:
-            target = rnode.exec_targets.get(pin_name)
-            if target:
+            for target in rnode.exec_targets.get(pin_name, []):
                 self._run_loop(target)
                 next_ids.append(target)
 
@@ -151,11 +178,10 @@ class FlowExecutor:
         out_refs["meta"] = ray.put(self._build_meta(node_id, rnode, started_at, duration_ms))
         self._write_node_outputs(node_id, out_refs)
 
-        return [
-            rnode.exec_targets[pin]
-            for pin in fired
-            if pin in rnode.exec_targets
-        ]
+        result = []
+        for pin in fired:
+            result.extend(rnode.exec_targets.get(pin, []))
+        return result
 
     # ------------------------------------------------------------------
     # Resolución de data inputs
@@ -237,6 +263,25 @@ class FlowExecutor:
             bus.emit.remote(event_name, payload_ref)
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Task Ray para ramas paralelas — cada rama tiene su propio FlowExecutor
+# ---------------------------------------------------------------------------
+
+@ray.remote
+def _run_subgraph_task(built: BuiltFlow, state: GraphState, entry_id: str) -> None:
+    """Ejecuta un subgrafo desde entry_id en un proceso Ray aislado.
+
+    Comparte el GraphState del executor padre — único punto de sincronización
+    entre ramas paralelas. Los @engine_node de cada rama no interfieren entre sí
+    porque cada rama tiene su propio FlowExecutor y stack de llamadas.
+    """
+    executor = FlowExecutor(built)
+    executor._state = state
+    executor._spawn_actors()
+    executor._run_loop(entry_id)
+    executor._teardown_actors()
 
 
 # ---------------------------------------------------------------------------

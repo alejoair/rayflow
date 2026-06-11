@@ -10,6 +10,7 @@ from rayflow.nodes.decorators import (
     Input,
     Output,
     engine_node,
+    parallel_node,
 )
 
 
@@ -99,6 +100,20 @@ class Sequence:
         ctx.fire("then_1")
         ctx.fire("then_2")
         return {}
+
+
+@parallel_node
+class Parallel:
+    """Fork/join paralelo. Lanza branch_0/1/2 simultáneamente como tasks Ray.
+
+    Cada rama corre en su propio FlowExecutor parcial compartiendo el GraphState.
+    El pin 'joined' se dispara cuando todas las ramas han terminado.
+    """
+    exec_in = ExecInput()
+    branch_0 = ExecOutput()
+    branch_1 = ExecOutput()
+    branch_2 = ExecOutput()
+    joined = ExecOutput()
 
 
 @engine_node

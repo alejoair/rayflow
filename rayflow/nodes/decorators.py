@@ -130,6 +130,23 @@ class NodeMeta:
     is_exec_node: bool = False
     is_engine_node: bool = False
     is_async: bool = False
+    is_parallel: bool = False
+
+    def __getstate__(self):
+        # ray_handle no es serializable — se reconstruye en el worker a partir de py_class
+        state = self.__dict__.copy()
+        state["ray_handle"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Reconstruir ray_handle en el proceso destino
+        if not self.is_engine_node and self.is_exec_node and self.py_class is not None:
+            self.ray_handle = ray.remote(self.py_class)
+        elif not self.is_engine_node and not self.is_exec_node and self.py_class is not None:
+            run_fn = getattr(self.py_class, "run", None)
+            if run_fn is not None:
+                self.ray_handle = ray.remote(_make_data_task(self.py_class))
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +195,21 @@ def engine_node(cls: type) -> type:
     meta = _extract_meta(cls)
     meta.is_engine_node = True
     meta.is_async = False
+    _strip_pin_descriptors(cls, meta)
+    setattr(cls, _NODE_META_ATTR, meta)
+    return cls
+
+
+def parallel_node(cls: type) -> type:
+    """Registra un nodo de fork/join paralelo.
+
+    El engine lanza cada branch_N como task Ray independiente con su propio
+    FlowExecutor parcial. Comparten el GraphState del executor padre.
+    El pin 'joined' se dispara cuando todas las ramas terminan.
+    """
+    meta = _extract_meta(cls)
+    meta.is_engine_node = True
+    meta.is_parallel = True
     _strip_pin_descriptors(cls, meta)
     setattr(cls, _NODE_META_ATTR, meta)
     return cls
