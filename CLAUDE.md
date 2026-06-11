@@ -76,10 +76,16 @@ Pasado como primer argumento a `run()` en ambos tipos de nodo.
 class ExecContext:
     def fire(self, pin_name: str) -> None: ...
     def set_output(self, pin_name: str, value: Any) -> None: ...
+    def get_variable(self, name: str) -> Any: ...       # lee variable del GraphState
+    def set_variable(self, name: str, value: Any): ...  # escribe variable en el GraphState
+    def emit_event(self, event_name: str, payload: Any = None): ...  # emite al bus global
 ```
 
-En `@ray_node` viaja serializado al proceso del actor (`_SerializableExecContext`).
-En `@engine_node` es local con callbacks al engine.
+En `@ray_node` viaja serializado al proceso del actor (`_SerializableExecContext`). Lleva el `graph_id` de la ejecución y resuelve el `GraphState` via `ray.get_actor(f"gs_{graph_id}")` — así cualquier actor Ray puede acceder al estado compartido de su grafo sin depender del handle Python del driver.
+
+En `@engine_node` es local con callbacks directos al engine.
+
+`get_variable` y `set_variable` están disponibles en **ambos** tipos. En `@ray_node` la llamada es remota (actor → actor de estado); en `@engine_node` es local.
 
 ---
 
@@ -135,6 +141,24 @@ _fire(node_id)
 
 Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen bajo demanda al resolver inputs de nodos posteriores.
 
+### Pure nodes (nodos lazy)
+
+Un `@engine_node` **sin exec pins** es un "pure node" — se evalúa bajo demanda cuando otro nodo necesita su output, igual que los pure nodes de Unreal Blueprints. No requiere conexión exec en el JSON.
+
+```python
+@engine_node
+class Get:
+    variable_name = Input("str", default="")
+    value = Output("Any")
+
+    def run(self, ctx: ExecContext, variable_name: str) -> dict:
+        return {"value": ctx.get_variable(variable_name)}
+```
+
+El engine lo detecta en `_resolve_pin` (path 2a) y llama `_eval_pure_engine_node()` en el momento en que el nodo consumidor necesita ese valor. El mismo mecanismo aplica a cualquier `@engine_node` sin exec pins que el usuario defina — no hay configuración especial.
+
+Un `@ray_node` sin exec pins también es lazy (path 2b), pero se ejecuta como task Ray.
+
 ---
 
 ## Paralelismo
@@ -169,25 +193,28 @@ Fork/join con paralelismo real vía Ray. Cada rama corre en su propio `FlowExecu
 ### Modelo de serialización para ramas paralelas
 `BuiltFlow` se serializa por Ray para pasar a cada task de rama. `NodeMeta.ray_handle` se excluye del pickle (`__getstate__`) y se reconstruye en el worker destino (`__setstate__`).
 
+Las ramas reciben el `graph_id` (string), no el handle del `GraphState`. Cada worker reconstruye el handle localmente con `ray.get_actor(f"gs_{graph_id}")`. Esto evita problemas de serialización del handle Ray y usa el sistema de nombres como único punto de coordinación.
+
 ---
 
 ## Nodos builtin
 
-| Nodo | Tipo | Descripción |
-|---|---|---|
-| `OnStart` | `@engine_node` | Punto de entrada sin parámetros |
-| `FlowInput` | `@engine_node` | Punto de entrada con parámetros |
-| `FlowOutput` | `@engine_node` | Punto de salida del flow |
-| `OnEvent` | `@engine_node` | Entrada por evento externo |
-| `EmitEvent` | `@engine_node` | Emite evento al bus global |
-| `Branch` | `@engine_node` | Desvío condicional true/false |
-| `Sequence` | `@engine_node` | Dispara then_0/then_1/then_2 en orden |
-| `Parallel` | `@parallel_node` | Fork/join — lanza branch_0/1/2 en paralelo, joined al terminar |
-| `ForEach` | `@engine_node` | Itera array, dispara loop_body por elemento |
-| `Get` | `@engine_node` | Lee variable del GraphState |
-| `Set` | `@engine_node` | Escribe variable en el GraphState |
-| `Add` | `@ray_node` | Suma dos enteros |
-| `ToInt/ToFloat/ToStr/ToBool` | `@ray_node` | Casteos explícitos |
+| Nodo | Tipo | Exec pins | Descripción |
+|---|---|---|---|
+| `OnStart` | `@engine_node` | sí | Punto de entrada sin parámetros |
+| `FlowInput` | `@engine_node` | sí | Punto de entrada con parámetros |
+| `FlowOutput` | `@engine_node` | sí | Punto de salida del flow |
+| `OnEvent` | `@engine_node` | sí | Entrada por evento externo |
+| `EmitEvent` | `@engine_node` | sí | Emite evento al bus global via `ctx.emit_event()` |
+| `Branch` | `@engine_node` | sí | Desvío condicional true/false |
+| `Sequence` | `@engine_node` | sí | Dispara then_0/then_1/then_2 en orden |
+| `Parallel` | `@parallel_node` | sí | Fork/join — lanza branch_0/1/2 en paralelo, joined al terminar |
+| `ForEach` | `@engine_node` | sí | Itera array, dispara loop_body por elemento |
+| `Get` | `@engine_node` | **no** | Lee variable — pure node, evaluado bajo demanda |
+| `Set` | `@engine_node` | sí | Escribe variable via `ctx.set_variable()` |
+| `Add` | `@ray_node` | sí | Suma dos enteros |
+| `GreaterThan` | `@ray_node` | sí | Compara dos enteros, devuelve bool |
+| `ToInt/ToFloat/ToStr/ToBool` | `@ray_node` | sí | Casteos explícitos |
 
 ---
 
@@ -232,15 +259,34 @@ rayflow.stop(graph_id, ["mi_evento"])
 
 ---
 
+## GraphState y graph_id
+
+Cada ejecución de un flow crea un actor `GraphState` con nombre único:
+
+```python
+graph_id = str(uuid.uuid4())
+state = GraphState.options(name=f"gs_{graph_id}", lifetime="detached").remote(var_defaults)
+```
+
+El `graph_id` se propaga a:
+- `_SerializableExecContext` — los `@ray_node` lo usan para resolver el state por nombre
+- `_run_subgraph_task` — las ramas paralelas reconstruyen el handle localmente
+
+Esto permite que múltiples grafos corran simultáneamente sin colisiones, y que cualquier actor Ray del cluster acceda al estado de su grafo via `ray.get_actor(f"gs_{graph_id}")`.
+
+Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
+
+---
+
 ## Archivos clave
 
 | Archivo | Responsabilidad |
 |---|---|
-| `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, descriptores de pin, `NodeMeta` |
-| `rayflow/engine/executor.py` | `FlowExecutor` — ciclo BFS, `_fire_engine_node`, `_fire_ray_node` |
+| `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, `_SerializableExecContext`, descriptores de pin, `NodeMeta` |
+| `rayflow/engine/executor.py` | `FlowExecutor` — ciclo BFS, `_fire_engine_node`, `_fire_ray_node`, `_eval_pure_engine_node` |
 | `rayflow/build/validator.py` | Valida el flow y produce `BuiltFlow` con `exec_targets` resueltos |
 | `rayflow/schema/models.py` | `FlowDef`, `NodeDef`, `PinKind` |
 | `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
-| `rayflow/state/actor.py` | `GraphState` — actor Ray con variables y outputs de nodos |
+| `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
 | `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |
 | `rayflow/api.py` | API pública: `run`, `run_async`, `serve`, `stop` |
