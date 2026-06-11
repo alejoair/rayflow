@@ -85,11 +85,24 @@ class ExecContext:
 
     En @engine_node: fire() es bloqueante — el engine ejecuta el subgrafo
     conectado al pin antes de retornar el control al nodo.
+
+    get_variable / set_variable solo están disponibles en @engine_node.
+    Llamarlos desde un @ray_node lanza NotImplementedError.
     """
 
-    def __init__(self, fire_fn: Callable[[str], None], set_output_fn: Callable[[str, Any], None]):
+    def __init__(
+        self,
+        fire_fn: Callable[[str], None],
+        set_output_fn: Callable[[str, Any], None],
+        get_variable_fn: Callable[[str], Any] | None = None,
+        set_variable_fn: Callable[[str, Any], None] | None = None,
+        emit_event_fn: Callable[[str, Any], None] | None = None,
+    ):
         self._fire_fn = fire_fn
         self._set_output_fn = set_output_fn
+        self._get_variable_fn = get_variable_fn
+        self._set_variable_fn = set_variable_fn
+        self._emit_event_fn = emit_event_fn
 
     def fire(self, pin_name: str) -> None:
         """Dispara el exec output indicado."""
@@ -98,6 +111,24 @@ class ExecContext:
     def set_output(self, pin_name: str, value: Any) -> None:
         """Expone un data output (útil en @engine_node con outputs intermedios)."""
         self._set_output_fn(pin_name, value)
+
+    def get_variable(self, name: str) -> Any:
+        """Lee una variable del GraphState. Solo disponible en @engine_node."""
+        if self._get_variable_fn is None:
+            raise NotImplementedError("get_variable solo está disponible en @engine_node")
+        return self._get_variable_fn(name)
+
+    def set_variable(self, name: str, value: Any) -> None:
+        """Escribe una variable en el GraphState. Solo disponible en @engine_node."""
+        if self._set_variable_fn is None:
+            raise NotImplementedError("set_variable solo está disponible en @engine_node")
+        self._set_variable_fn(name, value)
+
+    def emit_event(self, event_name: str, payload: Any = None) -> None:
+        """Emite un evento al bus global. Solo disponible en @engine_node."""
+        if self._emit_event_fn is None:
+            raise NotImplementedError("emit_event solo está disponible en @engine_node")
+        self._emit_event_fn(event_name, payload)
 
 
 # ---------------------------------------------------------------------------

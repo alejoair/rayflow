@@ -32,6 +32,7 @@ FLOW = {
         {"id": "par", "type": "Parallel", "exec_in": "entry"},
 
         # ── Rama 0: sumar todos los elementos ─────────────────────────
+        # Get es pure (sin exec) — se evalúa bajo demanda al resolver inputs de Add
         {"id": "foreach_sum", "type": "ForEach",
          "exec_in": "par.branch_0",
          "inputs": {"array": "entry.numbers"}},
@@ -72,15 +73,14 @@ FLOW = {
          "inputs": {"variable_name": "above_count", "value": "add_count.result"}},
 
         # ── joined: Sequence dispara 3 nodos en orden ─────────────────
-        # Las ramas ya terminaron — leer variables es seguro
         {"id": "seq", "type": "Sequence", "exec_in": "par.joined"},
 
         {"id": "get_final_total", "type": "Get",
          "inputs": {"variable_name": "running_total"}},
+
         {"id": "get_final_count", "type": "Get",
          "inputs": {"variable_name": "above_count"}},
 
-        # fan-out: seq.then_0 conectado a dos nodos (ToStr + otro)
         {"id": "total_str",  "type": "ToStr", "exec_in": "seq.then_0",
          "inputs": {"value": "get_final_total.value"}},
 

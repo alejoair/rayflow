@@ -70,6 +70,7 @@ class EmitEvent:
     exec_out = ExecOutput()
 
     def run(self, ctx: ExecContext, event_name: str, payload: any) -> dict:
+        ctx.emit_event(event_name, payload)
         ctx.fire("exec_out")
         return {}
 

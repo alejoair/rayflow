@@ -11,12 +11,17 @@ from rayflow.nodes.decorators import (
 
 @engine_node
 class Get:
-    """Lee una variable del estado del grafo. Nodo de datos (sin exec pins).
+    """Lee una variable del estado del grafo.
 
-    El engine resuelve su valor leyendo del state actor en el momento de la lectura.
+    Nodo pure (sin exec pins): se evalúa bajo demanda cuando otro nodo
+    necesita su output. No requiere conexión exec — el engine lo llama
+    implícitamente al resolver los inputs del nodo consumidor.
     """
     variable_name = Input("str", default="")
     value = Output("Any")
+
+    def run(self, ctx: ExecContext, variable_name: str) -> dict:
+        return {"value": ctx.get_variable(variable_name)}
 
 
 @engine_node
@@ -28,5 +33,6 @@ class Set:
     exec_out = ExecOutput()
 
     def run(self, ctx: ExecContext, variable_name: str, value: any) -> dict:
+        ctx.set_variable(variable_name, value)
         ctx.fire("exec_out")
         return {}
