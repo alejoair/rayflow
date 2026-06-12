@@ -40,8 +40,11 @@ def run_async(source: str | Path | dict, **inputs: Any):
     return _run_flow_task.remote(source, inputs)
 
 
-def serve(source: str | Path, extra_node_dirs: list[str | Path] | None = None) -> str:
+def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = None) -> str:
     """Registra un flow por evento en el bus global y lo deja residente.
+
+    Distinto de la API REST (`rayflow serve` en el CLI): esto suscribe el flow
+    al bus de eventos interno para que se dispare al emitirse uno de sus eventos.
 
     Returns:
         graph_id único asignado a este flow residente.

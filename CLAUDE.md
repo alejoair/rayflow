@@ -283,10 +283,43 @@ outputs = rayflow.run("flow.json", x=5, y=3)
 ref = rayflow.run_async("flow.json", x=5)
 outputs = ray.get(ref)
 
-# Flow residente por eventos
-graph_id = rayflow.serve("flow.json")
+# Flow residente por eventos (suscribe al bus de eventos interno)
+graph_id = rayflow.serve_events("flow.json")
 rayflow.stop(graph_id, ["mi_evento"])
 ```
+
+Cada ejecución (`run`/`run_async`) se aísla por un `graph_id` UUID propio, así
+que ejecuciones concurrentes del mismo flow no colisionan.
+
+---
+
+## API REST (CLI `rayflow serve`)
+
+`rayflow/server.py` levanta un servidor FastAPI que sirve uno o más flows como
+endpoints HTTP. Distinto de `serve_events` (bus de eventos): aquí cada request
+HTTP ejecuta el flow y devuelve sus outputs.
+
+```bash
+rayflow serve --file suma.json --file otro.json --port 8000
+```
+
+Carga y **valida** cada flow al arrancar (build temprano; falla si un flow no
+compila o si dos comparten `name`), los indexa por su `name`, y expone:
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/health` | Healthcheck |
+| `GET` | `/flows` | Lista flows servidos con su interfaz (inputs/outputs) |
+| `GET` | `/flows/{name}` | Interfaz de un flow |
+| `POST` | `/flows/{name}/run` | Ejecuta el flow con los inputs del body JSON, devuelve outputs |
+
+```
+POST /flows/suma/run   { "x": 3, "y": 7 }   ->   { "resultado": 10 }
+```
+
+El handler es `async` y usa `run_async` (awaitable sobre el `ObjectRef` de Ray),
+sin bloquear el event loop. Requiere el extra: `pip install 'rayflow[serve]'`
+(FastAPI + uvicorn). CLI en `rayflow/cli.py`; `python -m rayflow serve …` también.
 
 ---
 
@@ -335,4 +368,6 @@ Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
 | `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
 | `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |
 | `rayflow/nodes/builtin/flow.py` | `CallFlow` — subgrafos compartidos e isolados |
-| `rayflow/api.py` | API pública: `run`, `run_async`, `serve`, `stop` |
+| `rayflow/api.py` | API pública: `run`, `run_async`, `serve_events`, `stop` |
+| `rayflow/server.py` | API REST (FastAPI): carga/valida flows y los sirve como endpoints HTTP |
+| `rayflow/cli.py` + `__main__.py` | CLI: `rayflow serve --file …` levanta la API REST |
