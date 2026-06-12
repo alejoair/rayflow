@@ -28,7 +28,7 @@ class NodeDef:
     # data inputs: nombre → valor literal o "node_id.pin_name"
     inputs: dict[str, Any] = field(default_factory=dict)
     # exec input: None si OnStart/OnEvent, o "node_id" si viene de otro nodo
-    exec_in: str | list[str] | None = None
+    exec_in: str | list[str] | dict | None = None
     # Ruta del GraphState al que pertenece este nodo. None = el del flow raíz.
     # Asignado por flatten() al expandir un CallFlow isolated: los nodos del
     # subgrafo aislado apuntan a su propio segmento de estado.

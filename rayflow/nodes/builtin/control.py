@@ -1,7 +1,9 @@
 """Nodos de control de flujo. Se ejecutan localmente en el engine (@engine_node).
 
-ctx.fire() es bloqueante: el subgrafo conectado se ejecuta completo antes de
-que run() continúe. Los subgrafos conectados pueden contener @ray_node normales.
+`await ctx.fire()` es bloqueante: el subgrafo conectado se ejecuta completo antes
+de que run() continúe. Los subgrafos pueden contener @ray_node. Los data outputs
+se exponen SOLO con ctx.set_output() (no por return) — antes del fire que los
+consume. Varias ramas pueden lanzarse concurrentes con asyncio.gather.
 """
 from rayflow.nodes.decorators import (
     ExecContext,
@@ -19,9 +21,8 @@ class OnStart:
     """Punto de entrada para flows sin parámetros."""
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext) -> dict:
-        ctx.fire("exec_out")
-        return {}
+    async def run(self, ctx: ExecContext) -> None:
+        await ctx.fire("exec_out")
 
 
 @engine_node
@@ -33,9 +34,8 @@ class FlowInput:
     """
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext) -> dict:
-        ctx.fire("exec_out")
-        return {}
+    async def run(self, ctx: ExecContext) -> None:
+        await ctx.fire("exec_out")
 
 
 @engine_node
@@ -46,8 +46,8 @@ class FlowOutput:
     """
     exec_in = ExecInput()
 
-    def run(self, ctx: ExecContext) -> dict:
-        return {}
+    async def run(self, ctx: ExecContext) -> None:
+        pass
 
 
 @engine_node
@@ -58,9 +58,8 @@ class Branch:
     true = ExecOutput()
     false = ExecOutput()
 
-    def run(self, ctx: ExecContext, condition: bool) -> dict:
-        ctx.fire("true" if condition else "false")
-        return {}
+    async def run(self, ctx: ExecContext, condition: bool) -> None:
+        await ctx.fire("true" if condition else "false")
 
 
 @engine_node
@@ -71,24 +70,22 @@ class Sequence:
     then_1 = ExecOutput()
     then_2 = ExecOutput()
 
-    def run(self, ctx: ExecContext) -> dict:
-        ctx.fire("then_0")
-        ctx.fire("then_1")
-        ctx.fire("then_2")
-        return {}
+    async def run(self, ctx: ExecContext) -> None:
+        await ctx.fire("then_0")
+        await ctx.fire("then_1")
+        await ctx.fire("then_2")
 
 
 @parallel_node
 class Parallel:
-    """Fork/join paralelo. Lanza branch_0/1/2 simultáneamente como tasks Ray.
+    """Fork/join paralelo. Lanza N ramas simultáneamente como tasks Ray.
 
-    Cada rama corre en su propio FlowExecutor parcial compartiendo el GraphState.
+    Los branch pins (branch_0, branch_1, …, branch_N) se inyectan dinámicamente
+    en build a partir del wiring del JSON. Cada rama corre en su propio
+    FlowExecutor parcial compartiendo el GraphState.
     El pin 'joined' se dispara cuando todas las ramas han terminado.
     """
     exec_in = ExecInput()
-    branch_0 = ExecOutput()
-    branch_1 = ExecOutput()
-    branch_2 = ExecOutput()
     joined = ExecOutput()
 
 
@@ -102,10 +99,9 @@ class ForEach:
     element = Output("Any")
     index = Output("int")
 
-    def run(self, ctx: ExecContext, array: list) -> dict:
+    async def run(self, ctx: ExecContext, array: list) -> None:
         for i, element in enumerate(array or []):
             ctx.set_output("element", element)
             ctx.set_output("index", i)
-            ctx.fire("loop_body")
-        ctx.fire("completed")
-        return {}
+            await ctx.fire("loop_body")
+        await ctx.fire("completed")

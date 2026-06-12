@@ -16,14 +16,17 @@ _catalog: NodeCatalog | None = None
 def get_catalog(extra_dirs: list[str | Path] | None = None) -> NodeCatalog:
     """Devuelve el catálogo global, registrando built-in + nodos de usuario.
 
-    Los nodos de usuario se descubren por archivo desde `extra_dirs` (y, por
-    convención, desde ./nodes en el working directory).
+    Por convención, descubre los nodos custom del paquete ./custom_nodes/ del
+    working directory (importado como módulo real para que sus clases sean
+    picklables/reconstruibles en los workers Ray vía runtime_env). `extra_dirs`
+    añade directorios adicionales.
     """
     global _catalog
     if _catalog is None:
         _catalog = NodeCatalog()
         for module in _BUILTIN_MODULES:
             _register_module(_catalog, module)
+        _catalog.load_custom_nodes_package()
 
     if extra_dirs:
         for d in extra_dirs:

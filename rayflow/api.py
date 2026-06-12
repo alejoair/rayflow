@@ -97,4 +97,12 @@ def _run_event_flow(source: Any, event_name: str, payload: Any) -> None:
 
 def _ensure_ray() -> None:
     if not ray.is_initialized():
-        ray.init(ignore_reinit_error=True, namespace="rayflow")
+        from rayflow.workspace import ensure_workspace, runtime_env
+        ensure_workspace()
+        kwargs: dict[str, Any] = {"ignore_reinit_error": True, "namespace": "rayflow"}
+        env = runtime_env()
+        if env is not None:
+            # Distribuye custom_nodes/ a todos los workers Ray (py_modules), así
+            # los nodos custom son importables en cualquier proceso del cluster.
+            kwargs["runtime_env"] = env
+        ray.init(**kwargs)

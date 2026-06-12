@@ -39,7 +39,7 @@ class CallFlow:
     result   = Output("dict")
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext, flow: str, isolated: bool, **extra_inputs) -> dict:
+    async def run(self, ctx: ExecContext, flow: str, isolated: bool, **extra_inputs) -> None:
         # No se usa: el engine orquesta CallFlow directamente (ver
         # FlowEngine._fire_callflow_node). Se deja por simetría de declaración.
-        return {}
+        pass

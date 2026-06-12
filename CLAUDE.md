@@ -31,10 +31,12 @@ class Add:
 ### `@engine_node`
 Ejecutado localmente por el engine (mismo proceso, sin Ray).
 
-- `ctx.fire(pin)` es **bloqueante**: ejecuta el subgrafo conectado completo antes de retornar.
-- `ctx.set_output(pin, value)` expone data outputs intermedios (usado en ForEach, etc.).
+- `run()` es `async def` y debe usar `await ctx.fire(pin)`.
+- `await ctx.fire(pin)` es **bloqueante**: ejecuta el subgrafo conectado completo antes de retornar.
+- `ctx.set_output(pin, value)` es el **único** canal de data outputs — `return` no funciona para exponer datos (lanza `RuntimeError`). Llamar `set_output` antes del `await fire` garantiza que el subgrafo ya puede leer el valor.
 - Habilita: control de flujo (Branch, ForEach, Sequence), TryCatch, While, CallFlow, depuración, y cualquier nodo que necesite razonar sobre la ejecución.
 - Los subgrafos disparados por `ctx.fire()` pueden contener `@ray_node` normales.
+- Concurrencia: `await asyncio.gather(ctx.fire("a"), ctx.fire("b"))` lanza dos subgrafos concurrentemente en el mismo event loop.
 
 ```python
 @engine_node
@@ -44,9 +46,8 @@ class Branch:
     true = ExecOutput()
     false = ExecOutput()
 
-    def run(self, ctx: ExecContext, condition: bool) -> dict:
-        ctx.fire("true" if condition else "false")
-        return {}
+    async def run(self, ctx: ExecContext, condition: bool) -> None:
+        await ctx.fire("true" if condition else "false")
 
 @engine_node
 class ForEach:
@@ -57,13 +58,12 @@ class ForEach:
     element = Output("Any")
     index = Output("int")
 
-    def run(self, ctx: ExecContext, array: list) -> dict:
+    async def run(self, ctx: ExecContext, array: list) -> None:
         for i, element in enumerate(array or []):
             ctx.set_output("element", element)
             ctx.set_output("index", i)
-            ctx.fire("loop_body")   # bloquea; el subgrafo puede tener @ray_node
-        ctx.fire("completed")
-        return {}
+            await ctx.fire("loop_body")   # bloquea; el subgrafo puede tener @ray_node
+        await ctx.fire("completed")
 ```
 
 ---
@@ -74,7 +74,7 @@ Pasado como primer argumento a `run()` en ambos tipos de nodo.
 
 ```python
 class ExecContext:
-    def fire(self, pin_name: str) -> None: ...
+    async def fire(self, pin_name: str) -> None: ...   # await obligatorio en @engine_node
     def set_output(self, pin_name: str, value: Any) -> None: ...
     def get_variable(self, name: str) -> Any: ...       # lee variable del GraphState
     def set_variable(self, name: str, value: Any): ...  # escribe variable en el GraphState
@@ -128,19 +128,19 @@ La compatibilidad es estricta: no hay coerción implícita. `int` y `float` son 
 
 ## Engine — ciclo de ejecución
 
-`FlowEngine` es una clase Python local (no actor Ray). `FlowExecutor` es un wrapper fino para compatibilidad con la API pública. `_run_loop()` mantiene una cola BFS de `node_id`s a disparar.
+`FlowEngine` es una clase Python local (no actor Ray). `FlowExecutor` es un wrapper fino para compatibilidad con la API pública. El motor es completamente **async**: `execute()` lanza `asyncio.run(_run_and_collect())` como borde sync→async. `_run_loop()` es recursivo con `asyncio.gather` para fan-out concurrente.
 
 ```
 _fire(node_id)
   ├─ subflow_entry  → _fire_callflow_node()  (CallFlow shell: orquesta subgrafo inline)
-  ├─ is_parallel    → _fire_parallel_node()  (fork/join vía _run_subgraph_task)
-  ├─ is_engine_node → _fire_engine_node()    (local, ctx.fire() bloqueante)
-  └─ @ray_node      → _fire_ray_node()       (actor Ray, ctx acumula pins)
+  ├─ is_parallel    → _fire_parallel_node()  (fork/join vía asyncio.gather)
+  ├─ is_engine_node → _fire_engine_node()    (local, await ctx.fire() bloqueante)
+  └─ @ray_node      → _fire_ray_node()       (actor Ray, await result_ref)
 ```
 
-- **`_fire_callflow_node()`**: orquesta un CallFlow shell. El subflow ya está aplanado inline en build (ver "Flatten"). Dispara `subflow_entry` (bloqueante vía `_run_loop`), reúne los inputs del `subflow_exit` como el dict `result`, y continúa hacia `exec_out`.
-- **`_fire_engine_node()`**: instancia el nodo, crea `ExecContext` con callbacks locales, llama `run(ctx, **inputs)`. Cada `ctx.fire(pin)` llama `_run_loop(target)` síncronamente. Los outputs se guardan en `GraphState` **después** de que `run()` retorna. Para outputs que deben estar disponibles antes del `fire()`, usar `ctx.set_output(pin, value)` dentro de `run()`.
-- **`_fire_ray_node()`**: llama `actor.run_with_ctx.remote(ctx, **inputs)`, hace `ray.get()`, recoge `fired_pins` del ctx devuelto, los traduce a `node_id`s via `exec_targets` y los encola en el BFS.
+- **`_fire_callflow_node()`**: orquesta un CallFlow shell. El subflow ya está aplanado inline en build (ver "Flatten"). Dispara `subflow_entry` (bloqueante vía `await _run_loop`), reúne los inputs del `subflow_exit` como el dict `result`, y continúa hacia `exec_out`.
+- **`_fire_engine_node()`**: instancia el nodo, crea `ExecContext` con callbacks async locales, llama `await run(ctx, **inputs)`. `set_output` es el único canal de data outputs — `return` con datos lanza `RuntimeError`. `await ctx.fire(pin)` ejecuta el subgrafo completo antes de retornar.
+- **`_fire_ray_node()`**: llama `actor.run_with_ctx.remote(ctx, **inputs)`, hace `await result_ref` (cede el event loop mientras el actor computa), recoge `fired_pins` del ctx devuelto y los traduce a `node_id`s via `exec_targets`.
 
 Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen bajo demanda al resolver inputs de nodos posteriores.
 
@@ -162,9 +162,29 @@ El engine lo detecta en `_resolve_pin` (path 2a) y llama `_eval_pure_engine_node
 
 Un `@ray_node` sin exec pins también es lazy (path 2b), pero se ejecuta como task Ray.
 
+### AND/OR en `exec_in` múltiple
+
+Un nodo puede declarar múltiples predecesores exec con semántica explícita:
+
+- **`"exec_in": "a"`** — un solo predecesor, comportamiento estándar.
+- **`"exec_in": ["a", "b"]`** — **AND**: el nodo espera que **todos** los predecesores completen antes de dispararse. Útil como join post-fan-out.
+- **`"exec_in": {"or": ["a", "b"]}`** — **OR**: el nodo se dispara con el **primero** que llegue. Útil para convergencia post-`Branch` (donde solo una rama ejecuta).
+
+El engine lleva `_exec_arrivals: dict[str, set[str]]` — un set de predecesores llegados por nodo AND-join. Cuando todas las ramas del fan-out completan (la recursión de `_run_loop` retorna en cada rama), el set está completo y el join se dispara. En OR, el nodo dispara inmediatamente sin conteo.
+
+```json
+{ "id": "a", "exec_in": "entry" },
+{ "id": "b", "exec_in": "entry" },
+{ "id": "join", "type": "FlowOutput", "exec_in": ["a", "b"], "inputs": { "r0": "a.result", "r1": "b.result" } }
+```
+
+```json
+{ "id": "merge", "exec_in": {"or": ["branch.true", "branch.false"]} }
+```
+
 ### Ciclo de vida de actores @ray_node
 
-Los actores se crean **una sola vez** al inicio del flow en `FlowEngine._spawn_actors()`, con nombre único `{node_id}_{graph_id}` en namespace `"rayflow"`. Los handles se guardan en `self._actors` y se pasan directamente a las ramas paralelas (`_run_subgraph_task`), que reusan el mismo `FlowEngine` en modo subgrafo.
+Los actores se crean **una sola vez** al inicio del flow en `FlowEngine._spawn_actors()`, con nombre único `{node_id}_{graph_id}` en namespace `"rayflow"`. Los handles se guardan en `self._actors` y se acceden directamente desde las ramas del Parallel, que comparten el mismo `FlowEngine`.
 
 - Los actores **no** se crean en tiempo de ejecución ni por cada rama — son singleton por flow.
 - `CallFlow` **no** crea engines: el subflow se aplana inline en build time (ver "Flatten" abajo) y el engine lo orquesta como un subgrafo del mismo flow.
@@ -193,18 +213,23 @@ Campos en `NodeDef` que produce el flatten: `state_path`, `subflow_of`, `iface`,
 
 ## Paralelismo
 
-### Fan-out exec
-Un exec output puede conectarse a múltiples nodos destino — todos se disparan en secuencia desde el engine. Se declara con múltiples nodos apuntando al mismo origen:
+### Fan-out exec — concurrente por defecto
+Un exec output puede conectarse a múltiples nodos destino. Todos se disparan **concurrentemente** via `asyncio.gather` — no en secuencia.
 
 ```json
 { "id": "nodo_a", "exec_in": "origen" },
 { "id": "nodo_b", "exec_in": "origen" }
 ```
 
-`exec_targets` en `ResolvedNode` es `dict[str, list[str]]` — cada pin puede tener uno o varios destinos.
+`exec_targets` en `ResolvedNode` es `dict[str, list[str]]` — cada pin puede tener uno o varios destinos. Cuando hay varios, `_run_loop` los lanza con `asyncio.gather`. Los `@ray_node` corren en paralelo real (procesos Ray separados); los `@engine_node` se intercalan cooperativamente en el mismo event loop.
 
-### Nodo `Parallel` — fork/join real
-Fork/join con paralelismo real vía Ray. Cada rama corre como task Ray (`_run_subgraph_task`), que reusa el mismo `FlowEngine` en **modo subgrafo** (estado y actores inyectados, no creados ni destruidos) y comparte el mismo `GraphState` actor.
+**Condición de carrera**: si dos ramas del fan-out escriben la misma variable con `Set`, el resultado es no determinista. Es un error de diseño del flow, no del engine.
+
+### Join — AND/OR en `exec_in`
+Ver sección "AND/OR en `exec_in` múltiple" arriba.
+
+### Nodo `Parallel` — fork/join explícito con join
+El nodo `Parallel` sigue disponible para el caso en que se necesita un pin `joined` explícito que se dispara cuando todas las ramas completan. Las ramas (`branch_0`, `branch_1`, …) se inyectan dinámicamente en build a partir del wiring del JSON.
 
 ```json
 { "id": "par", "type": "Parallel", "exec_in": "entry" },
@@ -213,17 +238,7 @@ Fork/join con paralelismo real vía Ray. Cada rama corre como task Ray (`_run_su
 { "id": "merge",  "type": "Merge",    "exec_in": "par.joined" }
 ```
 
-- `branch_0`, `branch_1`, `branch_2` — se lanzan simultáneamente.
-- `joined` — se dispara cuando **todas** las ramas terminan (ray.get sobre todos los refs).
-- Las ramas pueden contener `@engine_node` y `@ray_node` normales.
-- El aislamiento es por proceso Ray — los `@engine_node` de ramas distintas no comparten estado Python.
-- El `GraphState` es el único punto de sincronización compartido — accesos serializados por ser actor Ray.
-- **Condición de carrera**: si dos ramas escriben la misma variable con `Set`, el resultado es no determinista. Es un error de diseño del flow, no del engine.
-
-### Modelo de serialización para ramas paralelas
-`BuiltFlow` se serializa por Ray para pasar a cada task de rama. `NodeMeta.ray_handle` se excluye del pickle (`__getstate__`) y se reconstruye en el worker destino (`__setstate__`).
-
-`_run_subgraph_task` recibe el `built`, el `graph_id`, el handle del `GraphState` y los handles de actores `@ray_node` del flow padre — todos serializables por Ray. Con ellos instancia un `FlowEngine` en modo subgrafo (`run_subgraph(entry_id)`), sin recrear estado ni actores.
+Para la mayoría de casos, el fan-out nativo + AND en `exec_in` es suficiente sin `Parallel`.
 
 ---
 
@@ -237,10 +252,10 @@ Fork/join con paralelismo real vía Ray. Cada rama corre como task Ray (`_run_su
 | `OnEvent` | `@engine_node` | sí | Entrada por evento externo. `event_name` (con namespace) es config estática; expone el `payload` recibido como output |
 | `EmitEvent` | `@engine_node` | sí | Publica un evento al EventBroker via `ctx.emit_event()`. `event_name` lleva el namespace (ej. `"ventas/order_created"`) |
 | `Branch` | `@engine_node` | sí | Desvío condicional true/false |
-| `Sequence` | `@engine_node` | sí | Dispara then_0/then_1/then_2 en orden |
-| `Parallel` | `@parallel_node` | sí | Fork/join — lanza branch_0/1/2 en paralelo, joined al terminar |
-| `ForEach` | `@engine_node` | sí | Itera array, dispara loop_body por elemento |
-| `Get` | `@engine_node` | **no** | Lee variable — pure node, evaluado bajo demanda |
+| `Sequence` | `@engine_node` | sí | Dispara then_0/then_1/then_2 en orden secuencial |
+| `Parallel` | `@parallel_node` | sí | Fork/join con pin `joined` explícito — lanza N ramas (branch_0..branch_N) concurrentemente; para la mayoría de casos, fan-out nativo + AND `exec_in` es suficiente |
+| `ForEach` | `@engine_node` | sí | Itera array, dispara loop_body por elemento (bloqueante por iteración), completed al terminar |
+| `Get` | `@engine_node` | **no** | Lee variable — pure node síncrono, evaluado bajo demanda |
 | `Set` | `@engine_node` | sí | Escribe variable via `ctx.set_variable()` |
 | `CallFlow` | `@engine_node` | sí | Ejecuta otro flow como subgrafo, aplanado inline en build (ver "Flatten"). `isolated=True`: variables en namespace de estado propio (clave prefijada). `isolated=False`: comparte variables del padre. Output `result: dict` contiene los outputs del subflow. Inputs extra se pasan al subflow. |
 | `Add` | `@ray_node` | sí | Suma dos enteros |
@@ -267,7 +282,11 @@ Fork/join con paralelismo real vía Ray. Cada rama corre como task Ray (`_run_su
 }
 ```
 
-`exec_in` acepta `"node_id"` (exec output por defecto) o `"node_id.pin_name"` (exec output específico, ej. `"branch.true"`).
+`exec_in` acepta:
+- `"node_id"` — exec output por defecto del nodo fuente.
+- `"node_id.pin_name"` — exec output específico (ej. `"branch.true"`).
+- `["a", "b"]` — AND-join: espera que ambos nodos completen.
+- `{"or": ["a", "b"]}` — OR-join: dispara con el primero que llegue.
 
 ---
 
@@ -368,7 +387,6 @@ state = GraphState.options(name=f"gs_{graph_id}", lifetime="detached").remote(va
 
 El `graph_id` se propaga a:
 - `_SerializableExecContext` — los `@ray_node` lo usan para resolver el state por nombre
-- `_run_subgraph_task` — las ramas paralelas reciben el handle del state directamente
 
 Esto permite que múltiples grafos corran simultáneamente sin colisiones, y que cualquier actor Ray del cluster acceda al estado de su grafo via `ray.get_actor(f"gs_{graph_id}")`.
 
@@ -395,9 +413,9 @@ Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
 | Archivo | Responsabilidad |
 |---|---|
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, `_SerializableExecContext`, descriptores de pin, `NodeMeta` |
-| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local) + `FlowExecutor` (wrapper), `_run_subgraph_task` (ramas de Parallel, reusa `FlowEngine` en modo subgrafo) |
-| `rayflow/build/validator.py` | `flatten()` (aplana CallFlow inline a namespace plano), valida el flow y produce `BuiltFlow` con `exec_targets` resueltos |
-| `rayflow/schema/models.py` | `FlowDef`, `NodeDef` (incl. campos del flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`/`subflow_exit`, `subflow_vars`, `flow_name`), `PinKind` |
+| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local, motor async) + `FlowExecutor` (wrapper); `_exec_arrivals` para AND-join; fan-out concurrente vía `asyncio.gather` |
+| `rayflow/build/validator.py` | `flatten()` (aplana CallFlow inline a namespace plano), valida el flow y produce `BuiltFlow` con `exec_targets` y `exec_join` resueltos |
+| `rayflow/schema/models.py` | `FlowDef`, `NodeDef` (incl. `exec_in: str \| list \| dict`, campos del flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`/`subflow_exit`, `subflow_vars`, `flow_name`), `PinKind` |
 | `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
 | `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
 | `rayflow/events/bus.py` | `EventBroker` — actor global pub/sub fire-and-forget, namespaced por nombre de evento |

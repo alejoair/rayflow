@@ -106,9 +106,17 @@ class ExecContext:
         self._emit_event_fn = emit_event_fn
         self.graph_id = graph_id
 
-    def fire(self, pin_name: str) -> None:
-        """Dispara el exec output indicado."""
-        self._fire_fn(pin_name)
+    async def fire(self, pin_name: str) -> None:
+        """Dispara el exec output indicado (bloqueante: ejecuta el subgrafo).
+
+        En @engine_node con exec pins, el contrato es `await ctx.fire(pin)`. El
+        await es el punto de suspensión donde el engine persiste los outputs ya
+        expuestos con set_output antes de hundirse en el subgrafo, y donde varias
+        ramas lanzadas con asyncio.gather pueden solaparse.
+        """
+        result = self._fire_fn(pin_name)
+        if inspect.isawaitable(result):
+            await result
 
     def set_output(self, pin_name: str, value: Any) -> None:
         """Expone un data output (útil en @engine_node con outputs intermedios)."""
@@ -197,13 +205,20 @@ def ray_node(cls: type) -> type:
     meta.is_engine_node = False
     meta.is_async = inspect.iscoroutinefunction(getattr(cls, "run", None))
 
-    # Inyectar run_with_ctx en la clase para que el actor lo exponga
+    # Inyectar run_with_ctx en la clase para que el actor lo exponga.
+    # Si run es una corrutina (async def), el actor expone un método async y el
+    # engine lo await-ea vía el ObjectRef — Ray soporta actores async nativamente.
     if meta.is_exec_node:
         original_run = cls.run
 
-        def run_with_ctx(self, ctx, **inputs):
-            outputs = original_run(self, ctx, **inputs)
-            return (ctx.fired, outputs or {})
+        if meta.is_async:
+            async def run_with_ctx(self, ctx, **inputs):
+                outputs = await original_run(self, ctx, **inputs)
+                return (ctx.fired, outputs or {})
+        else:
+            def run_with_ctx(self, ctx, **inputs):
+                outputs = original_run(self, ctx, **inputs)
+                return (ctx.fired, outputs or {})
 
         cls.run_with_ctx = run_with_ctx
 

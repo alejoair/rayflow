@@ -24,9 +24,8 @@ class OnEvent:
     exec_out = ExecOutput()
     payload = Output("Any")
 
-    def run(self, ctx: ExecContext, event_name: str = "") -> dict:
-        ctx.fire("exec_out")
-        return {}
+    async def run(self, ctx: ExecContext, event_name: str = "") -> None:
+        await ctx.fire("exec_out")
 
 
 @engine_node
@@ -41,7 +40,6 @@ class EmitEvent:
     payload = Input("Any", default=None)
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext, event_name: str, payload: Any) -> dict:
+    async def run(self, ctx: ExecContext, event_name: str, payload: Any) -> None:
         ctx.emit_event(event_name, payload)
-        ctx.fire("exec_out")
-        return {}
+        await ctx.fire("exec_out")

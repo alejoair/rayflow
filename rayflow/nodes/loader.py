@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -15,8 +16,41 @@ class NodeCatalog:
         # nombre_nodo → (clase, NodeMeta)
         self._registry: dict[str, tuple[type, NodeMeta]] = {}
 
+    def load_custom_nodes_package(self) -> None:
+        """Importa el paquete ./custom_nodes/ del cwd como módulo REAL.
+
+        A diferencia de load_directory (que usa nombres de módulo sintéticos no
+        importables desde otro proceso), aquí los nodos quedan bajo
+        `custom_nodes.<modulo>` — un módulo importable. Esto es lo que permite
+        que sus clases se reconstruyan en los workers Ray (que reciben
+        custom_nodes/ vía runtime_env py_modules) al deserializar el BuiltFlow.
+        """
+        from rayflow.workspace import custom_nodes_path
+
+        cn = custom_nodes_path()
+        if not cn.exists():
+            return
+        # El cwd debe estar en sys.path para que `import custom_nodes.*` funcione.
+        cwd = str(cn.parent)
+        if cwd not in sys.path:
+            sys.path.insert(0, cwd)
+
+        for path in sorted(cn.glob("*.py")):
+            if path.name == "__init__.py" or path.name.startswith("_"):
+                continue
+            module_name = f"custom_nodes.{path.stem}"
+            try:
+                module = importlib.import_module(module_name)
+            except Exception:
+                continue
+            self._register_from_module(module)
+
     def load_directory(self, directory: str | Path) -> None:
-        """Importa todos los .py del directorio y registra los nodos encontrados."""
+        """Importa todos los .py del directorio y registra los nodos encontrados.
+
+        Usa nombres de módulo sintéticos — apto para nodos locales del driver,
+        NO para distribución a workers (usar custom_nodes/ para eso).
+        """
         directory = Path(directory)
         if not directory.exists():
             return
@@ -36,13 +70,13 @@ class NodeCatalog:
             spec.loader.exec_module(module)
         except Exception:
             return
+        self._register_from_module(module)
 
+    def _register_from_module(self, module) -> None:
         for attr_name in dir(module):
             obj = getattr(module, attr_name)
-            if isinstance(obj, type):
-                meta = get_node_meta(obj)
-                if meta is not None:
-                    self._registry[meta.name] = (obj, meta)
+            if isinstance(obj, type) and get_node_meta(obj) is not None:
+                self.register(obj)
 
     def register(self, cls: type) -> None:
         meta = get_node_meta(cls)

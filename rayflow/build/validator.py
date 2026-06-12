@@ -43,6 +43,8 @@ class ResolvedNode:
     exec_sources: list[str] = field(default_factory=list)
     # exec outputs → lista de node_ids destino (fan-out: uno o varios)
     exec_targets: dict[str, list[str]] = field(default_factory=dict)
+    # semántica de múltiples exec_in: "and" (espera todos) | "or" (primero que llegue)
+    exec_join: str = "and"
 
     @property
     def state_path(self) -> str | None:
@@ -197,6 +199,8 @@ def _reparent_exec_in(exec_in, prefix: str):
         return None
     if isinstance(exec_in, str):
         return _reparent_ref(exec_in, prefix)
+    if isinstance(exec_in, dict):
+        return {"or": [_reparent_ref(e, prefix) for e in exec_in["or"]]}
     return [_reparent_ref(e, prefix) for e in exec_in]
 
 
@@ -348,6 +352,34 @@ def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta
         if extra:
             meta = copy.copy(meta)
             meta.inputs = list(meta.inputs) + extra
+    elif meta.is_parallel and node_def is not None:
+        # Descubrir branch pins dinámicos escaneando el wiring del flow.
+        # Los nodos cuyo exec_in referencie este Parallel con un pin que
+        # empiece por "branch_" definen las ramas disponibles.
+        branch_pins: set[str] = set()
+        par_id = node_def.id
+        for nd in flow.nodes:
+            if nd.exec_in is None:
+                continue
+            sources = [nd.exec_in] if isinstance(nd.exec_in, str) else nd.exec_in
+            for src in sources:
+                if "." not in src:
+                    continue
+                src_id, src_pin = src.split(".", 1)
+                if src_id == par_id and src_pin.startswith("branch_"):
+                    branch_pins.add(src_pin)
+        if branch_pins:
+            def _branch_sort_key(pin: str) -> tuple:
+                suffix = pin[len("branch_"):]
+                try:
+                    return (0, int(suffix))
+                except ValueError:
+                    return (1, suffix)
+            sorted_branches = sorted(branch_pins, key=_branch_sort_key)
+            # joined siempre declarado — mantenerlo al final
+            other = [p for p in meta.exec_outputs if p != "joined"]
+            meta = copy.copy(meta)
+            meta.exec_outputs = sorted_branches + (["joined"] if "joined" in meta.exec_outputs else [])
     return meta
 
 
@@ -369,7 +401,19 @@ def _validate_exec_inputs(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> None
                 )
             continue
 
-        sources = [exec_in] if isinstance(exec_in, str) else exec_in
+        if isinstance(exec_in, dict):
+            if "or" not in exec_in:
+                raise BuildError(
+                    f"Nodo '{nid}': exec_in como dict debe tener la forma {{\"or\": [...]}}"
+                )
+            rnode.exec_join = "or"
+            sources = exec_in["or"]
+        elif isinstance(exec_in, list):
+            rnode.exec_join = "and"
+            sources = exec_in
+        else:
+            rnode.exec_join = "and"
+            sources = [exec_in]
         for src in sources:
             src_id, src_pin = _parse_exec_ref(src, nodes)
             if src_id not in nodes:

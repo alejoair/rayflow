@@ -32,7 +32,6 @@ class Set:
     value = Input("Any", default=None)
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext, variable_name: str, value: any) -> dict:
+    async def run(self, ctx: ExecContext, variable_name: str, value: any) -> None:
         ctx.set_variable(variable_name, value)
-        ctx.fire("exec_out")
-        return {}
+        await ctx.fire("exec_out")

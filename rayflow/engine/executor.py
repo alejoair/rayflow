@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections import deque
+import asyncio
 from typing import Any
+import inspect
 import time
 import uuid
 
@@ -31,19 +32,16 @@ class FlowEngine:
     flow los reutilizan — no los duplican.
     """
 
-    def __init__(self, built: BuiltFlow, flow_inputs: dict[str, Any] | None = None,
-                 actors: dict[str, Any] | None = None,
-                 state: GraphState | None = None, graph_id: str | None = None):
+    def __init__(self, built: BuiltFlow, flow_inputs: dict[str, Any] | None = None):
         self._built = built
         self._flow_inputs = flow_inputs or {}
-        # state/graph_id inyectados → modo subgrafo (rama de Parallel): el engine
-        # reutiliza el GraphState y los actores del flow padre, no los crea ni
-        # destruye. Si son None, execute() los crea.
-        self._state: GraphState | None = state
-        self._graph_id: str | None = graph_id
+        self._state: GraphState | None = None
+        self._graph_id: str | None = None
         self._output_refs: dict[str, Any] = {}
-        # Handles de actores @ray_node — pasados desde el driver donde la clase es conocida
-        self._actors: dict[str, Any] = actors or {}
+        self._actors: dict[str, Any] = {}
+        # AND-join: rastrea qué predecesores exec llegaron ya a cada nodo join.
+        # Solo se puebla para nodos con exec_join=="and" y más de un predecesor.
+        self._exec_arrivals: dict[str, set[str]] = {}
 
     # ------------------------------------------------------------------
     # API pública
@@ -58,19 +56,10 @@ class FlowEngine:
         ).remote(var_defaults)
 
         self._spawn_actors()
-        self._run_and_collect()
+        asyncio.run(self._run_and_collect())
         self._teardown_actors()
         ray.kill(self._state)
         return self._output_refs
-
-    def run_subgraph(self, entry_id: str) -> None:
-        """Ejecuta un subgrafo (rama de Parallel) desde entry_id.
-
-        Reutiliza el GraphState y los actores del flow padre (inyectados en el
-        constructor). No crea ni destruye estado ni actores, ni siembra inputs
-        del flow. Comparte toda la lógica de _fire_* con execute().
-        """
-        self._run_loop(entry_id)
 
     # ------------------------------------------------------------------
     # Gestión de actores @ray_node — creados una vez por flow
@@ -79,9 +68,8 @@ class FlowEngine:
     def _spawn_actors(self) -> None:
         """Instancia actores @ray_node con nombre único "{node_id}_{graph_id}".
 
-        Los handles se guardan en self._actors y se pasan a las tasks de ramas
-        paralelas — así las ramas no necesitan redescubrir los actores por nombre
-        desde un proceso donde la clase Python puede no estar importada.
+        Los handles se guardan en self._actors y se acceden directamente desde
+        las ramas del Parallel, que comparten el mismo engine.
         """
         for node_id, rnode in self._built.nodes.items():
             if rnode.meta.is_engine_node or rnode.meta.is_parallel:
@@ -110,36 +98,56 @@ class FlowEngine:
     # Ciclo interno
     # ------------------------------------------------------------------
 
-    def _run_and_collect(self) -> None:
+    async def _run_and_collect(self) -> None:
+        for node_id, rnode in self._built.nodes.items():
+            if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
+                self._exec_arrivals[node_id] = set()
+
         input_refs = {name: ray.put(value) for name, value in self._flow_inputs.items()}
         self._write_node_outputs(self._built.entry_node_id, input_refs)
-        self._run_loop(self._built.entry_node_id)
+        await self._run_loop(self._built.entry_node_id)
         self._output_refs = {
             name: ray.get(ref) for name, ref in self._output_refs.items()
         }
 
-    def _run_loop(self, entry_id: str) -> None:
-        queue: deque[str] = deque([entry_id])
-        while queue:
-            node_id = queue.popleft()
-            next_ids = self._fire(node_id)
-            queue.extend(next_ids)
+    async def _run_loop(self, entry_id: str, arrived_from: str | None = None) -> None:
+        if not self._is_ready(entry_id, arrived_from):
+            return
+        next_ids = await self._fire(entry_id)
+        if len(next_ids) > 1:
+            await asyncio.gather(*[self._run_loop(nid, entry_id) for nid in next_ids])
+        elif next_ids:
+            await self._run_loop(next_ids[0], entry_id)
 
-    def _fire(self, node_id: str) -> list[str]:
+    def _is_ready(self, node_id: str, arrived_from: str | None) -> bool:
+        """Devuelve True si el nodo puede dispararse ya.
+
+        Para nodos AND-join con múltiples predecesores, acumula las llegadas y
+        solo autoriza el disparo cuando todos los predecesores han completado.
+        Para todo lo demás (OR, un solo predecesor, entry nodes) siempre True.
+        """
+        if node_id not in self._exec_arrivals:
+            return True
+        arrivals = self._exec_arrivals[node_id]
+        if arrived_from is not None:
+            arrivals.add(arrived_from)
+        return len(arrivals) >= len(self._built.nodes[node_id].exec_sources)
+
+    async def _fire(self, node_id: str) -> list[str]:
         rnode = self._built.nodes[node_id]
         if rnode.node_def.subflow_entry is not None:
-            return self._fire_callflow_node(node_id, rnode)
+            return await self._fire_callflow_node(node_id, rnode)
         if rnode.meta.is_parallel:
-            return self._fire_parallel_node(node_id, rnode)
+            return await self._fire_parallel_node(node_id, rnode)
         if rnode.meta.is_engine_node:
-            return self._fire_engine_node(node_id, rnode)
-        return self._fire_ray_node(node_id, rnode)
+            return await self._fire_engine_node(node_id, rnode)
+        return await self._fire_ray_node(node_id, rnode)
 
     # ------------------------------------------------------------------
     # CallFlow — subgrafo inline orquestado por el engine
     # ------------------------------------------------------------------
 
-    def _fire_callflow_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
+    async def _fire_callflow_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         """Orquesta un CallFlow shell: corre el subgrafo inline y lee 'result'.
 
         El subflow ya está aplanado inline (flatten). El shell dispara su entry
@@ -163,7 +171,7 @@ class FlowEngine:
                 ))
 
         # Corre el subgrafo inline, bloqueante.
-        self._run_loop(entry_id)
+        await self._run_loop(entry_id)
 
         # Reúne los outputs del subflow desde los inputs resueltos del FlowOutput
         # de retorno — ese es el dict 'result' que ve el padre.
@@ -181,10 +189,10 @@ class FlowEngine:
         return rnode.exec_targets.get("exec_out", [])
 
     # ------------------------------------------------------------------
-    # Nodo Parallel — fork/join con tasks Ray
+    # Nodo Parallel — fork/join con asyncio.gather
     # ------------------------------------------------------------------
 
-    def _fire_parallel_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
+    async def _fire_parallel_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         branch_ids = []
         for pin in rnode.meta.exec_outputs:
             if pin != "joined":
@@ -192,12 +200,10 @@ class FlowEngine:
 
         started_at = time.time()
         if branch_ids:
-            # Pasar handles directamente — las tasks reciben actores ya creados
-            refs = [
-                _run_subgraph_task.remote(self._built, self._graph_id, self._state, self._actors, eid)
-                for eid in branch_ids
-            ]
-            ray.get(refs)
+            # Cada rama corre como corrutina independiente en el mismo engine.
+            # _run_loop tiene su propia deque — no interfieren entre sí.
+            # Los writes van al GraphState (actor Ray, serializado).
+            await asyncio.gather(*[self._run_loop(eid) for eid in branch_ids])
         duration_ms = (time.time() - started_at) * 1000
 
         self._write_node_outputs(node_id, {
@@ -209,7 +215,7 @@ class FlowEngine:
     # @engine_node — ejecutado localmente, ctx.fire() bloqueante
     # ------------------------------------------------------------------
 
-    def _fire_engine_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
+    async def _fire_engine_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         name = rnode.meta.name
         resolved = self._resolve_inputs(rnode)
         inputs = {k: ray.get(v) for k, v in resolved.items()}
@@ -228,13 +234,19 @@ class FlowEngine:
             # y dispara exec_out hacia el subgrafo. No se invoca run() — el nodo
             # builtin no acepta estos kwargs dinámicos.
             self._write_node_outputs(node_id, dict(resolved))
-            for target in rnode.exec_targets.get("exec_out", []):
-                self._run_loop(target)
+            targets = rnode.exec_targets.get("exec_out", [])
+            if len(targets) > 1:
+                await asyncio.gather(*[self._run_loop(t, node_id) for t in targets])
+            elif targets:
+                await self._run_loop(targets[0], node_id)
             return []
 
-        def _fire_fn(pin_name: str) -> None:
-            for target in rnode.exec_targets.get(pin_name, []):
-                self._run_loop(target)
+        async def _fire_fn(pin_name: str) -> None:
+            targets = rnode.exec_targets.get(pin_name, [])
+            if len(targets) > 1:
+                await asyncio.gather(*[self._run_loop(t, node_id) for t in targets])
+            elif targets:
+                await self._run_loop(targets[0], node_id)
 
         def _set_output_fn(pin_name: str, value: Any) -> None:
             self._write_node_outputs(node_id, {pin_name: ray.put(value)})
@@ -268,11 +280,19 @@ class FlowEngine:
         run_fn = getattr(rnode.meta.py_class, "run", None)
         if run_fn is not None:
             instance = rnode.meta.py_class()
-            outputs = instance.run(ctx, **inputs) or {}
-            if outputs:
-                self._write_node_outputs(node_id, {
-                    k: ray.put(v) for k, v in outputs.items()
-                })
+            result = instance.run(ctx, **inputs)
+            if inspect.isawaitable(result):
+                result = await result
+            # set_output es el ÚNICO canal de data outputs en @engine_node.
+            # Devolver data por return es un error (causaba que el consumidor
+            # disparado por un fire leyera None, porque el return se persistía
+            # tarde). Ver CLAUDE.md.
+            if result:
+                raise RuntimeError(
+                    f"@engine_node '{name}' (id={node_id}) devolvió data por return "
+                    f"({list(result)}). Usa ctx.set_output(pin, valor) — es el único "
+                    f"canal de data outputs en engine nodes."
+                )
         duration_ms = (time.time() - started_at) * 1000
 
         self._write_node_outputs(node_id, {
@@ -284,14 +304,17 @@ class FlowEngine:
     # @ray_node — actor Ray, localizado por nombre en el cluster
     # ------------------------------------------------------------------
 
-    def _fire_ray_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
+    async def _fire_ray_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         actor = self._get_actor(node_id)
         resolved = self._resolve_inputs(rnode)
 
         ctx = _SerializableExecContext(self._graph_id)
         started_at = time.time()
+        # .remote() es no bloqueante; await sobre el ObjectRef cede el control,
+        # así que dentro de un asyncio.gather otra rama avanza mientras este
+        # @ray_node remoto computa. Aquí está la concurrencia I/O real.
         result_ref = actor.run_with_ctx.remote(ctx, **resolved)
-        fired, outputs = ray.get(result_ref)
+        fired, outputs = await result_ref
         duration_ms = (time.time() - started_at) * 1000
 
         out_refs = {pin: ray.put(value) for pin, value in outputs.items()}
@@ -407,28 +430,6 @@ class FlowExecutor:
     def execute(self) -> dict[str, Any]:
         return FlowEngine(self._built, self._flow_inputs).execute()
 
-
-# ---------------------------------------------------------------------------
-# Task Ray para ramas paralelas del mismo flow
-# ---------------------------------------------------------------------------
-
-@ray.remote
-def _run_subgraph_task(
-    built: BuiltFlow,
-    graph_id: str,
-    state: Any,
-    actors: dict[str, Any],
-    entry_id: str,
-) -> None:
-    """Ejecuta un subgrafo (rama de Parallel) en un worker Ray.
-
-    Reutiliza el mismo FlowEngine que el flow padre, en modo subgrafo: recibe
-    el GraphState y los actores ya creados (serializables por Ray) y corre desde
-    entry_id sin crear ni destruir estado. Toda la lógica de _fire_* es la misma
-    que en la ejecución principal — sin duplicación.
-    """
-    engine = FlowEngine(built, actors=actors, state=state, graph_id=graph_id)
-    engine.run_subgraph(entry_id)
 
 
 # ---------------------------------------------------------------------------
