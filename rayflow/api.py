@@ -50,25 +50,26 @@ def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = 
         graph_id único asignado a este flow residente.
     """
     _ensure_ray()
-    from rayflow.events.bus import get_event_bus
+    from rayflow.events.bus import get_event_broker
 
     flow_def = load_flow(source)
     catalog = get_catalog(extra_node_dirs)
     build(flow_def, catalog)  # validación temprana
 
     graph_id = str(uuid.uuid4())
-    bus = get_event_bus()
+    broker = get_event_broker()
+    # source tal cual (ruta o dict) — str() perdería un dict inline.
     for event_name in flow_def.events:
-        ray.get(bus.subscribe.remote(event_name, str(source), graph_id))
+        ray.get(broker.subscribe.remote(event_name, source, graph_id))
     return graph_id
 
 
 def stop(graph_id: str, event_names: list[str]) -> None:
-    """Desuscribe un flow residente del bus de eventos."""
-    from rayflow.events.bus import get_event_bus
-    bus = get_event_bus()
+    """Desuscribe un flow residente del broker de eventos."""
+    from rayflow.events.bus import get_event_broker
+    broker = get_event_broker()
     for event_name in event_names:
-        ray.get(bus.unsubscribe.remote(event_name, graph_id))
+        ray.get(broker.unsubscribe.remote(event_name, graph_id))
 
 
 @ray.remote
@@ -81,12 +82,17 @@ def _run_flow_task(source: Any, inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 @ray.remote
-def _run_event_flow(flow_path: str, event_name: str, payload: Any) -> None:
-    """Ejecuta un flow disparado por evento (fire-and-forget, sección 4)."""
-    flow_def = load_flow(flow_path)
+def _run_event_flow(source: Any, event_name: str, payload: Any) -> None:
+    """Ejecuta un flow disparado por evento (fire-and-forget).
+
+    El engine escribe los flow_inputs como outputs del entry node; al pasar
+    'payload' con ese nombre, el output `payload` del OnEvent queda poblado y
+    el subgrafo del flow receptor puede consumirlo como "on.payload".
+    """
+    flow_def = load_flow(source)
     catalog = get_catalog()
     built = build(flow_def, catalog)
-    FlowExecutor(built, {"_event_name": event_name, "_payload": payload}).execute()
+    FlowExecutor(built, {"payload": payload}).execute()
 
 
 def _ensure_ray() -> None:

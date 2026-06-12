@@ -78,7 +78,7 @@ class ExecContext:
     def set_output(self, pin_name: str, value: Any) -> None: ...
     def get_variable(self, name: str) -> Any: ...       # lee variable del GraphState
     def set_variable(self, name: str, value: Any): ...  # escribe variable en el GraphState
-    def emit_event(self, event_name: str, payload: Any = None): ...  # emite al bus global
+    def emit_event(self, event_name: str, payload: Any = None): ...  # publica al EventBroker
 ```
 
 En `@ray_node` viaja serializado al proceso del actor (`_SerializableExecContext`). Lleva el `graph_id` de la ejecución y resuelve el `GraphState` via `ray.get_actor(f"gs_{graph_id}")` — así cualquier actor Ray puede acceder al estado compartido de su grafo sin depender del handle Python del driver.
@@ -234,8 +234,8 @@ Fork/join con paralelismo real vía Ray. Cada rama corre como task Ray (`_run_su
 | `OnStart` | `@engine_node` | sí | Punto de entrada sin parámetros |
 | `FlowInput` | `@engine_node` | sí | Punto de entrada con parámetros |
 | `FlowOutput` | `@engine_node` | sí | Punto de salida del flow |
-| `OnEvent` | `@engine_node` | sí | Entrada por evento externo |
-| `EmitEvent` | `@engine_node` | sí | Emite evento al bus global via `ctx.emit_event()` |
+| `OnEvent` | `@engine_node` | sí | Entrada por evento externo. `event_name` (con namespace) es config estática; expone el `payload` recibido como output |
+| `EmitEvent` | `@engine_node` | sí | Publica un evento al EventBroker via `ctx.emit_event()`. `event_name` lleva el namespace (ej. `"ventas/order_created"`) |
 | `Branch` | `@engine_node` | sí | Desvío condicional true/false |
 | `Sequence` | `@engine_node` | sí | Dispara then_0/then_1/then_2 en orden |
 | `Parallel` | `@parallel_node` | sí | Fork/join — lanza branch_0/1/2 en paralelo, joined al terminar |
@@ -283,7 +283,7 @@ outputs = rayflow.run("flow.json", x=5, y=3)
 ref = rayflow.run_async("flow.json", x=5)
 outputs = ray.get(ref)
 
-# Flow residente por eventos (suscribe al bus de eventos interno)
+# Flow residente por eventos (suscribe al EventBroker; ver "Sistema de eventos")
 graph_id = rayflow.serve_events("flow.json")
 rayflow.stop(graph_id, ["mi_evento"])
 ```
@@ -320,6 +320,40 @@ POST /flows/suma/run   { "x": 3, "y": 7 }   ->   { "resultado": 10 }
 El handler es `async` y usa `run_async` (awaitable sobre el `ObjectRef` de Ray),
 sin bloquear el event loop. Requiere el extra: `pip install 'rayflow[serve]'`
 (FastAPI + uvicorn). CLI en `rayflow/cli.py`; `python -m rayflow serve …` también.
+
+---
+
+## Sistema de eventos (EventBroker)
+
+El `EventBroker` (`events/bus.py`) es un **único actor Ray detached y global**,
+análogo al `GraphState` pero para eventos: pub/sub **fire-and-forget** entre
+flows. El aislamiento es por **namespace en el nombre del evento**, estilo clave
+de S3 — los `/` son solo parte del nombre, no contenedores:
+
+```
+"ventas/order_created"   ← un namespace
+"inventario/stock_low"   ← otro
+"tick"                   ← namespace global
+```
+
+- **Matching exacto** por el nombre completo (namespace incluido). El namespace
+  es **explícito en el `event_name`** que el usuario escribe en el JSON; emisor
+  y receptor deben usar el mismo string. El broker no conoce `state_path`.
+- **Fire-and-forget**: `publish` despacha a los suscriptores actuales y olvida.
+  No persiste mensajes — si nadie escucha, el evento se pierde.
+- `publish_count(event_name)` expone cuántas veces se publicó (introspección).
+
+**Flujo emisor → receptor:**
+- `EmitEvent` (nodo) → `ctx.emit_event(name, payload)` → `broker.publish`.
+- El broker lanza `_run_event_flow.remote(source, name, payload)` por cada flow
+  suscrito (registrado con `serve_events`).
+- `_run_event_flow` ejecuta el flow receptor pasando `{"payload": payload}` como
+  flow_input. El engine escribe los flow_inputs como outputs del entry node, así
+  el output `payload` del `OnEvent` queda poblado y el subgrafo lo consume como
+  `"on.payload"`.
+
+`OnEvent` lleva `event_name` como configuración estática (a qué evento se
+suscribe); no es un input de ejecución.
 
 ---
 
@@ -366,6 +400,7 @@ Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
 | `rayflow/schema/models.py` | `FlowDef`, `NodeDef` (incl. campos del flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`/`subflow_exit`, `subflow_vars`, `flow_name`), `PinKind` |
 | `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
 | `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
+| `rayflow/events/bus.py` | `EventBroker` — actor global pub/sub fire-and-forget, namespaced por nombre de evento |
 | `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |
 | `rayflow/nodes/builtin/flow.py` | `CallFlow` — subgrafos compartidos e isolados |
 | `rayflow/api.py` | API pública: `run`, `run_async`, `serve_events`, `stop` |

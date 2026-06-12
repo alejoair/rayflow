@@ -252,9 +252,9 @@ class FlowEngine:
 
         def _emit_event_fn(event_name: str, payload: Any) -> None:
             try:
-                from rayflow.events.bus import get_event_bus
-                bus = get_event_bus()
-                bus.emit.remote(event_name, ray.put(payload))
+                from rayflow.events.bus import get_event_broker
+                broker = get_event_broker()
+                broker.publish.remote(event_name, payload)
             except Exception:
                 pass
 
@@ -461,8 +461,8 @@ class _SerializableExecContext:
 
     def emit_event(self, event_name: str, payload: Any = None) -> None:
         try:
-            from rayflow.events.bus import get_event_bus
-            bus = get_event_bus()
-            bus.emit.remote(event_name, ray.put(payload))
+            from rayflow.events.bus import get_event_broker
+            broker = get_event_broker()
+            broker.publish.remote(event_name, payload)
         except Exception:
             pass

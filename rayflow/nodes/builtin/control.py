@@ -51,31 +51,6 @@ class FlowOutput:
 
 
 @engine_node
-class OnEvent:
-    """Punto de entrada disparado por un evento externo."""
-    exec_out = ExecOutput()
-    payload = Output("Any")
-
-    def run(self, ctx: ExecContext) -> dict:
-        ctx.fire("exec_out")
-        return {}
-
-
-@engine_node
-class EmitEvent:
-    """Emite un evento al bus global. Fire-and-forget."""
-    exec_in = ExecInput()
-    event_name = Input("str", default="")
-    payload = Input("Any", default=None)
-    exec_out = ExecOutput()
-
-    def run(self, ctx: ExecContext, event_name: str, payload: any) -> dict:
-        ctx.emit_event(event_name, payload)
-        ctx.fire("exec_out")
-        return {}
-
-
-@engine_node
 class Branch:
     """Desvío condicional. Dispara `true` o `false` según `condition`."""
     exec_in = ExecInput()

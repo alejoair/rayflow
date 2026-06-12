@@ -48,6 +48,12 @@ class NodeCatalog:
         meta = get_node_meta(cls)
         if meta is None:
             raise ValueError(f"{cls} no tiene metadata de nodo (@node no aplicado)")
+        existing = self._registry.get(meta.name)
+        if existing is not None and existing[0] is not cls:
+            raise ValueError(
+                f"Nodo '{meta.name}' duplicado: ya registrado como {existing[0]!r}, "
+                f"se intentó registrar {cls!r}. Renombra uno de los dos."
+            )
         self._registry[meta.name] = (cls, meta)
 
     def get(self, name: str) -> tuple[type, NodeMeta] | None:
