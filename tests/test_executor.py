@@ -1,0 +1,279 @@
+"""Tests de ejecución end-to-end con Ray."""
+import pytest
+import ray
+import rayflow
+from rayflow.nodes.registry import reset_catalog
+
+
+@pytest.fixture(autouse=True)
+def ray_init():
+    if not ray.is_initialized():
+        ray.init(ignore_reinit_error=True, namespace="rayflow")
+    reset_catalog()
+    yield
+
+
+def test_flow_suma():
+    result = rayflow.run({"name": "suma", "inputs": {"a": "int", "b": "int"},
+        "outputs": {"result": "int"}, "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "add", "type": "Add", "exec_in": "entry",
+             "inputs": {"a": "entry.a", "b": "entry.b"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "add",
+             "inputs": {"result": "add.result"}},
+        ]}, a=3, b=4)
+    assert result["result"] == 7
+
+
+def test_fan_out_ambos_nodos_se_ejecutan():
+    """Un exec output conectado a dos nodos — ambos deben ejecutarse."""
+    from rayflow.nodes.decorators import ray_node, ExecContext, Input, Output, ExecInput, ExecOutput
+    from rayflow.nodes.registry import get_catalog
+
+    @ray_node
+    class SetFlag:
+        exec_in = ExecInput()
+        flag_name = Input("str", default="")
+        exec_out = ExecOutput()
+
+        def run(self, ctx: ExecContext, flag_name: str) -> dict:
+            ctx.fire("exec_out")
+            return {}
+
+    catalog = get_catalog()
+    catalog.register(SetFlag)
+
+    # entry dispara a nodo_a y nodo_b en paralelo (fan-out)
+    result = rayflow.run({
+        "name": "fanout",
+        "outputs": {"meta_a": "dict", "meta_b": "dict"},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "nodo_a", "type": "SetFlag", "exec_in": "entry",
+             "inputs": {"flag_name": "a"}},
+            {"id": "nodo_b", "type": "SetFlag", "exec_in": "entry",
+             "inputs": {"flag_name": "b"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": ["nodo_a", "nodo_b"],
+             "inputs": {"meta_a": "nodo_a.meta", "meta_b": "nodo_b.meta"}},
+        ],
+    })
+    assert result["meta_a"]["id"] == "nodo_a"
+    assert result["meta_b"]["id"] == "nodo_b"
+
+
+def test_parallel_fork_join():
+    """Nodo Parallel lanza branch_0 y branch_1 simultáneamente, joined al terminar."""
+    result = rayflow.run({
+        "name": "parallel_test",
+        "outputs": {"sum_a": "int", "sum_b": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput",
+             "inputs": {}},
+            {"id": "par", "type": "Parallel", "exec_in": "entry"},
+            {"id": "add_a", "type": "Add", "exec_in": "par.branch_0",
+             "inputs": {"a": 10, "b": 5}},
+            {"id": "add_b", "type": "Add", "exec_in": "par.branch_1",
+             "inputs": {"a": 20, "b": 3}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "par.joined",
+             "inputs": {"sum_a": "add_a.result", "sum_b": "add_b.result"}},
+        ],
+    })
+    assert result["sum_a"] == 15
+    assert result["sum_b"] == 23
+
+
+def test_parallel_con_foreach_en_rama():
+    """Parallel con @engine_node (ForEach) dentro de una rama — aislamiento correcto."""
+    result = rayflow.run({
+        "name": "parallel_foreach",
+        "inputs": {"items": "list"},
+        "outputs": {"done": "dict"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "par", "type": "Parallel", "exec_in": "entry"},
+            {"id": "foreach", "type": "ForEach", "exec_in": "par.branch_0",
+             "inputs": {"array": "entry.items"}},
+            {"id": "add_elem", "type": "Add", "exec_in": "foreach.loop_body",
+             "inputs": {"a": "foreach.element", "b": 0}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "par.joined",
+             "inputs": {"done": "par.meta"}},
+        ],
+    }, items=[1, 2, 3])
+    assert result["done"]["type"] == "Parallel"
+
+
+def test_parallel_n_branches():
+    """Parallel con 4 ramas dinámicas (branch_0 a branch_3)."""
+    result = rayflow.run({
+        "name": "parallel_4branches",
+        "outputs": {"r0": "int", "r1": "int", "r2": "int", "r3": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "par", "type": "Parallel", "exec_in": "entry"},
+            {"id": "add_0", "type": "Add", "exec_in": "par.branch_0",
+             "inputs": {"a": 1, "b": 10}},
+            {"id": "add_1", "type": "Add", "exec_in": "par.branch_1",
+             "inputs": {"a": 2, "b": 20}},
+            {"id": "add_2", "type": "Add", "exec_in": "par.branch_2",
+             "inputs": {"a": 3, "b": 30}},
+            {"id": "add_3", "type": "Add", "exec_in": "par.branch_3",
+             "inputs": {"a": 4, "b": 40}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "par.joined",
+             "inputs": {
+                 "r0": "add_0.result",
+                 "r1": "add_1.result",
+                 "r2": "add_2.result",
+                 "r3": "add_3.result",
+             }},
+        ],
+    })
+    assert result["r0"] == 11
+    assert result["r1"] == 22
+    assert result["r2"] == 33
+    assert result["r3"] == 44
+
+
+def test_parallel_con_engine_node_puro():
+    """Parallel con ramas que solo tienen @engine_node (Branch + Set), sin @ray_node."""
+    result = rayflow.run({
+        "name": "parallel_engine_only",
+        "outputs": {"done": "dict"},
+        "variables": [{"name": "x", "type": "int", "default": 0}],
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "set_init", "type": "Set", "exec_in": "entry",
+             "inputs": {"variable_name": "x", "value": 100}},
+            {"id": "par", "type": "Parallel", "exec_in": "set_init"},
+            {"id": "branch_a", "type": "Branch", "exec_in": "par.branch_0",
+             "inputs": {"condition": True}},
+            {"id": "set_a", "type": "Set", "exec_in": "branch_a.true",
+             "inputs": {"variable_name": "x", "value": 200}},
+            {"id": "branch_b", "type": "Branch", "exec_in": "par.branch_1",
+             "inputs": {"condition": True}},
+            {"id": "set_b", "type": "Set", "exec_in": "branch_b.true",
+             "inputs": {"variable_name": "x", "value": 300}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "par.joined",
+             "inputs": {"done": "par.meta"}},
+        ],
+    })
+    assert result["done"]["type"] == "Parallel"
+
+
+def test_parallel_anidado():
+    """Parallel dentro de una rama de otro Parallel (nested fork/join)."""
+    result = rayflow.run({
+        "name": "nested_parallel",
+        "outputs": {"r0": "int", "r1": "int", "r2": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "par_outer", "type": "Parallel", "exec_in": "entry"},
+            {"id": "add_a", "type": "Add", "exec_in": "par_outer.branch_0",
+             "inputs": {"a": 1, "b": 2}},
+            {"id": "par_inner", "type": "Parallel", "exec_in": "par_outer.branch_1"},
+            {"id": "add_b0", "type": "Add", "exec_in": "par_inner.branch_0",
+             "inputs": {"a": 10, "b": 20}},
+            {"id": "add_b1", "type": "Add", "exec_in": "par_inner.branch_1",
+             "inputs": {"a": 30, "b": 40}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "par_outer.joined",
+             "inputs": {
+                 "r0": "add_a.result",
+                 "r1": "add_b0.result",
+                 "r2": "add_b1.result",
+             }},
+        ],
+    })
+    assert result["r0"] == 3
+    assert result["r1"] == 30
+    assert result["r2"] == 70
+
+
+# ---------------------------------------------------------------------------
+# AND/OR exec_in semántico
+# ---------------------------------------------------------------------------
+
+def test_and_join_espera_ambas_ramas():
+    """Fan-out de 2 ramas; el nodo de salida con exec_in lista (AND) espera ambas."""
+    result = rayflow.run({
+        "name": "and_join_basic",
+        "outputs": {"r0": "int", "r1": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "add_a", "type": "Add", "exec_in": "entry",
+             "inputs": {"a": 1, "b": 10}},
+            {"id": "add_b", "type": "Add", "exec_in": "entry",
+             "inputs": {"a": 2, "b": 20}},
+            {"id": "exit", "type": "FlowOutput",
+             "exec_in": ["add_a", "add_b"],
+             "inputs": {"r0": "add_a.result", "r1": "add_b.result"}},
+        ],
+    })
+    assert result["r0"] == 11
+    assert result["r1"] == 22
+
+
+def test_and_join_espera_rama_lenta():
+    """El AND-join espera a la rama con más nodos en cadena."""
+    result = rayflow.run({
+        "name": "and_join_slow_branch",
+        "outputs": {"r0": "int", "r1": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            # rama rápida: un solo nodo
+            {"id": "fast", "type": "Add", "exec_in": "entry",
+             "inputs": {"a": 1, "b": 0}},
+            # rama lenta: dos nodos en cadena
+            {"id": "slow1", "type": "Add", "exec_in": "entry",
+             "inputs": {"a": 10, "b": 0}},
+            {"id": "slow2", "type": "Add", "exec_in": "slow1",
+             "inputs": {"a": "slow1.result", "b": 5}},
+            {"id": "exit", "type": "FlowOutput",
+             "exec_in": ["fast", "slow2"],
+             "inputs": {"r0": "fast.result", "r1": "slow2.result"}},
+        ],
+    })
+    assert result["r0"] == 1
+    assert result["r1"] == 15
+
+
+def test_or_join_post_branch():
+    """OR explícito: convergencia post-Branch; solo una rama ejecuta."""
+    result = rayflow.run({
+        "name": "or_join_branch",
+        "inputs": {"cond": "bool"},
+        "outputs": {"out": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "br", "type": "Branch", "exec_in": "entry",
+             "inputs": {"condition": "entry.cond"}},
+            {"id": "true_add", "type": "Add", "exec_in": "br.true",
+             "inputs": {"a": 1, "b": 0}},
+            {"id": "false_add", "type": "Add", "exec_in": "br.false",
+             "inputs": {"a": 2, "b": 0}},
+            {"id": "exit", "type": "FlowOutput",
+             "exec_in": {"or": ["true_add", "false_add"]},
+             "inputs": {"out": "true_add.result"}},
+        ],
+    }, cond=True)
+    assert result["out"] == 1
+
+
+def test_or_join_post_branch_false():
+    """OR: rama false del Branch también llega al join."""
+    result = rayflow.run({
+        "name": "or_join_branch_false",
+        "inputs": {"cond": "bool"},
+        "outputs": {"out": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "br", "type": "Branch", "exec_in": "entry",
+             "inputs": {"condition": "entry.cond"}},
+            {"id": "true_add", "type": "Add", "exec_in": "br.true",
+             "inputs": {"a": 1, "b": 0}},
+            {"id": "false_add", "type": "Add", "exec_in": "br.false",
+             "inputs": {"a": 99, "b": 0}},
+            {"id": "exit", "type": "FlowOutput",
+             "exec_in": {"or": ["true_add", "false_add"]},
+             "inputs": {"out": "false_add.result"}},
+        ],
+    }, cond=False)
+    assert result["out"] == 99

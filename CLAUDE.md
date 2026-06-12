@@ -1,193 +1,426 @@
-# CLAUDE.md
+# Rayflow — Contexto del proyecto
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Rayflow es un motor de ejecución de grafos de nodos al estilo Unreal Engine Blueprints, construido sobre Ray. Los flows se definen como JSON y se ejecutan distribuyendo nodos como actores/tasks de Ray.
 
-## Development Commands
+---
 
-### Start Development Server
-```bash
-# Install dependencies
-pip install -e .
+## Tipos de nodo
 
-# Start the visual editor (serves both API and frontend)
-rayflow create --port 8000
+### `@ray_node`
+Ejecutado como actor o task de Ray (proceso remoto, distribuido).
 
-# Or with specific working directory
-rayflow create --port 8000 --working-path /path/to/project
-```
+- **Con exec pins** → actor Ray (estado persistente entre llamadas).
+- **Sin exec pins** → task Ray (función pura sin estado).
+- `ctx.fire(pin)` acumula los pins disparados; el engine los encola al terminar `run()`.
+- El decorador genera automáticamente `run_with_ctx(ctx, **inputs)` que devuelve `(fired_pins, outputs_dict)`.
 
-This command sets `RAYFLOW_CWD` environment variable and launches uvicorn with `rayflow.server.app:app`. The server serves the React-based visual editor at the root URL and provides API endpoints at `/api/*`.
-
-### Testing
-```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/
-```
-
-### Manual Server Control
-If you need to manually start the server:
-```bash
-# From project root, with working directory set
-RAYFLOW_CWD=/path/to/working/dir python -m uvicorn rayflow.server.app:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## Architecture Overview
-
-RayFlow is a **visual flow editor with Ray distributed execution** that follows this architecture:
-
-```
-Visual Editor (React/Ant Design) ←→ FastAPI Server ←→ Ray Actors (Nodes)
-                ↓
-         flow.json files                    nodes/*.py files
-```
-
-### Key Design Principles
-
-1. **One Node = One Python File**: Each node is a separate `.py` file with a Ray remote class
-2. **AST-Based Metadata Extraction**: Server uses Python AST parsing to extract node metadata (inputs, outputs, constants, UI info)
-3. **Dynamic Discovery**: Nodes are discovered from both `rayflow/nodes/` (built-in) and `./nodes/` (user-defined)
-4. **Type-Safe Connections**: Visual editor enforces type compatibility between node connections
-5. **Configurable Node Constants**: Uppercase class variables become editable UI controls
-
-## Visual Editor Architecture
-
-### Frontend Stack
-- **React 18** + **Ant Design 5.28.0**: UI framework and components
-- **React Flow 11.11.4**: Visual node graph editor with custom node rendering
-- **CDN-based loading**: All libraries loaded from CDN (no build process)
-
-### Key Components
-- **`editor/app.js`**: Main application with collapsible sidebars
-- **`editor/components/Canvas.js`**: React Flow integration with drag-drop and type validation
-- **`editor/components/NodeList.js`**: Categorized node library with search
-- **`editor/components/Inspector.js`**: Property editor with dynamic form generation
-- **`editor/components/NodeComponent.js`**: Custom React Flow node renderer
-
-### Configuration System
-- **`editor/config/data-types.json`**: Data type definitions with colors, UI field types, and visual settings
-- Type configuration maps Python types to UI components (int→number input, str→text input, bool→switch)
-
-## Node System
-
-### Node Base Class Structure
 ```python
-@ray.remote
-class YourNode(RayflowNode):
-    # UI Metadata (extracted by AST parser)
-    icon = "fa-icon-name"           # Font Awesome icon
-    category = "category_name"       # For organization in UI
-    description = "What this node does"
+@ray_node
+class Add:
+    exec_in = ExecInput()
+    a = Input("int", default=0)
+    b = Input("int", default=0)
+    result = Output("int")
+    exec_out = ExecOutput()
 
-    # Configurable Constants (uppercase = editable in UI)
-    MAX_VALUE = 100                 # int → number input
-    ENABLE_LOGGING = True           # bool → switch
-    DEFAULT_MESSAGE = "Hello"       # str → text input
-
-    # Type Definitions
-    inputs = {"x": int, "y": str}   # Input port types
-    outputs = {"result": float}     # Output port types
-
-    # Execution Flow
-    exec_input = True               # Needs execution signal
-    exec_output = True              # Provides execution signal
-
-    def process(self, **inputs):
-        # Implementation here
-        return {"result": some_value}
+    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
+        ctx.fire("exec_out")
+        return {"result": a + b}
 ```
 
-### Special Node Types
+### `@engine_node`
+Ejecutado localmente por el engine (mismo proceso, sin Ray).
 
-**START Node** (`rayflow/nodes/base/start.py`):
-- Entry points for workflows
-- `exec_input = False`, `exec_output = True`
-- No input handles visible (starts the flow)
+- `run()` es `async def` y debe usar `await ctx.fire(pin)`.
+- `await ctx.fire(pin)` es **bloqueante**: ejecuta el subgrafo conectado completo antes de retornar.
+- `ctx.set_output(pin, value)` es el **único** canal de data outputs — `return` no funciona para exponer datos (lanza `RuntimeError`). Llamar `set_output` antes del `await fire` garantiza que el subgrafo ya puede leer el valor.
+- Habilita: control de flujo (Branch, ForEach, Sequence), TryCatch, While, CallFlow, depuración, y cualquier nodo que necesite razonar sobre la ejecución.
+- Los subgrafos disparados por `ctx.fire()` pueden contener `@ray_node` normales.
+- Concurrencia: `await asyncio.gather(ctx.fire("a"), ctx.fire("b"))` lanza dos subgrafos concurrentemente en el mismo event loop.
 
-**RETURN Node** (`rayflow/nodes/base/return.py`):
-- Exit points for workflows
-- `exec_input = True`, `exec_output = False`
-- Terminates workflow execution
+```python
+@engine_node
+class Branch:
+    exec_in = ExecInput()
+    condition = Input("bool", default=False)
+    true = ExecOutput()
+    false = ExecOutput()
 
-### Node Discovery and Metadata
-The server scans two directories:
-1. **`rayflow/nodes/`**: Built-in nodes (part of package)
-2. **`./nodes/`**: User-defined nodes (in working directory)
+    async def run(self, ctx: ExecContext, condition: bool) -> None:
+        await ctx.fire("true" if condition else "false")
 
-AST parser extracts from each `.py` file:
-- Class metadata (icon, category, description)
-- Input/output type definitions
-- Configurable constants (uppercase class variables)
-- Execution flow configuration
+@engine_node
+class ForEach:
+    exec_in = ExecInput()
+    array = Input("list", default=None)
+    loop_body = ExecOutput()
+    completed = ExecOutput()
+    element = Output("Any")
+    index = Output("int")
 
-## Server Architecture
+    async def run(self, ctx: ExecContext, array: list) -> None:
+        for i, element in enumerate(array or []):
+            ctx.set_output("element", element)
+            ctx.set_output("index", i)
+            await ctx.fire("loop_body")   # bloquea; el subgrafo puede tener @ray_node
+        await ctx.fire("completed")
+```
 
-### FastAPI Application (`rayflow/server/app.py`)
-- Serves visual editor at `/` from `editor/index.html`
-- Serves components at `/components/{filename}`
-- Serves config files at `/config/{filename}`
-- API routes at `/api/*` (defined in `routes.py`)
-- Uses `RAYFLOW_CWD` environment variable for working directory
+---
 
-### Key API Endpoints
-- **`GET /api/nodes`**: Returns all discovered nodes with metadata
-- **`GET /`**: Serves the visual editor
-- **`GET /health`**: Health check
+## ExecContext
 
-## Important File Patterns
+Pasado como primer argumento a `run()` en ambos tipos de nodo.
 
-### Adding New Built-in Nodes
-1. Create `rayflow/nodes/{category}/{name}.py`
-2. Follow the node base class pattern
-3. Add configurable constants as uppercase class variables
-4. Server will automatically discover via AST parsing
+```python
+class ExecContext:
+    async def fire(self, pin_name: str) -> None: ...   # await obligatorio en @engine_node
+    def set_output(self, pin_name: str, value: Any) -> None: ...
+    def get_variable(self, name: str) -> Any: ...       # lee variable del GraphState
+    def set_variable(self, name: str, value: Any): ...  # escribe variable en el GraphState
+    def emit_event(self, event_name: str, payload: Any = None): ...  # publica al EventBroker
+```
 
-### Adding User Nodes
-1. Create `./nodes/{name}.py` in working directory
-2. Follow same pattern as built-in nodes
-3. Will appear in node library with "CUSTOM" badge
+En `@ray_node` viaja serializado al proceso del actor (`_SerializableExecContext`). Lleva el `graph_id` de la ejecución y resuelve el `GraphState` via `ray.get_actor(f"gs_{graph_id}")` — así cualquier actor Ray puede acceder al estado compartido de su grafo sin depender del handle Python del driver.
 
-### Visual Editor Customization
-- **`editor/config/data-types.json`**: Modify type colors, UI field mappings, handle sizes
-- **`editor/index.html`**: Add new CDN dependencies or custom CSS
-- **Component files**: Modify React components (require server restart for changes)
+En `@engine_node` es local con callbacks directos al engine.
 
-## Type System
+`get_variable` y `set_variable` están disponibles en **ambos** tipos. En `@ray_node` la llamada es remota (actor → actor de estado); en `@engine_node` es local.
 
-### Supported Python Types
-- `int`, `float`, `str`, `bool`, `dict`, `list`, `any`
-- Special type: `exec` (execution flow signal, white colored)
+---
 
-### UI Field Mappings (in data-types.json)
-- `int`/`float` → `"fieldType": "number"` → Ant Design InputNumber
-- `str` → `"fieldType": "text"` → Ant Design Input
-- `bool` → `"fieldType": "switch"` → Ant Design Switch
-- `dict`/`list` → `"fieldType": "textarea"` → JSON editor
+## Pin implícito `meta`
 
-### Connection Rules
-- **Exec connections** (white): Only connect exec-to-exec
-- **Data connections** (colored): Type must match exactly (no auto-conversion)
-- **Each input**: Can only receive one connection
-- **Outputs**: Can connect to multiple inputs
+Todos los nodos (tanto `@ray_node` como `@engine_node`) exponen automáticamente un data output `meta` de tipo `dict`, inyectado por el engine tras cada ejecución. No se declara en el nodo — siempre está disponible.
 
-## Common Development Patterns
+```python
+{
+    "id": "add_1",        # id de la instancia (ruta plana: "sub/add_1" si viene de un CallFlow)
+    "type": "Add",        # nombre de la clase del nodo
+    "flow": "mi_flow",    # nombre del flow que DECLARÓ el nodo (el subflow si viene de un CallFlow, no el raíz)
+    "started_at": 1718100000.123,  # unix timestamp de inicio
+    "duration_ms": 45.2,           # duración de run() en milisegundos
+}
+```
 
-### Testing Node Changes
-1. Modify node file in `rayflow/nodes/` or `./nodes/`
-2. Restart server (uvicorn auto-reload should work)
-3. Refresh editor to see changes in node library
-4. Drag updated node to canvas to test
+Se puede conectar como cualquier data output:
+```json
+{ "id": "logger", "type": "Log", "inputs": { "data": "add_1.meta" } }
+```
 
-### Debugging Visual Editor
-1. Open browser dev tools (F12)
-2. Check console for JavaScript errors
-3. Inspect network tab for API call failures
-4. Use React DevTools if available
+El validator reconoce `"node_id.meta"` como referencia válida aunque no esté declarado en el nodo. En `build/validator.py` hay un caso especial para `src_pin == "meta"` que asigna tipo `"dict"`.
 
-### Adding New Data Types
-1. Update `editor/config/data-types.json` with new type definition
-2. Add color, fieldType, and inputProps
-3. Restart server and refresh editor
-4. New type will be available for node inputs/outputs
+---
+
+## Tipos de pines
+
+| Descriptor | Tipo | Descripción |
+|---|---|---|
+| `Input("int", default=0)` | data input | Recibe un valor. Tipo canónico string. |
+| `Output("str")` | data output | Produce un valor. |
+| `ExecInput()` | exec input | Recibe señal de ejecución. |
+| `ExecOutput()` | exec output | Dispara señal de ejecución. |
+
+**Tipos permitidos**: `int`, `float`, `str`, `bool`, `list`, `dict`, `Any`, `list[T]`, `dict[str, T]`.
+La compatibilidad es estricta: no hay coerción implícita. `int` y `float` son incompatibles. Usar nodos `ToInt`, `ToFloat`, `ToStr`, `ToBool` para casteos.
+
+---
+
+## Engine — ciclo de ejecución
+
+`FlowEngine` es una clase Python local (no actor Ray). `FlowExecutor` es un wrapper fino para compatibilidad con la API pública. El motor es completamente **async**: `execute()` lanza `asyncio.run(_run_and_collect())` como borde sync→async. `_run_loop()` es recursivo con `asyncio.gather` para fan-out concurrente.
+
+```
+_fire(node_id)
+  ├─ subflow_entry  → _fire_callflow_node()  (CallFlow shell: orquesta subgrafo inline)
+  ├─ is_parallel    → _fire_parallel_node()  (fork/join vía asyncio.gather)
+  ├─ is_engine_node → _fire_engine_node()    (local, await ctx.fire() bloqueante)
+  └─ @ray_node      → _fire_ray_node()       (actor Ray, await result_ref)
+```
+
+- **`_fire_callflow_node()`**: orquesta un CallFlow shell. El subflow ya está aplanado inline en build (ver "Flatten"). Dispara `subflow_entry` (bloqueante vía `await _run_loop`), reúne los inputs del `subflow_exit` como el dict `result`, y continúa hacia `exec_out`.
+- **`_fire_engine_node()`**: instancia el nodo, crea `ExecContext` con callbacks async locales, llama `await run(ctx, **inputs)`. `set_output` es el único canal de data outputs — `return` con datos lanza `RuntimeError`. `await ctx.fire(pin)` ejecuta el subgrafo completo antes de retornar.
+- **`_fire_ray_node()`**: llama `actor.run_with_ctx.remote(ctx, **inputs)`, hace `await result_ref` (cede el event loop mientras el actor computa), recoge `fired_pins` del ctx devuelto y los traduce a `node_id`s via `exec_targets`.
+
+Los data outputs de cada nodo se escriben en `GraphState` (actor Ray) y se leen bajo demanda al resolver inputs de nodos posteriores.
+
+### Pure nodes (nodos lazy)
+
+Un `@engine_node` **sin exec pins** es un "pure node" — se evalúa bajo demanda cuando otro nodo necesita su output, igual que los pure nodes de Unreal Blueprints. No requiere conexión exec en el JSON.
+
+```python
+@engine_node
+class Get:
+    variable_name = Input("str", default="")
+    value = Output("Any")
+
+    def run(self, ctx: ExecContext, variable_name: str) -> dict:
+        return {"value": ctx.get_variable(variable_name)}
+```
+
+El engine lo detecta en `_resolve_pin` (path 2a) y llama `_eval_pure_engine_node()` en el momento en que el nodo consumidor necesita ese valor. El mismo mecanismo aplica a cualquier `@engine_node` sin exec pins que el usuario defina — no hay configuración especial.
+
+Un `@ray_node` sin exec pins también es lazy (path 2b), pero se ejecuta como task Ray.
+
+### AND/OR en `exec_in` múltiple
+
+Un nodo puede declarar múltiples predecesores exec con semántica explícita:
+
+- **`"exec_in": "a"`** — un solo predecesor, comportamiento estándar.
+- **`"exec_in": ["a", "b"]`** — **AND**: el nodo espera que **todos** los predecesores completen antes de dispararse. Útil como join post-fan-out.
+- **`"exec_in": {"or": ["a", "b"]}`** — **OR**: el nodo se dispara con el **primero** que llegue. Útil para convergencia post-`Branch` (donde solo una rama ejecuta).
+
+El engine lleva `_exec_arrivals: dict[str, set[str]]` — un set de predecesores llegados por nodo AND-join. Cuando todas las ramas del fan-out completan (la recursión de `_run_loop` retorna en cada rama), el set está completo y el join se dispara. En OR, el nodo dispara inmediatamente sin conteo.
+
+```json
+{ "id": "a", "exec_in": "entry" },
+{ "id": "b", "exec_in": "entry" },
+{ "id": "join", "type": "FlowOutput", "exec_in": ["a", "b"], "inputs": { "r0": "a.result", "r1": "b.result" } }
+```
+
+```json
+{ "id": "merge", "exec_in": {"or": ["branch.true", "branch.false"]} }
+```
+
+### Ciclo de vida de actores @ray_node
+
+Los actores se crean **una sola vez** al inicio del flow en `FlowEngine._spawn_actors()`, con nombre único `{node_id}_{graph_id}` en namespace `"rayflow"`. Los handles se guardan en `self._actors` y se acceden directamente desde las ramas del Parallel, que comparten el mismo `FlowEngine`.
+
+- Los actores **no** se crean en tiempo de ejecución ni por cada rama — son singleton por flow.
+- `CallFlow` **no** crea engines: el subflow se aplana inline en build time (ver "Flatten" abajo) y el engine lo orquesta como un subgrafo del mismo flow.
+- `NodeMeta.__getstate__/__setstate__` excluye `ray_handle` del pickle y lo reconstruye en el worker a partir de `py_class` — evita problemas de serialización de handles Ray.
+- **Restricción**: clases `@ray_node` definidas localmente (ej. en tests) deben registrarse en el catálogo antes de compilar el flow. Son serializables porque `py_class` viaja en el `BuiltFlow`.
+
+---
+
+## Flatten — namespace plano de nodos
+
+En build time, `flatten()` (`build/validator.py`) expande recursivamente cada `CallFlow` **inline** en un único grafo plano. No hay subflows ni ejecutores anidados en runtime: todo es un namespace plano de nodos cuyos ids son **rutas de procedencia** estilo S3, donde los `/` son solo parte del nombre, no contenedores reales.
+
+```
+padre/add_1
+padre/sub/add_1          ← nodo de un CallFlow "sub"
+padre/sub/sub2/add_1     ← CallFlow anidado (un salto por nivel)
+```
+
+- **Reusa FlowInput/FlowOutput** del subflow como puntos de empalme — cero nodos builtin implícitos nuevos. Se marcan con `subflow_of` = el CallFlow shell **inmediato** (un salto hacia arriba, como `parentNode` en el DOM).
+- El `CallFlow` shell guarda `subflow_entry`/`subflow_exit` (ids del entry/exit del subgrafo) y `subflow_vars` (variables del subflow aislado a sembrar). El engine lo orquesta en `_fire_callflow_node`.
+- **Subflow estático**: el input `flow` debe ser un dict inline o ruta conocida en build. No se soporta elegir el subflow en runtime.
+
+Campos en `NodeDef` que produce el flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`, `subflow_exit`, `subflow_vars`, `flow_name` (nombre del flow declarante, usado en `meta['flow']`).
+
+---
+
+## Paralelismo
+
+### Fan-out exec — concurrente por defecto
+Un exec output puede conectarse a múltiples nodos destino. Todos se disparan **concurrentemente** via `asyncio.gather` — no en secuencia.
+
+```json
+{ "id": "nodo_a", "exec_in": "origen" },
+{ "id": "nodo_b", "exec_in": "origen" }
+```
+
+`exec_targets` en `ResolvedNode` es `dict[str, list[str]]` — cada pin puede tener uno o varios destinos. Cuando hay varios, `_run_loop` los lanza con `asyncio.gather`. Los `@ray_node` corren en paralelo real (procesos Ray separados); los `@engine_node` se intercalan cooperativamente en el mismo event loop.
+
+**Condición de carrera**: si dos ramas del fan-out escriben la misma variable con `Set`, el resultado es no determinista. Es un error de diseño del flow, no del engine.
+
+### Join — AND/OR en `exec_in`
+Ver sección "AND/OR en `exec_in` múltiple" arriba.
+
+### Nodo `Parallel` — fork/join explícito con join
+El nodo `Parallel` sigue disponible para el caso en que se necesita un pin `joined` explícito que se dispara cuando todas las ramas completan. Las ramas (`branch_0`, `branch_1`, …) se inyectan dinámicamente en build a partir del wiring del JSON.
+
+```json
+{ "id": "par", "type": "Parallel", "exec_in": "entry" },
+{ "id": "rama_a", "type": "ProcessA", "exec_in": "par.branch_0" },
+{ "id": "rama_b", "type": "ProcessB", "exec_in": "par.branch_1" },
+{ "id": "merge",  "type": "Merge",    "exec_in": "par.joined" }
+```
+
+Para la mayoría de casos, el fan-out nativo + AND en `exec_in` es suficiente sin `Parallel`.
+
+---
+
+## Nodos builtin
+
+| Nodo | Tipo | Exec pins | Descripción |
+|---|---|---|---|
+| `OnStart` | `@engine_node` | sí | Punto de entrada sin parámetros |
+| `FlowInput` | `@engine_node` | sí | Punto de entrada con parámetros |
+| `FlowOutput` | `@engine_node` | sí | Punto de salida del flow |
+| `OnEvent` | `@engine_node` | sí | Entrada por evento externo. `event_name` (con namespace) es config estática; expone el `payload` recibido como output |
+| `EmitEvent` | `@engine_node` | sí | Publica un evento al EventBroker via `ctx.emit_event()`. `event_name` lleva el namespace (ej. `"ventas/order_created"`) |
+| `Branch` | `@engine_node` | sí | Desvío condicional true/false |
+| `Sequence` | `@engine_node` | sí | Dispara then_0/then_1/then_2 en orden secuencial |
+| `Parallel` | `@parallel_node` | sí | Fork/join con pin `joined` explícito — lanza N ramas (branch_0..branch_N) concurrentemente; para la mayoría de casos, fan-out nativo + AND `exec_in` es suficiente |
+| `ForEach` | `@engine_node` | sí | Itera array, dispara loop_body por elemento (bloqueante por iteración), completed al terminar |
+| `Get` | `@engine_node` | **no** | Lee variable — pure node síncrono, evaluado bajo demanda |
+| `Set` | `@engine_node` | sí | Escribe variable via `ctx.set_variable()` |
+| `CallFlow` | `@engine_node` | sí | Ejecuta otro flow como subgrafo, aplanado inline en build (ver "Flatten"). `isolated=True`: variables en namespace de estado propio (clave prefijada). `isolated=False`: comparte variables del padre. Output `result: dict` contiene los outputs del subflow. Inputs extra se pasan al subflow. |
+| `Add` | `@ray_node` | sí | Suma dos enteros |
+| `GreaterThan` | `@ray_node` | sí | Compara dos enteros, devuelve bool |
+| `ToInt/ToFloat/ToStr/ToBool` | `@ray_node` | sí | Casteos explícitos |
+
+---
+
+## Schema de un flow (JSON)
+
+```json
+{
+  "name": "mi_flow",
+  "version": "1",
+  "inputs": { "x": "int" },
+  "outputs": { "result": "int" },
+  "variables": [{ "name": "contador", "type": "int", "default": 0 }],
+  "events": [],
+  "nodes": [
+    { "id": "entry", "type": "FlowInput" },
+    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
+    { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
+  ]
+}
+```
+
+`exec_in` acepta:
+- `"node_id"` — exec output por defecto del nodo fuente.
+- `"node_id.pin_name"` — exec output específico (ej. `"branch.true"`).
+- `["a", "b"]` — AND-join: espera que ambos nodos completen.
+- `{"or": ["a", "b"]}` — OR-join: dispara con el primero que llegue.
+
+---
+
+## API pública
+
+```python
+import rayflow
+
+# Síncrono
+outputs = rayflow.run("flow.json", x=5, y=3)
+
+# Asíncrono (devuelve ObjectRef de Ray)
+ref = rayflow.run_async("flow.json", x=5)
+outputs = ray.get(ref)
+
+# Flow residente por eventos (suscribe al EventBroker; ver "Sistema de eventos")
+graph_id = rayflow.serve_events("flow.json")
+rayflow.stop(graph_id, ["mi_evento"])
+```
+
+Cada ejecución (`run`/`run_async`) se aísla por un `graph_id` UUID propio, así
+que ejecuciones concurrentes del mismo flow no colisionan.
+
+---
+
+## API REST (CLI `rayflow serve`)
+
+`rayflow/server.py` levanta un servidor FastAPI que sirve uno o más flows como
+endpoints HTTP. Distinto de `serve_events` (bus de eventos): aquí cada request
+HTTP ejecuta el flow y devuelve sus outputs.
+
+```bash
+rayflow serve --file suma.json --file otro.json --port 8000
+```
+
+Carga y **valida** cada flow al arrancar (build temprano; falla si un flow no
+compila o si dos comparten `name`), los indexa por su `name`, y expone:
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/health` | Healthcheck |
+| `GET` | `/flows` | Lista flows servidos con su interfaz (inputs/outputs) |
+| `GET` | `/flows/{name}` | Interfaz de un flow |
+| `POST` | `/flows/{name}/run` | Ejecuta el flow con los inputs del body JSON, devuelve outputs |
+
+```
+POST /flows/suma/run   { "x": 3, "y": 7 }   ->   { "resultado": 10 }
+```
+
+El handler es `async` y usa `run_async` (awaitable sobre el `ObjectRef` de Ray),
+sin bloquear el event loop. Requiere el extra: `pip install 'rayflow[serve]'`
+(FastAPI + uvicorn). CLI en `rayflow/cli.py`; `python -m rayflow serve …` también.
+
+---
+
+## Sistema de eventos (EventBroker)
+
+El `EventBroker` (`events/bus.py`) es un **único actor Ray detached y global**,
+análogo al `GraphState` pero para eventos: pub/sub **fire-and-forget** entre
+flows. El aislamiento es por **namespace en el nombre del evento**, estilo clave
+de S3 — los `/` son solo parte del nombre, no contenedores:
+
+```
+"ventas/order_created"   ← un namespace
+"inventario/stock_low"   ← otro
+"tick"                   ← namespace global
+```
+
+- **Matching exacto** por el nombre completo (namespace incluido). El namespace
+  es **explícito en el `event_name`** que el usuario escribe en el JSON; emisor
+  y receptor deben usar el mismo string. El broker no conoce `state_path`.
+- **Fire-and-forget**: `publish` despacha a los suscriptores actuales y olvida.
+  No persiste mensajes — si nadie escucha, el evento se pierde.
+- `publish_count(event_name)` expone cuántas veces se publicó (introspección).
+
+**Flujo emisor → receptor:**
+- `EmitEvent` (nodo) → `ctx.emit_event(name, payload)` → `broker.publish`.
+- El broker lanza `_run_event_flow.remote(source, name, payload)` por cada flow
+  suscrito (registrado con `serve_events`).
+- `_run_event_flow` ejecuta el flow receptor pasando `{"payload": payload}` como
+  flow_input. El engine escribe los flow_inputs como outputs del entry node, así
+  el output `payload` del `OnEvent` queda poblado y el subgrafo lo consume como
+  `"on.payload"`.
+
+`OnEvent` lleva `event_name` como configuración estática (a qué evento se
+suscribe); no es un input de ejecución.
+
+---
+
+## GraphState y graph_id
+
+Cada ejecución de un flow crea **un solo** actor `GraphState` con nombre único:
+
+```python
+graph_id = str(uuid.uuid4())
+state = GraphState.options(name=f"gs_{graph_id}", lifetime="detached").remote(var_defaults)
+```
+
+El `graph_id` se propaga a:
+- `_SerializableExecContext` — los `@ray_node` lo usan para resolver el state por nombre
+
+Esto permite que múltiples grafos corran simultáneamente sin colisiones, y que cualquier actor Ray del cluster acceda al estado de su grafo via `ray.get_actor(f"gs_{graph_id}")`.
+
+### Aislamiento de variables por `state_path` (estilo bucket S3)
+
+El único `GraphState` guarda **todas** las variables del flow y sus subgrafos. El aislamiento de un subflow `isolated=True` no usa actores separados: se logra **prefijando la clave de la variable** con el `state_path` del nodo, como una clave de S3 en un solo bucket (`_var_key` en `executor.py`):
+
+```
+contador            ← variable del flow raíz (state_path None)
+padre/sub/contador  ← misma variable en un subflow aislado (state_path "padre/sub")
+```
+
+- `isolated=True` → `state_path` propio → claves prefijadas → no pisa al padre.
+- `isolated=False` → `state_path` heredado → mismas claves → comparte con el padre.
+- Los **node outputs** (pins) no se prefijan: sus ids ya son únicos por ruta (`padre/sub/add`).
+- Los defaults de un subflow aislado se siembran lazy al entrar (`_fire_callflow_node`).
+
+Al terminar el flow, el engine destruye el `GraphState` con `ray.kill(state)`.
+
+---
+
+## Archivos clave
+
+| Archivo | Responsabilidad |
+|---|---|
+| `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext`, `_SerializableExecContext`, descriptores de pin, `NodeMeta` |
+| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local, motor async) + `FlowExecutor` (wrapper); `_exec_arrivals` para AND-join; fan-out concurrente vía `asyncio.gather` |
+| `rayflow/build/validator.py` | `flatten()` (aplana CallFlow inline a namespace plano), valida el flow y produce `BuiltFlow` con `exec_targets` y `exec_join` resueltos |
+| `rayflow/schema/models.py` | `FlowDef`, `NodeDef` (incl. `exec_in: str \| list \| dict`, campos del flatten: `state_path`, `subflow_of`, `iface`, `subflow_entry`/`subflow_exit`, `subflow_vars`, `flow_name`), `PinKind` |
+| `rayflow/types.py` | Sistema de tipos de data pins, `parse_type`, `compatible` |
+| `rayflow/state/actor.py` | `GraphState` — actor Ray nombrado con variables y outputs de nodos |
+| `rayflow/events/bus.py` | `EventBroker` — actor global pub/sub fire-and-forget, namespaced por nombre de evento |
+| `rayflow/nodes/builtin/` | Nodos builtin organizados por dominio |
+| `rayflow/nodes/builtin/flow.py` | `CallFlow` — subgrafos compartidos e isolados |
+| `rayflow/api.py` | API pública: `run`, `run_async`, `serve_events`, `stop` |
+| `rayflow/server.py` | API REST (FastAPI): carga/valida flows y los sirve como endpoints HTTP |
+| `rayflow/cli.py` + `__main__.py` | CLI: `rayflow serve --file …` levanta la API REST |
