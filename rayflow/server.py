@@ -71,12 +71,18 @@ def load_served_flows(sources: list[str | Path | dict],
 
 def create_app(served: dict[str, ServedFlow]):
     """Construye la app FastAPI con los endpoints sobre los flows servidos."""
+    from pathlib import Path as _Path
     from fastapi import Body, FastAPI, HTTPException
+    from fastapi.staticfiles import StaticFiles
     from rayflow.api import run_async
     from rayflow.editor.routes import router as editor_router
 
     app = FastAPI(title="Rayflow", version="0.1.0")
     app.include_router(editor_router)
+
+    _static_dir = _Path(__file__).parent / "editor" / "static"
+    if _static_dir.exists():
+        app.mount("/editor", StaticFiles(directory=_static_dir, html=True), name="editor-static")
 
     @app.get("/health")
     async def health() -> dict[str, str]:
