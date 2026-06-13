@@ -1,6 +1,6 @@
 import { html } from 'htm/react';
 import { useState } from 'react';
-import { createFlow, deleteFlow } from './api.js';
+import { createFlow } from './api.js';
 
 function NewFlowModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
@@ -30,7 +30,7 @@ function NewFlowModal({ onClose, onCreate }) {
           <input class="prop-input" value=${name} onInput=${e => setName(e.target.value)} placeholder="mi_flow" autoFocus />
         </div>
         <div class="prop-field">
-          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Inputs JSON <span style=${{ color:'var(--text-muted)' }}>ej: {"x":"int"}</span></label>
+          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Inputs JSON</label>
           <textarea class="prop-input textarea" style=${{ height:56 }} value=${inputsRaw} onInput=${e => setInputsRaw(e.target.value)} />
         </div>
         <div class="prop-field">
@@ -47,64 +47,31 @@ function NewFlowModal({ onClose, onCreate }) {
   `;
 }
 
-export default function FlowManager({ flows, activeFlow, onSelectFlow, onFlowCreated, onFlowDeleted, onSave, onValidate, validationErrors, saving }) {
+export default function FlowManager({ flows, onOpenFlow, onFlowCreated }) {
   const [showNew, setShowNew] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  async function handleDelete() {
-    if (!activeFlow) return;
-    try {
-      await deleteFlow(activeFlow.name);
-      onFlowDeleted(activeFlow.name);
-      setConfirmDelete(false);
-    } catch (e) { alert(e.message); }
-  }
-
-  const validStatus = !activeFlow ? 'unknown' : validationErrors.length === 0 ? 'valid' : 'invalid';
 
   return html`
     <header class="app-header">
       <span class="logo">Rayflow</span>
       <div class="header-sep"></div>
 
-      <select class="flow-select" value=${activeFlow?.name ?? ''} onChange=${e => onSelectFlow(e.target.value)}>
-        <option value="">— Abrir flow —</option>
+      <select
+        class="flow-select"
+        value=""
+        onChange=${e => { if (e.target.value) { onOpenFlow(e.target.value); e.target.value = ''; } }}
+      >
+        <option value="">Abrir flow…</option>
         ${flows.map(f => html`<option key=${f.name} value=${f.name}>${f.name}</option>`)}
       </select>
 
       <button class="btn btn-sm" onClick=${() => setShowNew(true)}>+ Nuevo</button>
-      <div class="header-sep"></div>
-
-      ${activeFlow && html`
-        <button class="btn btn-sm btn-primary" onClick=${onSave} disabled=${saving}>${saving ? 'Guardando…' : '💾 Guardar'}</button>
-        <button class="btn btn-sm" onClick=${onValidate}>✓ Validar</button>
-        <button class="btn btn-sm btn-danger" onClick=${() => setConfirmDelete(true)}>🗑</button>
-        <div class="header-sep"></div>
-      `}
-
-      <div class="header-spacer"></div>
-
-      ${activeFlow && html`
-        <span class=${'status-badge status-' + validStatus}>
-          ${validStatus === 'valid' ? '✓ Válido' : validStatus === 'invalid' ? `✗ ${validationErrors.length} error(es)` : '—'}
-        </span>
-      `}
-      ${!activeFlow && html`<span style=${{ color:'var(--text-muted)', fontSize:12 }}>Ningún flow abierto</span>`}
     </header>
 
-    ${showNew && html`<${NewFlowModal} onClose=${() => setShowNew(false)} onCreate=${onFlowCreated} />`}
-
-    ${confirmDelete && html`
-      <div class="modal-overlay" onClick=${e => e.target===e.currentTarget && setConfirmDelete(false)}>
-        <div class="modal">
-          <div class="modal-title">¿Borrar "${activeFlow?.name}"?</div>
-          <p style=${{ fontSize:13, color:'var(--text-muted)', marginTop:8 }}>Esta acción no se puede deshacer.</p>
-          <div class="modal-footer">
-            <button class="btn" onClick=${() => setConfirmDelete(false)}>Cancelar</button>
-            <button class="btn btn-danger" onClick=${handleDelete}>Borrar</button>
-          </div>
-        </div>
-      </div>
+    ${showNew && html`
+      <${NewFlowModal}
+        onClose=${() => setShowNew(false)}
+        onCreate=${flow => { onFlowCreated(flow); setShowNew(false); }}
+      />
     `}
   `;
 }
