@@ -71,14 +71,7 @@ def load_served_flows(sources: list[str | Path | dict],
 
 def create_app(served: dict[str, ServedFlow]):
     """Construye la app FastAPI con los endpoints sobre los flows servidos."""
-    try:
-        from fastapi import Body, FastAPI, HTTPException
-    except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            "La API REST requiere FastAPI y uvicorn. Instala con: "
-            "pip install 'rayflow[serve]'"
-        ) from e
-
+    from fastapi import Body, FastAPI, HTTPException
     from rayflow.api import run_async
 
     app = FastAPI(title="Rayflow", version="0.1.0")
@@ -127,14 +120,7 @@ def create_app(served: dict[str, ServedFlow]):
 def serve(sources: list[str | Path], host: str = "127.0.0.1", port: int = 8000,
           extra_node_dirs: list[str | Path] | None = None) -> None:
     """Carga los flows, valida, y levanta el servidor REST (bloqueante)."""
-    try:
-        import uvicorn
-    except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            "La API REST requiere FastAPI y uvicorn. Instala con: "
-            "pip install 'rayflow[serve]'"
-        ) from e
-
+    import uvicorn
     served = load_served_flows(sources, extra_node_dirs)
     app = create_app(served)
     names = ", ".join(served) or "(ninguno)"

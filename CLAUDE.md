@@ -419,7 +419,7 @@ Carga y valida cada flow al arrancar (falla si un flow no compila o si dos compa
 | `GET` | `/flows/{name}` | Interfaz de un flow |
 | `POST` | `/flows/{name}/run` | Ejecuta el flow; body JSON = inputs; devuelve outputs |
 
-Requiere: `pip install 'rayflow[serve]'` (FastAPI + uvicorn).
+FastAPI y uvicorn son dependencias requeridas incluidas en la instalación base.
 
 ---
 
