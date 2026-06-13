@@ -206,8 +206,19 @@ async def delete_editor_flow(name: str) -> None:
 
 @router.post("/flows/{name}/run")
 async def run_editor_flow(name: str, inputs: Any = Body(default=None)) -> dict[str, Any]:
-    """Ejecuta un flow con los inputs dados. Equivalente a POST /flows/{name}/run."""
-    from rayflow.api import run_async
+    """Ejecuta un flow con los inputs dados.
+
+    A diferencia de POST /flows/{name}/run (que usa run_async → worker Ray),
+    aquí ejecutamos con run() en un thread pool del driver. Esto garantiza que
+    los custom nodes cargados vía --nodes-dir (load_directory) estén disponibles,
+    ya que el catálogo singleton del driver ya los tiene registrados.
+
+    Limitación: @ray_node custom nodes siguen requiriendo custom_nodes/ para
+    ser distribuibles a los workers Ray (restricción de serialización).
+    """
+    import asyncio
+    from functools import partial
+    from rayflow.api import run as run_sync
 
     data = get_flow_dict(name)
     if data is None:
@@ -218,8 +229,11 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)) -> dict[s
     if not isinstance(inputs, dict):
         raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON de inputs")
 
-    ref = run_async(data, **inputs)
     try:
-        return await ref
+        # run() llama asyncio.run() internamente — no puede usarse directamente
+        # desde una corrutina. run_in_executor lo ejecuta en un thread del pool
+        # donde no hay event loop activo, así asyncio.run() funciona correctamente.
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, partial(run_sync, data, **inputs))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error ejecutando el flow: {e}")

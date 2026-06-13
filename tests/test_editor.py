@@ -365,3 +365,83 @@ def test_run_flow_body_no_es_objeto(client):
     client.post("/editor/flows", json=MINIMAL)
     r = client.post("/editor/flows/minimal/run", json=[1, 2])
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Custom nodes — aparecen en el catálogo y pasan validación
+# ---------------------------------------------------------------------------
+
+CUSTOM_NODE_SRC = """\
+from rayflow.nodes.decorators import engine_node, ExecInput, ExecOutput, Input, Output, ExecContext
+
+@engine_node
+class Duplicate:
+    exec_in = ExecInput()
+    value = Input("int", default=0)
+    doubled = Output("int")
+    exec_out = ExecOutput()
+
+    async def run(self, ctx, value: int) -> None:
+        ctx.set_output("doubled", value * 2)
+        await ctx.fire("exec_out")
+"""
+
+DUPLICATE_FLOW = {
+    "name": "duplicate_flow",
+    "inputs": {"n": "int"},
+    "outputs": {"result": "int"},
+    "nodes": [
+        {"id": "entry", "type": "FlowInput"},
+        {"id": "dup", "type": "Duplicate", "exec_in": "entry", "inputs": {"value": "entry.n"}},
+        {"id": "exit", "type": "FlowOutput", "exec_in": "dup", "inputs": {"result": "dup.doubled"}},
+    ],
+}
+
+
+@pytest.fixture
+def client_with_custom_node(tmp_path, monkeypatch):
+    """Client con un @engine_node custom cargado vía --nodes-dir."""
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+
+    node_dir = tmp_path / "extra_nodes"
+    node_dir.mkdir()
+    (node_dir / "my_nodes.py").write_text(CUSTOM_NODE_SRC, encoding="utf-8")
+
+    reset_catalog()
+    served = load_served_flows([], extra_node_dirs=[str(node_dir)])
+    return TestClient(create_app(served))
+
+
+def test_custom_node_aparece_en_catalogo(client_with_custom_node):
+    r = client_with_custom_node.get("/editor/nodes")
+    assert r.status_code == 200
+    types = {n["type"] for n in r.json()}
+    assert "Duplicate" in types
+
+
+def test_custom_node_spec_correcta(client_with_custom_node):
+    r = client_with_custom_node.get("/editor/nodes/Duplicate")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["decorator"] == "engine_node"
+    assert data["has_exec_in"] is True
+    input_names = {p["name"] for p in data["inputs"]}
+    assert input_names == {"value"}
+    output_names = {p["name"] for p in data["outputs"]}
+    assert output_names == {"doubled"}
+
+
+def test_custom_node_pasa_validacion(client_with_custom_node, tmp_path, monkeypatch):
+    r = client_with_custom_node.post("/editor/validate", json=DUPLICATE_FLOW)
+    assert r.status_code == 200
+    assert r.json()["valid"] is True
+
+
+def test_custom_engine_node_se_ejecuta(client_with_custom_node):
+    """@engine_node custom corre en el driver — no depende de runtime_env de Ray."""
+    client_with_custom_node.post("/editor/flows", json=DUPLICATE_FLOW)
+    r = client_with_custom_node.post("/editor/flows/duplicate_flow/run", json={"n": 7})
+    assert r.status_code == 200
+    assert r.json()["result"] == 14
+
