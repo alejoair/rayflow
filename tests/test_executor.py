@@ -282,6 +282,110 @@ def test_or_join_post_branch_false():
 # Map
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Comparaciones puras
+# ---------------------------------------------------------------------------
+
+def test_comparacion_pura_lazy():
+    """LessThan evaluado lazy como data input de FlowOutput, sin exec wire."""
+    result = rayflow.run({
+        "name": "lt_lazy",
+        "inputs": {"x": "int"},
+        "outputs": {"is_small": "bool"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "lt", "type": "LessThan", "inputs": {"a": "entry.x", "b": 10}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "entry",
+             "inputs": {"is_small": "lt.result"}},
+        ],
+    }, x=5)
+    assert result["is_small"] is True
+
+
+def test_comparacion_pura_como_condicion_branch():
+    """GreaterThan pure alimenta Branch.condition directamente."""
+    result = rayflow.run({
+        "name": "gt_branch",
+        "inputs": {"x": "int"},
+        "outputs": {"out": "int"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "gt", "type": "GreaterThan", "inputs": {"a": "entry.x", "b": 0}},
+            {"id": "br", "type": "Branch", "exec_in": "entry",
+             "inputs": {"condition": "gt.result"}},
+            {"id": "pos", "type": "Add", "exec_in": "br.true",
+             "inputs": {"a": "entry.x", "b": 0}},
+            {"id": "neg", "type": "Add", "exec_in": "br.false",
+             "inputs": {"a": "entry.x", "b": 0}},
+            {"id": "exit", "type": "FlowOutput",
+             "exec_in": {"or": ["pos", "neg"]},
+             "inputs": {"out": "entry.x"}},
+        ],
+    }, x=7)
+    assert result["out"] == 7
+
+
+# ---------------------------------------------------------------------------
+# While
+# ---------------------------------------------------------------------------
+
+def test_while_itera_hasta_condicion():
+    """While con condición basada en variable — cuenta hasta 5."""
+    result = rayflow.run({
+        "name": "while_count",
+        "outputs": {"count": "int"},
+        "variables": [
+            {"name": "i",    "type": "int",  "default": 0},
+            {"name": "keep", "type": "bool", "default": True},
+        ],
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "w", "type": "While", "exec_in": "entry",
+             "inputs": {"condition_var": "keep"}},
+            # loop body
+            {"id": "get_i",     "type": "Get", "inputs": {"variable_name": "i"}},
+            {"id": "add",       "type": "Add", "exec_in": "w.loop_body",
+             "inputs": {"a": "get_i.value", "b": 1}},
+            {"id": "set_i",     "type": "Set", "exec_in": "add",
+             "inputs": {"variable_name": "i", "value": "add.result"}},
+            {"id": "lt",        "type": "LessThan",
+             "inputs": {"a": "add.result", "b": 5}},
+            {"id": "set_keep",  "type": "Set", "exec_in": "set_i",
+             "inputs": {"variable_name": "keep", "value": "lt.result"}},
+            # completed
+            {"id": "get_final", "type": "Get", "inputs": {"variable_name": "i"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "w.completed",
+             "inputs": {"count": "get_final.value"}},
+        ],
+    })
+    assert result["count"] == 5
+
+
+def test_while_cero_iteraciones():
+    """While con condición False desde el inicio: cero iteraciones."""
+    result = rayflow.run({
+        "name": "while_zero",
+        "outputs": {"count": "int"},
+        "variables": [
+            {"name": "i",    "type": "int",  "default": 0},
+            {"name": "keep", "type": "bool", "default": False},
+        ],
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "w", "type": "While", "exec_in": "entry",
+             "inputs": {"condition_var": "keep"}},
+            {"id": "get_i", "type": "Get", "inputs": {"variable_name": "i"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "w.completed",
+             "inputs": {"count": "get_i.value"}},
+        ],
+    })
+    assert result["count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Map
+# ---------------------------------------------------------------------------
+
 def test_map_con_ray_node_exec():
     """Map aplica un @ray_node exec (ToStr) a cada elemento del array."""
     result = rayflow.run({

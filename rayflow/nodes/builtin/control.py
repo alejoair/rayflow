@@ -142,6 +142,29 @@ class ForEach:
 
 
 @engine_node
+class While:
+    """Itera mientras una variable booleana sea True.
+
+    Lee la variable `condition_var` del GraphState al inicio de cada iteración.
+    El loop body es responsable de actualizarla (via Set) para controlar la salida.
+
+    Ejemplo de uso en JSON:
+        variables: [{"name": "keep_going", "type": "bool", "default": true}]
+        {"id": "w", "type": "While", "exec_in": "entry",
+         "inputs": {"condition_var": "keep_going"}}
+    """
+    exec_in = ExecInput()
+    condition_var = Input("str", default="")
+    loop_body = ExecOutput()
+    completed = ExecOutput()
+
+    async def run(self, ctx: ExecContext, condition_var: str) -> None:
+        while ctx.get_variable(condition_var):
+            await ctx.fire("loop_body")
+        await ctx.fire("completed")
+
+
+@engine_node
 class Map:
     """Aplica un nodo de transformación a cada elemento de un array.
 

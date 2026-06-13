@@ -4,10 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from rayflow.nodes.loader import NodeCatalog
-from rayflow.nodes.builtin import control, variables, events, cast, math as math_nodes, flow as flow_nodes
+from rayflow.nodes.builtin import control, variables, events, cast, math as math_nodes, flow as flow_nodes, compare as compare_nodes
 
 # Clases built-in ya decoradas (evita re-importarlas con importlib).
-_BUILTIN_MODULES = (control, variables, events, cast, math_nodes, flow_nodes)
+_BUILTIN_MODULES = (control, variables, events, cast, math_nodes, flow_nodes, compare_nodes)
 
 # Catálogo singleton — cargado una vez.
 _catalog: NodeCatalog | None = None

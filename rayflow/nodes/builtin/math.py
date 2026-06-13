@@ -13,17 +13,3 @@ class Add:
     async def run(self, ctx: ExecContext, a: int, b: int) -> None:
         ctx.set_output("result", a + b)
         await ctx.fire("exec_out")
-
-
-@ray_node
-class GreaterThan:
-    """True si a > b."""
-    exec_in = ExecInput()
-    a = Input("int", default=0)
-    b = Input("int", default=0)
-    result = Output("bool")
-    exec_out = ExecOutput()
-
-    async def run(self, ctx: ExecContext, a: int, b: int) -> None:
-        ctx.set_output("result", a > b)
-        await ctx.fire("exec_out")
