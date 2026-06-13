@@ -43,6 +43,13 @@ class NodeCatalog:
                 module = importlib.import_module(module_name)
             except Exception:
                 continue
+            # Forzar serialización por valor: custom_nodes/ solo está en sys.path
+            # del driver, no en los workers Ray ni en el actor FlowEngine.
+            try:
+                import ray.cloudpickle as _cp
+                _cp.register_pickle_by_value(module)
+            except Exception:
+                pass
             self._register_from_module(module)
 
     def load_directory(self, directory: str | Path) -> None:
@@ -69,8 +76,14 @@ class NodeCatalog:
         try:
             spec.loader.exec_module(module)
         except Exception:
+            sys.modules.pop(module_name, None)
             return
         self._register_from_module(module)
+        # Quitar de sys.modules después de registrar: cloudpickle serializa las
+        # clases por referencia al módulo solo si está en sys.modules. Sin él,
+        # fuerza serialización por valor (inline), lo que permite deserializarlas
+        # en workers Ray sin necesidad de importar un módulo sintético no disponible.
+        sys.modules.pop(module_name, None)
 
     def _register_from_module(self, module) -> None:
         for attr_name in dir(module):
