@@ -73,8 +73,10 @@ def create_app(served: dict[str, ServedFlow]):
     """Construye la app FastAPI con los endpoints sobre los flows servidos."""
     from fastapi import Body, FastAPI, HTTPException
     from rayflow.api import run_async
+    from rayflow.editor.routes import router as editor_router
 
     app = FastAPI(title="Rayflow", version="0.1.0")
+    app.include_router(editor_router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

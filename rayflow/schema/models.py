@@ -56,6 +56,9 @@ class NodeDef:
     # raíz; para nodos de un CallFlow spliced es el nombre del subflow. Lo usa
     # _build_meta para meta['flow']. None = flow raíz (resuelto en el engine).
     flow_name: str | None = None
+    # Metadatos del editor visual: posición en canvas, comentarios, etc.
+    # Ignorado completamente por el engine — solo lo lee/escribe el editor.
+    ui: dict | None = None
 
 
 @dataclass
