@@ -10,9 +10,9 @@ class Add:
     result = Output("int")
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
-        ctx.fire("exec_out")
-        return {"result": a + b}
+    async def run(self, ctx: ExecContext, a: int, b: int) -> None:
+        ctx.set_output("result", a + b)
+        await ctx.fire("exec_out")
 
 
 @ray_node
@@ -24,6 +24,6 @@ class GreaterThan:
     result = Output("bool")
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
-        ctx.fire("exec_out")
-        return {"result": a > b}
+    async def run(self, ctx: ExecContext, a: int, b: int) -> None:
+        ctx.set_output("result", a > b)
+        await ctx.fire("exec_out")

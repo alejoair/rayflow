@@ -36,9 +36,8 @@ def test_fan_out_ambos_nodos_se_ejecutan():
         flag_name = Input("str", default="")
         exec_out = ExecOutput()
 
-        def run(self, ctx: ExecContext, flag_name: str) -> dict:
-            ctx.fire("exec_out")
-            return {}
+        async def run(self, ctx: ExecContext, flag_name: str) -> None:
+            await ctx.fire("exec_out")
 
     catalog = get_catalog()
     catalog.register(SetFlag)

@@ -1,10 +1,6 @@
-"""Nodos de control de flujo. Se ejecutan localmente en el engine (@engine_node).
+"""Nodos de control de flujo."""
+import asyncio
 
-`await ctx.fire()` es bloqueante: el subgrafo conectado se ejecuta completo antes
-de que run() continúe. Los subgrafos pueden contener @ray_node. Los data outputs
-se exponen SOLO con ctx.set_output() (no por return) — antes del fire que los
-consume. Varias ramas pueden lanzarse concurrentes con asyncio.gather.
-"""
 from rayflow.nodes.decorators import (
     ExecContext,
     ExecInput,
@@ -78,15 +74,20 @@ class Sequence:
 
 @parallel_node
 class Parallel:
-    """Fork/join paralelo. Lanza N ramas simultáneamente como tasks Ray.
+    """Fork/join paralelo. Lanza N ramas simultáneamente.
 
     Los branch pins (branch_0, branch_1, …, branch_N) se inyectan dinámicamente
-    en build a partir del wiring del JSON. Cada rama corre en su propio
-    FlowExecutor parcial compartiendo el GraphState.
+    en build a partir del wiring del JSON. Las ramas se descubren en runtime via
+    ctx.exec_outputs_except("joined") y se lanzan con asyncio.gather.
     El pin 'joined' se dispara cuando todas las ramas han terminado.
     """
     exec_in = ExecInput()
     joined = ExecOutput()
+
+    async def run(self, ctx: ExecContext) -> None:
+        branches = await ctx.exec_outputs_except("joined")
+        await asyncio.gather(*[ctx.fire(b) for b in branches])
+        await ctx.fire("joined")
 
 
 @engine_node
