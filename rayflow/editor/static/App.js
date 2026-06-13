@@ -1,9 +1,11 @@
 import { html } from 'htm/react';
 import { useState, useEffect, useCallback } from 'react';
-import { getNodes, getFlows, getFlow } from './api.js';
+import { getNodes, getFlows, getFlow, getCustomNodeFile } from './api.js';
+import { flowDefToRF, rfToFlowDef } from './translator.js';
 import NodePalette from './NodePalette.js';
 import FlowManager from './FlowManager.js';
 import FlowTab from './FlowTab.js';
+import NodeEditorTab from './NodeEditorTab.js';
 import TabBar from './TabBar.js';
 
 function Toasts({ toasts }) {
@@ -19,7 +21,7 @@ let _tabCounter = 1;
 export default function App() {
   const [catalog, setCatalog] = useState({});
   const [flows, setFlows] = useState([]);
-  // tabs: [{id, flowName, flowData, dirty}]
+  // tabs: [{id, type:'flow'|'code', label, flowData?, filename?, content?, dirty}]
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -39,51 +41,87 @@ export default function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   }
 
-  async function handleOpenFlow(name) {
-    // If already open, just activate that tab
-    const existing = tabs.find(t => t.flowName === name);
-    if (existing) { setActiveTabId(existing.id); return; }
+  // ── Flow tabs ──────────────────────────────────────────────────────────────
 
+  async function handleOpenFlow(name) {
+    const existing = tabs.find(t => t.type === 'flow' && t.label === name);
+    if (existing) { setActiveTabId(existing.id); return; }
     try {
       const flowData = await getFlow(name);
       const id = `tab-${_tabCounter++}`;
-      setTabs(prev => [...prev, { id, flowName: name, flowData, dirty: false }]);
+      setTabs(prev => [...prev, { id, type: 'flow', label: name, flowData, dirty: false }]);
       setActiveTabId(id);
-    } catch (e) {
-      addToast(`Error abriendo: ${e.message}`, 'error');
-    }
+    } catch (e) { addToast(`Error abriendo: ${e.message}`, 'error'); }
   }
 
   function handleFlowCreated(flow) {
-    setFlows(prev => {
-      if (prev.find(f => f.name === flow.name)) return prev;
-      return [...prev, { name: flow.name, version: flow.version, inputs: flow.inputs, outputs: flow.outputs }];
-    });
+    setFlows(prev => prev.find(f => f.name === flow.name) ? prev : [
+      ...prev, { name: flow.name, version: flow.version, inputs: flow.inputs, outputs: flow.outputs }
+    ]);
     handleOpenFlow(flow.name);
-  }
-
-  function handleCloseTab(tabId) {
-    const idx = tabs.findIndex(t => t.id === tabId);
-    const tab = tabs[idx];
-    if (tab?.dirty) {
-      if (!confirm(`"${tab.flowName}" tiene cambios sin guardar. ¿Cerrar de todas formas?`)) return;
-    }
-    setTabs(prev => prev.filter(t => t.id !== tabId));
-    setActiveTabId(prev => {
-      if (prev !== tabId) return prev;
-      // Activate neighbour tab
-      const remaining = tabs.filter(t => t.id !== tabId);
-      if (!remaining.length) return null;
-      const newIdx = Math.min(idx, remaining.length - 1);
-      return remaining[newIdx].id;
-    });
   }
 
   function handleFlowDeleted(name) {
     setFlows(prev => prev.filter(f => f.name !== name));
-    const tab = tabs.find(t => t.flowName === name);
-    if (tab) handleCloseTab(tab.id);
+    const tab = tabs.find(t => t.type === 'flow' && t.label === name);
+    if (tab) closeTab(tab.id, true);
     addToast(`Flow "${name}" eliminado`, 'success');
+  }
+
+  // ── Code tabs ──────────────────────────────────────────────────────────────
+
+  async function handleOpenFile(filename, content) {
+    const existing = tabs.find(t => t.type === 'code' && t.label === filename);
+    if (existing) { setActiveTabId(existing.id); return; }
+
+    let fileContent = content;
+    if (fileContent === undefined) {
+      // Load from server
+      try {
+        const data = await getCustomNodeFile(filename);
+        fileContent = data.content;
+      } catch {
+        fileContent = null; // will use template
+      }
+    }
+
+    const id = `tab-${_tabCounter++}`;
+    setTabs(prev => [...prev, { id, type: 'code', label: filename, content: fileContent, dirty: false }]);
+    setActiveTabId(id);
+  }
+
+  function handleFileDeleted(filename) {
+    const tab = tabs.find(t => t.type === 'code' && t.label === filename);
+    if (tab) closeTab(tab.id, true);
+    if (NodePalette._refresh) NodePalette._refresh();
+    addToast(`Archivo "${filename}" eliminado`, 'success');
+  }
+
+  function handleCatalogReloaded(nodeList) {
+    const m = {};
+    nodeList.forEach(n => { m[n.type] = n; });
+    setCatalog(m);
+    if (NodePalette._refresh) NodePalette._refresh();
+  }
+
+  // ── Tab management ─────────────────────────────────────────────────────────
+
+  function closeTab(tabId, force = false) {
+    const idx = tabs.findIndex(t => t.id === tabId);
+    const tab = tabs[idx];
+    if (!force && tab?.dirty) {
+      if (!confirm(`"${tab.label}" tiene cambios sin guardar. ¿Cerrar de todas formas?`)) return;
+    }
+    setTabs(prev => {
+      const remaining = prev.filter(t => t.id !== tabId);
+      if (remaining.length > 0 && activeTabId === tabId) {
+        const newIdx = Math.min(idx, remaining.length - 1);
+        setActiveTabId(remaining[newIdx].id);
+      } else if (remaining.length === 0) {
+        setActiveTabId(null);
+      }
+      return remaining;
+    });
   }
 
   function handleTabDirty(tabId, dirty) {
@@ -104,31 +142,47 @@ export default function App() {
         tabs=${tabs}
         activeTabId=${activeTabId}
         onActivate=${setActiveTabId}
-        onClose=${handleCloseTab}
+        onClose=${id => closeTab(id)}
       />
 
       <div class="app-body">
-        <${NodePalette} catalog=${catalog} />
+        <${NodePalette}
+          catalog=${catalog}
+          onOpenFile=${handleOpenFile}
+        />
 
         <div class="tab-container">
           ${noTabs && html`
             <div class="canvas-empty" style=${{ flex: 1 }}>
               <div class="canvas-empty-icon">⬡</div>
-              <div class="canvas-empty-text">Abre un flow para empezar</div>
+              <div class="canvas-empty-text">Abre un flow o edita nodos custom</div>
             </div>
           `}
-          ${tabs.map(tab => html`
-            <${FlowTab}
-              key=${tab.id}
-              flowData=${tab.flowData}
-              catalog=${catalog}
-              flows=${flows}
-              isActive=${tab.id === activeTabId}
-              onDirtyChange=${dirty => handleTabDirty(tab.id, dirty)}
-              onFlowDeleted=${handleFlowDeleted}
-              onToast=${addToast}
-            />
-          `)}
+
+          ${tabs.map(tab => tab.type === 'flow'
+            ? html`
+              <${FlowTab}
+                key=${tab.id}
+                flowData=${tab.flowData}
+                catalog=${catalog}
+                flows=${flows}
+                isActive=${tab.id === activeTabId}
+                onDirtyChange=${dirty => handleTabDirty(tab.id, dirty)}
+                onFlowDeleted=${handleFlowDeleted}
+                onToast=${addToast}
+              />`
+            : html`
+              <${NodeEditorTab}
+                key=${tab.id}
+                filename=${tab.label}
+                initialContent=${tab.content}
+                isActive=${tab.id === activeTabId}
+                onDirtyChange=${dirty => handleTabDirty(tab.id, dirty)}
+                onFileDeleted=${handleFileDeleted}
+                onCatalogReloaded=${handleCatalogReloaded}
+                onToast=${addToast}
+              />`
+          )}
         </div>
       </div>
 

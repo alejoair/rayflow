@@ -276,3 +276,97 @@ async def stop_flow_events(name: str, graph_id: str) -> None:
         stop(graph_id, flow_def.events)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error desuscribiendo el flow: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Custom nodes — edición de archivos .py
+# ---------------------------------------------------------------------------
+
+def _safe_filename(filename: str) -> str:
+    """Valida que el nombre de archivo sea seguro (solo .py, sin path traversal)."""
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Nombre de archivo inválido")
+    if not filename.endswith(".py"):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos .py")
+    return filename
+
+
+@router.get("/custom-nodes/files")
+async def list_custom_node_files() -> dict[str, Any]:
+    """Lista los archivos .py de custom_nodes/ (excluye __init__ y privados)."""
+    from rayflow.workspace import custom_nodes_path
+    cn = custom_nodes_path()
+    if not cn.exists():
+        return {"files": []}
+    files = [
+        {"name": p.name, "size": p.stat().st_size}
+        for p in sorted(cn.glob("*.py"))
+        if p.name != "__init__.py" and not p.name.startswith("_")
+    ]
+    return {"files": files}
+
+
+@router.get("/custom-nodes/files/{filename}")
+async def get_custom_node_file(filename: str) -> dict[str, Any]:
+    """Devuelve el contenido de un archivo .py de custom_nodes/."""
+    from rayflow.workspace import custom_nodes_path
+    _safe_filename(filename)
+    p = custom_nodes_path() / filename
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=f"Archivo '{filename}' no encontrado")
+    return {"filename": filename, "content": p.read_text(encoding="utf-8")}
+
+
+@router.put("/custom-nodes/files/{filename}", status_code=200)
+async def save_custom_node_file(filename: str, body: dict = Body(...)) -> dict[str, Any]:
+    """Crea o actualiza un archivo .py en custom_nodes/."""
+    from rayflow.workspace import custom_nodes_path
+    _safe_filename(filename)
+    content = body.get("content", "")
+    cn = custom_nodes_path()
+    cn.mkdir(parents=True, exist_ok=True)
+    init = cn / "__init__.py"
+    if not init.exists():
+        init.write_text("", encoding="utf-8")
+    (cn / filename).write_text(content, encoding="utf-8")
+    return {"filename": filename, "saved": True}
+
+
+@router.delete("/custom-nodes/files/{filename}", status_code=204)
+async def delete_custom_node_file(filename: str) -> None:
+    """Elimina un archivo .py de custom_nodes/."""
+    from rayflow.workspace import custom_nodes_path
+    _safe_filename(filename)
+    p = custom_nodes_path() / filename
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=f"Archivo '{filename}' no encontrado")
+    p.unlink()
+
+
+@router.post("/custom-nodes/reload")
+async def reload_custom_nodes() -> list[dict[str, Any]]:
+    """Recarga el catálogo de nodos custom desde disco.
+
+    Elimina del catálogo los nodos registrados desde custom_nodes/, borra sus
+    módulos de sys.modules, y vuelve a importar el paquete. Devuelve el catálogo
+    actualizado para que el frontend refresque la paleta.
+    """
+    import sys
+    catalog = get_catalog()
+
+    # Eliminar entradas custom del catálogo
+    custom_keys = [
+        name for name, (cls, _) in list(catalog._registry.items())
+        if cls.__module__.startswith("custom_nodes")
+    ]
+    for key in custom_keys:
+        del catalog._registry[key]
+
+    # Limpiar sys.modules para forzar reimportación
+    for mod_key in [k for k in list(sys.modules) if k.startswith("custom_nodes")]:
+        del sys.modules[mod_key]
+
+    # Reimportar
+    catalog.load_custom_nodes_package()
+
+    return [_node_spec(name, meta) for name, _cls, meta in catalog]

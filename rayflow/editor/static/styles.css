@@ -461,6 +461,17 @@ body {
   overflow: hidden;
 }
 
+/* ── CodeMirror ── */
+.cm-wrap {
+  background: #1e1e2e;
+}
+.cm-wrap .cm-editor {
+  height: 100%;
+}
+.cm-wrap .cm-editor.cm-focused {
+  outline: none;
+}
+
 /* ── RF overrides ── */
 .react-flow__background { background: var(--bg) !important; }
 .react-flow__minimap { background: var(--surface2) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; }

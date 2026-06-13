@@ -10,9 +10,12 @@ export default function TabBar({ tabs, activeTabId, onActivate, onClose }) {
           key=${tab.id}
           class=${'tab' + (tab.id === activeTabId ? ' active' : '')}
           onClick=${() => onActivate(tab.id)}
-          title=${tab.flowName}
+          title=${tab.label}
         >
-          <span class="tab-name">${tab.flowName}</span>
+          <span style=${{ marginRight: 4, opacity: 0.7 }}>
+            ${tab.type === 'code' ? '🐍' : '⬡'}
+          </span>
+          <span class="tab-name">${tab.label}</span>
           ${tab.dirty && html`<span class="tab-dirty" title="Cambios sin guardar">●</span>`}
           <button
             class="tab-close"
