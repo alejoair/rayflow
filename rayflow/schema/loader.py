@@ -48,4 +48,5 @@ def _parse_node(data: dict[str, Any]) -> NodeDef:
         type=data["type"],
         inputs=data.get("inputs", {}),
         exec_in=data.get("exec_in"),
+        ui=data.get("ui"),
     )

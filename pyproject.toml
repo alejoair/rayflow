@@ -9,18 +9,14 @@ description = "Visual workflow orchestration on Ray"
 requires-python = ">=3.10"
 dependencies = [
     "ray>=2.9",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 
 [project.optional-dependencies]
-serve = [
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
-]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
     "httpx>=0.27",
 ]
 

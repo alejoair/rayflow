@@ -106,3 +106,9 @@ def _ensure_ray() -> None:
             # los nodos custom son importables en cualquier proceso del cluster.
             kwargs["runtime_env"] = env
         ray.init(**kwargs)
+        # Garantiza que el broker de eventos existe en el cluster desde el inicio.
+        # Sin esto, el broker se crearía la primera vez que alguien llame
+        # get_event_broker(), con el riesgo de que suscripciones hechas antes
+        # de ray.init se pierdan silenciosamente tras un reinicio de Ray.
+        from rayflow.events.bus import get_event_broker
+        get_event_broker()

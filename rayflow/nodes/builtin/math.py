@@ -1,7 +1,7 @@
-from rayflow.nodes.decorators import ray_node, Input, Output, ExecInput, ExecOutput, ExecContext
+from rayflow.nodes.decorators import engine_node, Input, Output, ExecInput, ExecOutput, ExecContext
 
 
-@ray_node
+@engine_node
 class Add:
     """Suma dos enteros."""
     exec_in = ExecInput()
@@ -10,20 +10,6 @@ class Add:
     result = Output("int")
     exec_out = ExecOutput()
 
-    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
-        ctx.fire("exec_out")
-        return {"result": a + b}
-
-
-@ray_node
-class GreaterThan:
-    """True si a > b."""
-    exec_in = ExecInput()
-    a = Input("int", default=0)
-    b = Input("int", default=0)
-    result = Output("bool")
-    exec_out = ExecOutput()
-
-    def run(self, ctx: ExecContext, a: int, b: int) -> dict:
-        ctx.fire("exec_out")
-        return {"result": a > b}
+    async def run(self, ctx: ExecContext, a: int, b: int) -> None:
+        ctx.set_output("result", a + b)
+        await ctx.fire("exec_out")
