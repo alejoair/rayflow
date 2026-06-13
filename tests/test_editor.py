@@ -445,3 +445,63 @@ def test_custom_engine_node_se_ejecuta(client_with_custom_node):
     assert r.status_code == 200
     assert r.json()["result"] == 14
 
+
+# ---------------------------------------------------------------------------
+# Concurrencia — varios flows al mismo tiempo no se interfieren
+# ---------------------------------------------------------------------------
+
+def test_ejecuciones_concurrentes_aisladas(client):
+    """Dos ejecuciones simultáneas del mismo flow devuelven resultados correctos."""
+    import threading
+
+    client.post("/editor/flows", json=SUMA)
+    results = {}
+
+    def run(key, x, y):
+        r = client.post("/editor/flows/suma/run", json={"x": x, "y": y})
+        results[key] = r.json()
+
+    t1 = threading.Thread(target=run, args=("a", 3, 7))
+    t2 = threading.Thread(target=run, args=("b", 10, 20))
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    assert results["a"]["resultado"] == 10
+    assert results["b"]["resultado"] == 30
+
+
+# ---------------------------------------------------------------------------
+# Eventos — serve-events y stop
+# ---------------------------------------------------------------------------
+
+EVENTO_FLOW = {
+    "name": "receptor_evento",
+    "events": ["editor/test_event"],
+    "nodes": [
+        {"id": "on", "type": "OnEvent", "inputs": {"event_name": "editor/test_event"}},
+        {"id": "out", "type": "FlowOutput", "exec_in": "on"},
+    ],
+}
+
+
+def test_serve_events_registra_flow(client):
+    client.post("/editor/flows", json=EVENTO_FLOW)
+    r = client.post("/editor/flows/receptor_evento/serve-events")
+    assert r.status_code == 201
+    data = r.json()
+    assert "graph_id" in data
+    assert data["flow"] == "receptor_evento"
+
+
+def test_serve_events_flow_inexistente(client):
+    r = client.post("/editor/flows/noexiste/serve-events")
+    assert r.status_code == 404
+
+
+def test_stop_events_desuscribe(client):
+    client.post("/editor/flows", json=EVENTO_FLOW)
+    r = client.post("/editor/flows/receptor_evento/serve-events")
+    graph_id = r.json()["graph_id"]
+    r2 = client.delete(f"/editor/flows/receptor_evento/serve-events/{graph_id}")
+    assert r2.status_code == 204
+

@@ -237,3 +237,42 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)) -> dict[s
         return await loop.run_in_executor(None, partial(run_sync, data, **inputs))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error ejecutando el flow: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Eventos — suscripción y desuscripción
+# ---------------------------------------------------------------------------
+
+@router.post("/flows/{name}/serve-events", status_code=201)
+async def serve_flow_events(name: str) -> dict[str, Any]:
+    """Registra un flow como oyente de eventos (serve_events).
+
+    El flow debe tener un nodo OnEvent con el event_name configurado, y
+    declarar ese evento en su campo `events`. Devuelve el graph_id asignado;
+    úsalo para desuscribir después.
+    """
+    from rayflow.api import serve_events
+
+    data = get_flow_dict(name)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+    try:
+        graph_id = serve_events(data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error registrando el flow: {e}")
+    return {"graph_id": graph_id, "flow": name}
+
+
+@router.delete("/flows/{name}/serve-events/{graph_id}", status_code=204)
+async def stop_flow_events(name: str, graph_id: str) -> None:
+    """Desuscribe un flow residente del bus de eventos."""
+    from rayflow.api import stop
+
+    data = get_flow_dict(name)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+    try:
+        flow_def = load_flow(data)
+        stop(graph_id, flow_def.events)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error desuscribiendo el flow: {e}")
