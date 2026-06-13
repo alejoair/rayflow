@@ -85,7 +85,7 @@ def test_list_nodes_devuelve_nodos_builtin(client):
 def test_list_nodes_estructura_completa(client):
     r = client.get("/editor/nodes")
     add = next(n for n in r.json() if n["type"] == "Add")
-    assert add["decorator"] == "ray_node"
+    assert add["decorator"] == "engine_node"
     assert add["has_exec_in"] is True
     assert add["has_exec_out"] is True
     assert add["is_exec_node"] is True
@@ -130,7 +130,7 @@ def test_get_node_existente(client):
     assert r.status_code == 200
     data = r.json()
     assert data["type"] == "Branch"
-    assert data["decorator"] == "engine_node"
+    assert data["decorator"] == "ray_node"
     input_names = {p["name"] for p in data["inputs"]}
     assert "condition" in input_names
 

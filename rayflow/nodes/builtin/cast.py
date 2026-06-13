@@ -1,10 +1,10 @@
 """Nodos de casteo explícito entre primitivos."""
 from typing import Any
 
-from rayflow.nodes.decorators import ray_node, Input, Output, ExecInput, ExecOutput, ExecContext
+from rayflow.nodes.decorators import engine_node, Input, Output, ExecInput, ExecOutput, ExecContext
 
 
-@ray_node
+@engine_node
 class ToInt:
     exec_in = ExecInput()
     value = Input("Any")
@@ -16,7 +16,7 @@ class ToInt:
         await ctx.fire("exec_out")
 
 
-@ray_node
+@engine_node
 class ToFloat:
     exec_in = ExecInput()
     value = Input("Any")
@@ -28,7 +28,7 @@ class ToFloat:
         await ctx.fire("exec_out")
 
 
-@ray_node
+@engine_node
 class ToStr:
     exec_in = ExecInput()
     value = Input("Any")
@@ -40,7 +40,7 @@ class ToStr:
         await ctx.fire("exec_out")
 
 
-@ray_node
+@engine_node
 class ToBool:
     exec_in = ExecInput()
     value = Input("Any")

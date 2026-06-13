@@ -1,7 +1,7 @@
-from rayflow.nodes.decorators import ray_node, Input, Output, ExecInput, ExecOutput, ExecContext
+from rayflow.nodes.decorators import engine_node, Input, Output, ExecInput, ExecOutput, ExecContext
 
 
-@ray_node
+@engine_node
 class Add:
     """Suma dos enteros."""
     exec_in = ExecInput()

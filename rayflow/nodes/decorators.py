@@ -361,7 +361,7 @@ def _strip_pin_descriptors(cls: type, meta: NodeMeta) -> None:
 
 def _make_data_task(cls: type):
     """Función plana (task de Ray) que instancia el nodo de datos y llama run."""
-    def _data_task(**inputs: Any) -> dict:
-        return cls().run(**inputs)
+    def _data_task(ctx, **inputs: Any) -> dict:
+        return cls().run(ctx, **inputs)
     _data_task.__name__ = f"{cls.__name__}_task"
     return _data_task

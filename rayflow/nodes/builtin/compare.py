@@ -5,7 +5,7 @@ sin necesidad de exec wire. Tipos Any para soportar int, float y str.
 """
 from typing import Any
 
-from rayflow.nodes.decorators import ExecContext, Input, Output, engine_node
+from rayflow.nodes.decorators import ExecContext, Input, Output, engine_node, ray_node
 
 
 @engine_node
@@ -48,7 +48,7 @@ class LessThanOrEqual:
         return {"result": a <= b}
 
 
-@engine_node
+@ray_node
 class Equal:
     a = Input("Any", default=None)
     b = Input("Any", default=None)

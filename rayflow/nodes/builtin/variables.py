@@ -1,4 +1,4 @@
-"""Nodos de estado (Get/Set). Se ejecutan en el engine (@engine_node)."""
+"""Nodos de estado (Get/Set)."""
 from rayflow.nodes.decorators import (
     ExecContext,
     ExecInput,
@@ -6,10 +6,11 @@ from rayflow.nodes.decorators import (
     Input,
     Output,
     engine_node,
+    ray_node,
 )
 
 
-@engine_node
+@ray_node
 class Get:
     """Lee una variable del estado del grafo.
 

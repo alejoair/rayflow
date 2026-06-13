@@ -11,6 +11,7 @@ from rayflow.nodes.decorators import (
     Output,
     engine_node,
     parallel_node,
+    ray_node,
 )
 
 
@@ -79,7 +80,7 @@ class FlowOutput:
         pass
 
 
-@engine_node
+@ray_node
 class Branch:
     """Desvío condicional. Dispara `true` o `false` según `condition`."""
     exec_in = ExecInput()
@@ -91,7 +92,7 @@ class Branch:
         await ctx.fire("true" if condition else "false")
 
 
-@engine_node
+@ray_node
 class Sequence:
     """Dispara sus exec outputs en orden secuencial."""
     exec_in = ExecInput()
@@ -205,22 +206,15 @@ class Map:
         for element in (array or []):
             inputs = {**base_inputs, first_in: element}
             node_instance = cls()
-
-            if meta.is_exec_node or meta.is_engine_node:
-                # exec node (engine o ray) o engine pure: run(ctx, **inputs)
-                capture = _MapCaptureCtx(ctx)
-                ret = node_instance.run(capture, **inputs)
-                if inspect.isawaitable(ret):
-                    ret = await ret
-                # pure engine node devuelve dict; exec nodes usan set_output (ret=None)
-                if isinstance(ret, dict):
-                    results.append(ret.get(first_out))
-                else:
-                    results.append(capture.outputs.get(first_out))
+            capture = _MapCaptureCtx(ctx)
+            ret = node_instance.run(capture, **inputs)
+            if inspect.isawaitable(ret):
+                ret = await ret
+            # pure nodes devuelven dict; exec nodes usan set_output (ret=None)
+            if isinstance(ret, dict):
+                results.append(ret.get(first_out))
             else:
-                # pure @ray_node: run(**inputs) sin ctx, devuelve dict
-                output = node_instance.run(**inputs) or {}
-                results.append(output.get(first_out))
+                results.append(capture.outputs.get(first_out))
 
         ctx.set_output("result", results)
         await ctx.fire("exec_out")

@@ -260,7 +260,8 @@ class FlowEngine:
         # 2b) @ray_node pure (sin exec pins) → task Ray bajo demanda
         if src_rnode and not src_rnode.meta.is_exec_node and not src_rnode.meta.is_engine_node:
             data_inputs = self._resolve_inputs(src_rnode)
-            result_ref = src_rnode.meta.ray_handle.remote(**data_inputs)
+            ctx = ExecContext(src_id, self._graph_id, src_rnode.state_path)
+            result_ref = src_rnode.meta.ray_handle.remote(ctx, **data_inputs)
             result = ray.get(result_ref)
             value = result.get(src_pin) if isinstance(result, dict) else result
             return ray.put(value)
