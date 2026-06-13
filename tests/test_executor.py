@@ -276,3 +276,42 @@ def test_or_join_post_branch_false():
         ],
     }, cond=False)
     assert result["out"] == 99
+
+
+# ---------------------------------------------------------------------------
+# Map
+# ---------------------------------------------------------------------------
+
+def test_map_con_ray_node_exec():
+    """Map aplica un @ray_node exec (ToStr) a cada elemento del array."""
+    result = rayflow.run({
+        "name": "map_tostr",
+        "inputs": {"items": "list"},
+        "outputs": {"strings": "list"},
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "m", "type": "Map", "exec_in": "entry",
+             "inputs": {"array": "entry.items", "node_type": "ToStr"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "m",
+             "inputs": {"strings": "m.result"}},
+        ],
+    }, items=[1, 2, 3])
+    assert result["strings"] == ["1", "2", "3"]
+
+
+def test_map_con_engine_node_puro():
+    """Map aplica un @engine_node pure (Get) — devuelve siempre el mismo valor."""
+    result = rayflow.run({
+        "name": "map_get",
+        "inputs": {"items": "list"},
+        "outputs": {"values": "list"},
+        "variables": [{"name": "magic", "type": "int", "default": 42}],
+        "nodes": [
+            {"id": "entry", "type": "FlowInput"},
+            {"id": "m", "type": "Map", "exec_in": "entry",
+             "inputs": {"array": "entry.items", "node_type": "Get"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "m",
+             "inputs": {"values": "m.result"}},
+        ],
+    }, items=["magic", "magic", "magic"])
+    assert result["values"] == [42, 42, 42]

@@ -1,5 +1,7 @@
 """Nodos de control de flujo."""
 import asyncio
+import inspect
+from typing import Any
 
 from rayflow.nodes.decorators import (
     ExecContext,
@@ -10,6 +12,37 @@ from rayflow.nodes.decorators import (
     engine_node,
     parallel_node,
 )
+
+
+class _MapCaptureCtx:
+    """Contexto de captura para Map: recoge set_output, ignora fire().
+
+    Permite ejecutar el run() de cualquier nodo inline (sin actores Ray)
+    capturando sus data outputs sin propagar el exec flow.
+    Las operaciones de variables/eventos se delegan al contexto padre.
+    """
+
+    def __init__(self, parent: ExecContext):
+        self._parent = parent
+        self.outputs: dict[str, Any] = {}
+
+    async def fire(self, pin_name: str) -> None:
+        pass
+
+    def set_output(self, pin_name: str, value: Any) -> None:
+        self.outputs[pin_name] = value
+
+    def get_variable(self, name: str) -> Any:
+        return self._parent.get_variable(name)
+
+    def set_variable(self, name: str, value: Any) -> None:
+        self._parent.set_variable(name, value)
+
+    def emit_event(self, event_name: str, payload: Any = None) -> None:
+        self._parent.emit_event(event_name, payload)
+
+    async def exec_outputs_except(self, *exclude: str) -> list[str]:
+        return []
 
 
 @engine_node
@@ -106,3 +139,65 @@ class ForEach:
             ctx.set_output("index", i)
             await ctx.fire("loop_body")
         await ctx.fire("completed")
+
+
+@engine_node
+class Map:
+    """Aplica un nodo de transformación a cada elemento de un array.
+
+    `node_type` es el nombre del tipo de nodo (string literal en el JSON).
+    El elemento se pasa al primer data input del nodo; los demás inputs
+    usan sus valores por defecto declarados. El primer data output de cada
+    invocación se recoge en la lista resultado.
+
+    Funciona con cualquier nodo del catálogo (pure o exec, engine o ray_node).
+    Los exec outputs del nodo aplicado se ignoran — Map solo captura datos.
+
+    Ejemplo de uso en JSON:
+        {"id": "m", "type": "Map", "exec_in": "entry",
+         "inputs": {"array": "entry.items", "node_type": "ToStr"}}
+    """
+    exec_in = ExecInput()
+    array = Input("list", default=None)
+    node_type = Input("str", default="")
+    result = Output("list")
+    exec_out = ExecOutput()
+
+    async def run(self, ctx: ExecContext, array: list, node_type: str) -> None:
+        from rayflow.nodes.registry import get_catalog
+        entry = get_catalog().get(node_type)
+        if entry is None:
+            raise RuntimeError(f"Map: nodo '{node_type}' no encontrado en el catálogo")
+        cls, meta = entry
+        if not meta.inputs:
+            raise RuntimeError(f"Map: '{node_type}' no tiene data inputs")
+        if not meta.outputs:
+            raise RuntimeError(f"Map: '{node_type}' no tiene data outputs")
+
+        first_in = meta.inputs[0].name
+        first_out = meta.outputs[0].name
+        base_inputs = {pin.name: pin.default for pin in meta.inputs if pin.has_default}
+
+        results = []
+        for element in (array or []):
+            inputs = {**base_inputs, first_in: element}
+            node_instance = cls()
+
+            if meta.is_exec_node or meta.is_engine_node:
+                # exec node (engine o ray) o engine pure: run(ctx, **inputs)
+                capture = _MapCaptureCtx(ctx)
+                ret = node_instance.run(capture, **inputs)
+                if inspect.isawaitable(ret):
+                    ret = await ret
+                # pure engine node devuelve dict; exec nodes usan set_output (ret=None)
+                if isinstance(ret, dict):
+                    results.append(ret.get(first_out))
+                else:
+                    results.append(capture.outputs.get(first_out))
+            else:
+                # pure @ray_node: run(**inputs) sin ctx, devuelve dict
+                output = node_instance.run(**inputs) or {}
+                results.append(output.get(first_out))
+
+        ctx.set_output("result", results)
+        await ctx.fire("exec_out")
