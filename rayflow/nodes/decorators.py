@@ -75,23 +75,35 @@ class ExecContext:
 
     Métodos sync: set_output, get_variable, set_variable, emit_event.
     Métodos async: fire, exec_outputs_except.
+
+    _output_writer: callable opcional para engine_nodes — evita la llamada
+    remota bloqueante al engine (self-call que deadlockearía el event loop
+    del actor). No se serializa; queda None cuando el ctx viaja a un worker.
     """
 
-    def __init__(self, node_id: str, graph_id: str, state_path: str | None = None):
+    def __init__(
+        self,
+        node_id: str,
+        graph_id: str,
+        state_path: str | None = None,
+        _output_writer=None,
+    ):
         self._node_id = node_id
         self._graph_id = graph_id
         self._state_path = state_path
         self._engine_handle = None
         self._state_handle = None
+        self._output_writer = _output_writer  # solo válido localmente
 
     def __getstate__(self):
-        # Excluir handles — se reacquieren bajo demanda en el proceso destino.
+        # Excluir handles y callbacks — se reacquieren bajo demanda.
         return {
             "_node_id": self._node_id,
             "_graph_id": self._graph_id,
             "_state_path": self._state_path,
             "_engine_handle": None,
             "_state_handle": None,
+            "_output_writer": None,
         }
 
     def __setstate__(self, state):
@@ -122,7 +134,10 @@ class ExecContext:
 
     def set_output(self, pin_name: str, value: Any) -> None:
         """Escribe un data output del nodo actual en el GraphState."""
-        ray.get(self._engine().set_output.remote(self._node_id, pin_name, value))
+        if self._output_writer is not None:
+            self._output_writer(self._node_id, pin_name, value)
+        else:
+            ray.get(self._engine().set_output.remote(self._node_id, pin_name, value))
 
     def get_variable(self, name: str) -> Any:
         """Lee una variable del GraphState (con prefijo state_path si aplica)."""

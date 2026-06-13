@@ -175,7 +175,10 @@ class FlowEngine:
                 await self._run_loop(targets[0], node_id)
             return []
 
-        ctx = ExecContext(node_id, self._graph_id, rnode.state_path)
+        ctx = ExecContext(
+            node_id, self._graph_id, rnode.state_path,
+            _output_writer=lambda nid, pin, val: self._write_node_outputs(nid, {pin: val}),
+        )
 
         started_at = time.time()
         # Escribir meta inicial antes de run() para que downstream pueda leerla

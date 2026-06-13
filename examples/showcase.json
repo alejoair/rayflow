@@ -8,7 +8,7 @@
   "outputs": {
     "total": "int",
     "above_count": "int",
-    "summary": "str"
+    "summary": "dict"
   },
   "variables": [
     { "name": "running_total", "type": "int", "default": 0 },
