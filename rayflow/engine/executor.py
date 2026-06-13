@@ -252,18 +252,13 @@ class FlowEngine:
                 ref = ray.get(ref)
             return ray.put(ref)
 
-        # 2a) @engine_node pure (sin exec pins) → evaluar localmente bajo demanda
-        if src_rnode and src_rnode.meta.is_engine_node and not src_rnode.meta.is_exec_node:
+        # 2a/2b) Nodo pure (sin exec pins) — @engine_node o @ray_node: misma firma
+        # run(self, ctx, **inputs) -> dict. Se evalúa inline en el engine en ambos casos:
+        # el decorator solo indica preferencia de dónde correr; para pure nodes (lazy,
+        # sin side-effects de exec flow) la evaluación inline es equivalente y evita
+        # problemas de serialización de ray_handle en procesos remotos.
+        if src_rnode and not src_rnode.meta.is_exec_node:
             value = self._eval_pure_engine_node(src_rnode, src_pin)
-            return ray.put(value)
-
-        # 2b) @ray_node pure (sin exec pins) → task Ray bajo demanda
-        if src_rnode and not src_rnode.meta.is_exec_node and not src_rnode.meta.is_engine_node:
-            data_inputs = self._resolve_inputs(src_rnode)
-            ctx = ExecContext(src_id, self._graph_id, src_rnode.state_path)
-            result_ref = src_rnode.meta.ray_handle.remote(ctx, **data_inputs)
-            result = ray.get(result_ref)
-            value = result.get(src_pin) if isinstance(result, dict) else result
             return ray.put(value)
 
         # 3) Fallback: default del pin consumidor
