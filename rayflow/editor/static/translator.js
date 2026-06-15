@@ -4,28 +4,19 @@ export function isRef(val) {
   return typeof val === 'string' && val.includes('.');
 }
 
-// Parse "node_id" or "node_id.pin" → {srcId, srcPin}
 function parseExecSrc(src) {
   const parts = src.split('.');
   return { srcId: parts[0], srcPin: parts.slice(1).join('.') || 'exec_out' };
 }
 
-// exec_in value → array of {srcId, srcPin}
 export function parseExecIn(execIn) {
   if (!execIn) return [];
-  if (typeof execIn === 'string') {
-    return [parseExecSrc(execIn)];
-  }
-  if (Array.isArray(execIn)) {
-    return execIn.map(parseExecSrc);
-  }
-  if (execIn && typeof execIn === 'object' && execIn.or) {
-    return execIn.or.map(parseExecSrc);
-  }
+  if (typeof execIn === 'string') return [parseExecSrc(execIn)];
+  if (Array.isArray(execIn)) return execIn.map(parseExecSrc);
+  if (execIn && typeof execIn === 'object' && execIn.or) return execIn.or.map(parseExecSrc);
   return [];
 }
 
-// Detect exec_in join mode
 export function execJoinMode(execIn) {
   if (!execIn) return 'none';
   if (typeof execIn === 'string') return 'single';
@@ -34,12 +25,20 @@ export function execJoinMode(execIn) {
   return 'none';
 }
 
-// Auto-layout: simple left-to-right grid for nodes without ui positions
 function autoPos(index) {
   const cols = 4;
-  const col = index % cols;
-  const row = Math.floor(index / cols);
-  return { x: 80 + col * 220, y: 80 + row * 180 };
+  return { x: 80 + (index % cols) * 240, y: 80 + Math.floor(index / cols) * 200 };
+}
+
+// Dynamic pins for boundary nodes (pins come from the flow interface, not the catalog)
+function dynamicData(nodeType, flowDef) {
+  if (nodeType === 'FlowInput' || nodeType === 'OnStart') {
+    return { dynamicOutputs: Object.entries(flowDef.inputs || {}) };
+  }
+  if (nodeType === 'FlowOutput') {
+    return { dynamicInputs: Object.entries(flowDef.outputs || {}) };
+  }
+  return {};
 }
 
 export function flowDefToRF(flowDef, catalog) {
@@ -50,18 +49,16 @@ export function flowDefToRF(flowDef, catalog) {
     data: {
       nodeType: n.type,
       meta: catalog[n.type] || null,
-      // literal inputs (not refs to other nodes)
       literals: Object.fromEntries(
         Object.entries(n.inputs || {}).filter(([, v]) => !isRef(v))
       ),
+      ...dynamicData(n.type, flowDef),
     },
     selected: false,
   }));
 
   const edges = [];
-
   (flowDef.nodes || []).forEach(n => {
-    // exec edges
     const srcs = parseExecIn(n.exec_in);
     const mode = execJoinMode(n.exec_in);
     srcs.forEach(({ srcId, srcPin }, idx) => {
@@ -78,7 +75,6 @@ export function flowDefToRF(flowDef, catalog) {
       });
     });
 
-    // data edges
     Object.entries(n.inputs || {}).forEach(([pin, val]) => {
       if (isRef(val)) {
         const dotIdx = val.indexOf('.');
@@ -100,17 +96,13 @@ export function flowDefToRF(flowDef, catalog) {
 }
 
 export function rfToFlowDef(rfNodes, rfEdges, flowMeta) {
-  // Build lookup: target node → incoming edges
   const execEdgesByTarget = {};
   const dataEdgesByTarget = {};
-
   rfEdges.forEach(e => {
     if (e.type === 'exec') {
-      if (!execEdgesByTarget[e.target]) execEdgesByTarget[e.target] = [];
-      execEdgesByTarget[e.target].push(e);
+      (execEdgesByTarget[e.target] = execEdgesByTarget[e.target] || []).push(e);
     } else {
-      if (!dataEdgesByTarget[e.target]) dataEdgesByTarget[e.target] = [];
-      dataEdgesByTarget[e.target].push(e);
+      (dataEdgesByTarget[e.target] = dataEdgesByTarget[e.target] || []).push(e);
     }
   });
 
@@ -118,7 +110,6 @@ export function rfToFlowDef(rfNodes, rfEdges, flowMeta) {
     const execEdges = execEdgesByTarget[rn.id] || [];
     const dataEdges = dataEdgesByTarget[rn.id] || [];
 
-    // Build exec_in
     let execIn = null;
     if (execEdges.length === 1) {
       const e = execEdges[0];
@@ -133,14 +124,11 @@ export function rfToFlowDef(rfNodes, rfEdges, flowMeta) {
       execIn = mode === 'or' ? { or: refs } : refs;
     }
 
-    // Build inputs: literals + data refs
     const inputs = { ...rn.data.literals };
     dataEdges.forEach(e => {
       const targetPin = (e.targetHandle || '').replace('data-in-', '');
       const srcPin = (e.sourceHandle || '').replace('data-out-', '');
-      if (targetPin && srcPin) {
-        inputs[targetPin] = `${e.source}.${srcPin}`;
-      }
+      if (targetPin && srcPin) inputs[targetPin] = `${e.source}.${srcPin}`;
     });
 
     const node = { id: rn.id, type: rn.data.nodeType };
@@ -153,16 +141,11 @@ export function rfToFlowDef(rfNodes, rfEdges, flowMeta) {
   return { ...flowMeta, nodes };
 }
 
-// Map pin type string to CSS variable
 export function typeColor(type) {
   const t = (type || 'Any').toLowerCase().split('[')[0];
   const map = {
-    int: 'var(--type-int)',
-    float: 'var(--type-float)',
-    str: 'var(--type-str)',
-    bool: 'var(--type-bool)',
-    list: 'var(--type-list)',
-    dict: 'var(--type-dict)',
+    int: 'var(--type-int)', float: 'var(--type-float)', str: 'var(--type-str)',
+    bool: 'var(--type-bool)', list: 'var(--type-list)', dict: 'var(--type-dict)',
     any: 'var(--type-any)',
   };
   return map[t] || 'var(--type-any)';

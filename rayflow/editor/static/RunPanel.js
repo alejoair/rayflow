@@ -2,7 +2,7 @@ import { html } from 'htm/react';
 import { useState } from 'react';
 import { runFlow } from './api.js';
 
-export default function RunPanel({ activeFlow, validationErrors }) {
+export default function RunPanel({ activeFlow, validationErrors, isDirty, onSaveFirst }) {
   const [inputs, setInputs] = useState({});
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
@@ -18,11 +18,15 @@ export default function RunPanel({ activeFlow, validationErrors }) {
 
   const flowInputs = activeFlow.inputs || {};
 
-  function setInput(name, val) {
-    setInputs(prev => ({ ...prev, [name]: val }));
-  }
+  function setInput(name, val) { setInputs(prev => ({ ...prev, [name]: val })); }
 
   async function handleRun() {
+    // Auto-save if canvas has unsaved changes
+    if (isDirty && onSaveFirst) {
+      const ok = await onSaveFirst();
+      if (!ok) return; // save failed, don't run
+    }
+
     setRunning(true); setResult(null); setError(null);
     try {
       const coerced = {};
@@ -45,6 +49,8 @@ export default function RunPanel({ activeFlow, validationErrors }) {
     }
   }
 
+  const hasErrors = validationErrors.length > 0;
+
   return html`
     <div class="app-footer">
       <div class="run-panel">
@@ -52,7 +58,7 @@ export default function RunPanel({ activeFlow, validationErrors }) {
           <div class="run-section">
             <div class="run-label">Inputs</div>
             ${Object.entries(flowInputs).map(([name, type]) => html`
-              <div key=${name} class="prop-field" style=${{ marginBottom: 6 }}>
+              <div key=${name} style=${{ marginBottom: 6 }}>
                 <label style=${{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3, display:'block' }}>
                   ${name} <span style=${{ color: 'var(--type-any)' }}>(${type})</span>
                 </label>
@@ -70,14 +76,15 @@ export default function RunPanel({ activeFlow, validationErrors }) {
         `}
 
         <div class="run-section">
-          <button
-            class="btn btn-primary"
-            onClick=${handleRun}
-            disabled=${running || validationErrors.length > 0}
-          >
+          ${isDirty && html`
+            <div style=${{ fontSize: 11, color: 'var(--exec-color)', marginBottom: 4 }}>
+              ⚠ Se guardará antes de ejecutar
+            </div>
+          `}
+          <button class="btn btn-primary" onClick=${handleRun} disabled=${running || hasErrors}>
             ${running ? '⏳ Ejecutando...' : '▶ Ejecutar'}
           </button>
-          ${validationErrors.length > 0 && html`
+          ${hasErrors && html`
             <div style=${{ fontSize: 11, color: 'var(--error-color)', marginTop: 4 }}>
               ${validationErrors.length} error(es) de validación
             </div>

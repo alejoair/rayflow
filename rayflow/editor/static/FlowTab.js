@@ -10,6 +10,107 @@ import RunPanel from './RunPanel.js';
 let _counter = 1;
 function freshId(type) { return `${type.toLowerCase()}_${_counter++}`; }
 
+// ── Interface editor modal ─────────────────────────────────────────────────
+function InterfaceModal({ flowDef, onSave, onClose }) {
+  const [name, setName] = useState(flowDef.name);
+  const [inputsRaw, setInputsRaw] = useState(JSON.stringify(flowDef.inputs || {}, null, 2));
+  const [outputsRaw, setOutputsRaw] = useState(JSON.stringify(flowDef.outputs || {}, null, 2));
+  const [err, setErr] = useState('');
+
+  function handleSave() {
+    setErr('');
+    if (!name.trim()) { setErr('El nombre es requerido'); return; }
+    let inputs, outputs;
+    try { inputs = JSON.parse(inputsRaw); outputs = JSON.parse(outputsRaw); }
+    catch { setErr('JSON inválido — ej: {"x": "int"}'); return; }
+    onSave({ name: name.trim(), inputs, outputs });
+    onClose();
+  }
+
+  return html`
+    <div class="modal-overlay" onClick=${e => e.target === e.currentTarget && onClose()}>
+      <div class="modal">
+        <div class="modal-title">Interfaz del flow</div>
+        <div class="prop-field">
+          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Nombre</label>
+          <input class="prop-input" value=${name} onInput=${e => setName(e.target.value)} />
+        </div>
+        <div class="prop-field">
+          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Inputs <span style=${{ color:'var(--text-muted)' }}>{"nombre":"tipo"}</span></label>
+          <textarea class="prop-input textarea" style=${{ height:80 }} value=${inputsRaw} onInput=${e => setInputsRaw(e.target.value)} />
+        </div>
+        <div class="prop-field">
+          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Outputs <span style=${{ color:'var(--text-muted)' }}>{"nombre":"tipo"}</span></label>
+          <textarea class="prop-input textarea" style=${{ height:80 }} value=${outputsRaw} onInput=${e => setOutputsRaw(e.target.value)} />
+        </div>
+        ${err && html`<div style=${{ color:'var(--error-color)', fontSize:12, marginTop:4 }}>${err}</div>`}
+        <div class="modal-footer">
+          <button class="btn" onClick=${onClose}>Cancelar</button>
+          <button class="btn btn-primary" onClick=${handleSave}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Variables editor modal ─────────────────────────────────────────────────
+const TYPE_OPTIONS = ['int','float','str','bool','list','dict','Any'];
+
+function VariablesModal({ variables, onSave, onClose }) {
+  const [vars, setVars] = useState(variables.map(v => ({ ...v })));
+
+  function addVar() {
+    setVars(prev => [...prev, { name: '', type: 'str', default: null }]);
+  }
+  function updateVar(idx, field, val) {
+    setVars(prev => prev.map((v, i) => i === idx ? { ...v, [field]: val } : v));
+  }
+  function removeVar(idx) {
+    setVars(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  return html`
+    <div class="modal-overlay" onClick=${e => e.target === e.currentTarget && onClose()}>
+      <div class="modal" style=${{ minWidth: 480 }}>
+        <div class="modal-title">Variables del flow</div>
+
+        <div style=${{ marginBottom: 8 }}>
+          <div class="var-row var-row-header">
+            <span>Nombre</span><span>Tipo</span><span>Default</span><span></span>
+          </div>
+          ${vars.map((v, i) => html`
+            <div key=${i} class="var-row">
+              <input class="prop-input" style=${{ width: '100%' }} value=${v.name}
+                onInput=${e => updateVar(i, 'name', e.target.value)} placeholder="nombre" />
+              <select class="prop-input" value=${v.type} onChange=${e => updateVar(i, 'type', e.target.value)}>
+                ${TYPE_OPTIONS.map(t => html`<option key=${t} value=${t}>${t}</option>`)}
+              </select>
+              <input class="prop-input" style=${{ width: '100%' }}
+                value=${v.default == null ? '' : String(v.default)}
+                onInput=${e => {
+                  const raw = e.target.value;
+                  let val;
+                  try { val = JSON.parse(raw); } catch { val = raw || null; }
+                  updateVar(i, 'default', val);
+                }} placeholder="default" />
+              <button class="btn btn-sm btn-danger" onClick=${() => removeVar(i)}>×</button>
+            </div>
+          `)}
+        </div>
+
+        <button class="btn btn-sm" onClick=${addVar}>+ Añadir variable</button>
+        <div class="modal-footer">
+          <button class="btn" onClick=${onClose}>Cancelar</button>
+          <button class="btn btn-primary" onClick=${() => { onSave(vars.filter(v => v.name)); onClose(); }}>
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Main FlowTab ───────────────────────────────────────────────────────────
 export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyChange, onFlowDeleted, onToast }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -17,10 +118,13 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [validationErrors, setValidationErrors] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showInterface, setShowInterface] = useState(false);
+  const [showVariables, setShowVariables] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const initialized = useRef(false);
+  const initializedForDirty = useRef(false);
 
-  // Load flow into canvas on mount (catalog must be ready)
   useEffect(() => {
     if (initialized.current) return;
     const { nodes: rfN, edges: rfE } = flowDefToRF(flowData, catalog);
@@ -29,13 +133,14 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
     initialized.current = true;
   }, [catalog]);
 
-  // Track dirty state after initial load
-  const initializedForDirty = useRef(false);
   useEffect(() => {
     if (!initialized.current) return;
     if (!initializedForDirty.current) { initializedForDirty.current = true; return; }
-    onDirtyChange(true);
+    markDirty();
   }, [nodes, edges]);
+
+  function markDirty() { setIsDirty(true); onDirtyChange(true); }
+  function markClean() { setIsDirty(false); onDirtyChange(false); }
 
   function buildFlowDef() {
     return rfToFlowDef(nodes, edges, {
@@ -54,10 +159,12 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
       const fd = buildFlowDef();
       await updateFlow(flowDef.name, fd);
       setFlowDef(prev => ({ ...prev, ...fd }));
-      onDirtyChange(false);
+      markClean();
       onToast('Flow guardado', 'success');
+      return true;
     } catch (e) {
       onToast(`Error guardando: ${e.message}`, 'error');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -66,9 +173,21 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
   async function handleValidate() {
     try {
       const result = await validateFlow(buildFlowDef());
-      setValidationErrors(result.errors || []);
+      const errors = result.errors || [];
+      setValidationErrors(errors);
+
+      // Highlight nodes with errors
+      const errSet = new Set();
+      nodes.forEach(n => {
+        if (errors.some(e => e.includes(n.id) || e.includes(`'${n.id}'`))) errSet.add(n.id);
+      });
+      setNodes(prev => prev.map(n => ({
+        ...n,
+        data: { ...n.data, hasError: errSet.has(n.id) },
+      })));
+
       if (result.valid) onToast('Flow válido ✓', 'success');
-      else onToast(`${result.errors.length} error(es)`, 'error');
+      else onToast(`${errors.length} error(es)`, 'error');
     } catch (e) {
       onToast(`Error validando: ${e.message}`, 'error');
     }
@@ -83,13 +202,36 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
     }
   }
 
+  function handleInterfaceSave({ name, inputs, outputs }) {
+    setFlowDef(prev => ({ ...prev, name, inputs, outputs }));
+    // Update dynamic pins on FlowInput/FlowOutput nodes
+    setNodes(prev => prev.map(n => {
+      if (n.data.nodeType === 'FlowInput' || n.data.nodeType === 'OnStart') {
+        return { ...n, data: { ...n.data, dynamicOutputs: Object.entries(inputs) } };
+      }
+      if (n.data.nodeType === 'FlowOutput') {
+        return { ...n, data: { ...n.data, dynamicInputs: Object.entries(outputs) } };
+      }
+      return n;
+    }));
+    markDirty();
+  }
+
+  function handleVariablesSave(vars) {
+    setFlowDef(prev => ({ ...prev, variables: vars }));
+    markDirty();
+  }
+
   const handleAddNode = useCallback((nodeType, position) => {
     const id = freshId(nodeType);
+    const extra = {};
+    if (nodeType === 'FlowInput' || nodeType === 'OnStart') extra.dynamicOutputs = Object.entries(flowDef.inputs || {});
+    if (nodeType === 'FlowOutput') extra.dynamicInputs = Object.entries(flowDef.outputs || {});
     setNodes(prev => [...prev, {
       id, type: 'rayflowNode', position,
-      data: { nodeType, meta: catalog[nodeType] || null, literals: {} },
+      data: { nodeType, meta: catalog[nodeType] || null, literals: {}, ...extra },
     }]);
-  }, [catalog]);
+  }, [catalog, flowDef]);
 
   const handleConnect = useCallback(params => {
     setEdges(prev => addEdge(params, prev));
@@ -111,34 +253,31 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
     setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...update } } : n));
   }
 
-  const validStatus = validationErrors.length === 0 ? 'valid' : 'invalid';
-
   return html`
     <div class="flow-tab" style=${{ display: isActive ? 'flex' : 'none' }}>
 
-      <!-- Tab toolbar -->
       <div class="tab-toolbar">
         <span class="tab-toolbar-name">${flowDef.name}</span>
-        <div class="tab-toolbar-inputs" style=${{ fontSize: 11, color: 'var(--text-muted)' }}>
+        <div class="tab-toolbar-inputs">
           ${Object.entries(flowDef.inputs || {}).map(([k,v]) => html`
-            <span key=${k} style=${{ marginRight: 8 }}>${k}: <span style=${{ color: 'var(--type-any)' }}>${v}</span></span>
+            <span key=${k} style=${{ marginRight: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+              ${k}<span style=${{ color: 'var(--type-any)' }}>:${v}</span>
+            </span>
           `)}
         </div>
-        <div style=${{ flex: 1 }}></div>
+        <div style=${{ flex: 1 }} />
         ${validationErrors.length > 0 && html`
           <span class="status-badge status-invalid" style=${{ marginRight: 4 }}>✗ ${validationErrors.length} error(es)</span>
         `}
-        ${validationErrors.length === 0 && html`
-          <span class="status-badge status-valid" style=${{ marginRight: 4, opacity: 0.7 }}>✓</span>
-        `}
-        <button class="btn btn-sm" onClick=${handleValidate}>Validar</button>
-        <button class="btn btn-sm btn-primary" onClick=${handleSave} disabled=${saving}>
-          ${saving ? 'Guardando…' : '💾 Guardar'}
+        <button class="btn btn-sm" onClick=${() => setShowInterface(true)} title="Editar nombre, inputs y outputs">✏ Interfaz</button>
+        <button class="btn btn-sm" onClick=${() => setShowVariables(true)} title="Editar variables del flow">
+          📋 Vars ${flowDef.variables?.length > 0 ? html`<span style=${{ color:'var(--accent)', marginLeft:2 }}>(${flowDef.variables.length})</span>` : ''}
         </button>
+        <button class="btn btn-sm" onClick=${handleValidate}>✓ Validar</button>
+        <button class="btn btn-sm btn-primary" onClick=${handleSave} disabled=${saving}>${saving ? 'Guardando…' : '💾 Guardar'}</button>
         <button class="btn btn-sm btn-danger" onClick=${() => setConfirmDelete(true)}>🗑</button>
       </div>
 
-      <!-- Canvas + properties -->
       <div class="tab-body">
         <${FlowCanvas}
           nodes=${nodes}
@@ -162,10 +301,29 @@ export default function FlowTab({ flowData, catalog, flows, isActive, onDirtyCha
         />
       </div>
 
-      <!-- Run panel -->
-      <${RunPanel} activeFlow=${flowDef} validationErrors=${validationErrors} />
+      <${RunPanel}
+        activeFlow=${flowDef}
+        validationErrors=${validationErrors}
+        isDirty=${isDirty}
+        onSaveFirst=${handleSave}
+      />
 
-      <!-- Delete confirm modal -->
+      ${showInterface && html`
+        <${InterfaceModal}
+          flowDef=${flowDef}
+          onSave=${handleInterfaceSave}
+          onClose=${() => setShowInterface(false)}
+        />
+      `}
+
+      ${showVariables && html`
+        <${VariablesModal}
+          variables=${flowDef.variables || []}
+          onSave=${handleVariablesSave}
+          onClose=${() => setShowVariables(false)}
+        />
+      `}
+
       ${confirmDelete && html`
         <div class="modal-overlay" onClick=${e => e.target===e.currentTarget && setConfirmDelete(false)}>
           <div class="modal">

@@ -461,6 +461,25 @@ body {
   overflow: hidden;
 }
 
+/* ── Variable editor rows ── */
+.var-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 100px 32px;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.var-row-header {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding: 0 2px;
+}
+.var-row-header span { display: block; }
+
 /* ── CodeMirror ── */
 .cm-wrap {
   background: #1e1e2e;
