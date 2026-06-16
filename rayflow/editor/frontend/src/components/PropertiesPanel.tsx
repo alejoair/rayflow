@@ -1,10 +1,28 @@
+import { useState } from 'react'
 import type { Node, Edge } from '@xyflow/react'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { typeColor } from '@/lib/translator'
 import type { NodeSpec, PinSpec, FlowMeta } from '@/lib/api'
+
+// ── Estilos compartidos ────────────────────────────────────────────────────
+
+const sectionLabel = {
+  fontSize: 11, fontWeight: 600,
+  color: 'var(--muted-foreground)',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.06em',
+  marginBottom: 10,
+}
+
+const fieldLabel = {
+  fontSize: 11,
+  color: 'var(--muted-foreground)',
+  marginBottom: 4,
+  display: 'block' as const,
+}
+
+// ── LiteralField ──────────────────────────────────────────────────────────
 
 interface LiteralFieldProps {
   pin: PinSpec
@@ -16,17 +34,27 @@ interface LiteralFieldProps {
 
 function LiteralField({ pin, value, onChange, catalog, flowList }: LiteralFieldProps) {
   const t = (pin.type || 'Any').toLowerCase()
+  const color = typeColor(pin.type)
+
+  const labelEl = (
+    <label style={fieldLabel}>
+      <span style={{ color }}>{pin.type}</span>
+      <span style={{ color: 'var(--foreground)', marginLeft: 6 }}>{pin.name}</span>
+    </label>
+  )
 
   if (pin.name === 'node_type') {
     return (
-      <div className="space-y-1">
-        <label className="text-[11px] text-[var(--muted-foreground)]">{pin.name} ({pin.type})</label>
+      <div>
+        {labelEl}
         <Select value={String(value ?? '')} onValueChange={onChange}>
-          <SelectTrigger className="h-7 text-xs bg-[var(--secondary)] border-[var(--border)]">
+          <SelectTrigger style={{ height: 32, fontSize: 13 }}>
             <SelectValue placeholder="— elegir —" />
           </SelectTrigger>
-          <SelectContent className="bg-[var(--card)] border-[var(--border)]">
-            {Object.keys(catalog).map(k => <SelectItem key={k} value={k} className="text-xs">{k}</SelectItem>)}
+          <SelectContent>
+            {Object.keys(catalog).map(k => (
+              <SelectItem key={k} value={k} style={{ fontSize: 13 }}>{k}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -35,14 +63,16 @@ function LiteralField({ pin, value, onChange, catalog, flowList }: LiteralFieldP
 
   if (pin.name === 'flow') {
     return (
-      <div className="space-y-1">
-        <label className="text-[11px] text-[var(--muted-foreground)]">{pin.name} (flow)</label>
+      <div>
+        {labelEl}
         <Select value={String(value ?? '')} onValueChange={onChange}>
-          <SelectTrigger className="h-7 text-xs bg-[var(--secondary)] border-[var(--border)]">
+          <SelectTrigger style={{ height: 32, fontSize: 13 }}>
             <SelectValue placeholder="— elegir —" />
           </SelectTrigger>
-          <SelectContent className="bg-[var(--card)] border-[var(--border)]">
-            {flowList.map(f => <SelectItem key={f.name} value={f.name} className="text-xs">{f.name}</SelectItem>)}
+          <SelectContent>
+            {flowList.map(f => (
+              <SelectItem key={f.name} value={f.name} style={{ fontSize: 13 }}>{f.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -51,35 +81,49 @@ function LiteralField({ pin, value, onChange, catalog, flowList }: LiteralFieldP
 
   if (t === 'bool') {
     return (
-      <div className="flex items-center gap-2">
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
         <input
           type="checkbox"
           checked={!!value}
           onChange={e => onChange(e.target.checked)}
-          className="accent-[var(--primary)] w-3.5 h-3.5"
+          style={{ accentColor: 'var(--primary)', width: 14, height: 14 }}
         />
-        <label className="text-[11px] text-[var(--muted-foreground)]">{pin.name}</label>
-      </div>
+        <span style={{ fontSize: 13, color: 'var(--foreground)' }}>{pin.name}</span>
+        <span style={{ fontSize: 11, color }}>{pin.type}</span>
+      </label>
     )
   }
 
   if (t === 'list' || t === 'dict' || t.startsWith('list[') || t.startsWith('dict[')) {
-    const display = typeof value === 'string' ? value : JSON.stringify(value ?? (t.startsWith('list') ? [] : {}), null, 2)
+    const display = typeof value === 'string'
+      ? value
+      : JSON.stringify(value ?? (t.startsWith('list') ? [] : {}), null, 2)
     return (
-      <div className="space-y-1">
-        <label className="text-[11px] text-[var(--muted-foreground)]">{pin.name} ({pin.type})</label>
-        <Textarea
+      <div>
+        {labelEl}
+        <textarea
           value={display}
-          onChange={e => { try { onChange(JSON.parse(e.target.value)) } catch { onChange(e.target.value) } }}
-          className="h-16 text-[11px] font-mono bg-[var(--secondary)] border-[var(--border)] text-[var(--foreground)] resize-none"
+          onChange={e => {
+            try { onChange(JSON.parse(e.target.value)) } catch { onChange(e.target.value) }
+          }}
+          rows={3}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '6px 10px', borderRadius: 6,
+            border: '1px solid var(--border)',
+            background: 'var(--secondary)',
+            color: 'var(--foreground)',
+            fontSize: 12, fontFamily: 'monospace',
+            resize: 'vertical', outline: 'none',
+          }}
         />
       </div>
     )
   }
 
   return (
-    <div className="space-y-1">
-      <label className="text-[11px] text-[var(--muted-foreground)]">{pin.name} ({pin.type})</label>
+    <div>
+      {labelEl}
       <Input
         type={t === 'int' || t === 'float' ? 'number' : 'text'}
         step={t === 'float' ? 'any' : undefined}
@@ -88,11 +132,34 @@ function LiteralField({ pin, value, onChange, catalog, flowList }: LiteralFieldP
           const v = e.target.value
           onChange(t === 'int' ? parseInt(v, 10) : t === 'float' ? parseFloat(v) : v)
         }}
-        className="h-7 text-xs bg-[var(--secondary)] border-[var(--border)] text-[var(--foreground)]"
+        style={{ height: 32, fontSize: 13 }}
       />
     </div>
   )
 }
+
+// ── Sección colapsable ────────────────────────────────────────────────────
+
+function Section({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: open ? 12 : 0,
+        }}
+      >
+        <span style={sectionLabel}>{title}</span>
+        <span style={{ fontSize: 10, color: 'var(--muted-foreground)', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s' }}>▾</span>
+      </button>
+      {open && children}
+    </div>
+  )
+}
+
+// ── PropertiesPanel ───────────────────────────────────────────────────────
 
 interface Props {
   selectedNodeId: string | null
@@ -104,28 +171,40 @@ interface Props {
   onUpdateNode: (nodeId: string, update: Record<string, unknown>) => void
 }
 
-export default function PropertiesPanel({ selectedNodeId, nodes, edges, catalog, flowList, validationErrors, onUpdateNode }: Props) {
+const headerStyle = {
+  padding: '12px 16px',
+  borderBottom: '1px solid var(--border)',
+  fontSize: 11, fontWeight: 600,
+  color: 'var(--muted-foreground)',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.06em',
+  flexShrink: 0,
+}
+
+export default function PropertiesPanel({
+  selectedNodeId, nodes, edges, catalog, flowList, validationErrors, onUpdateNode,
+}: Props) {
   const node = nodes.find(n => n.id === selectedNodeId)
 
   if (!node) {
     return (
-      <div className="w-64 flex flex-col border-l border-[var(--border)] bg-[var(--card)] flex-shrink-0">
-        <div className="px-3 py-2 border-b border-[var(--border)] text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
-          Propiedades
-        </div>
-        <div className="p-4 text-center text-xs text-[var(--muted-foreground)]">
-          Selecciona un nodo en el canvas
+      <div style={{ width: 240, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0 }}>
+        <div style={headerStyle}>Propiedades</div>
+        <div style={{ padding: 16, fontSize: 13, color: 'var(--muted-foreground)', textAlign: 'center' }}>
+          Selecciona un nodo
         </div>
       </div>
     )
   }
 
   const data = node.data as { nodeType: string; meta: NodeSpec | null; literals: Record<string, unknown> }
-  const meta = catalog[data.nodeType]
+  // Preferir la meta del nodo (puede tener pins dinámicos) sobre el catálogo global
+  const meta = data.meta ?? catalog[data.nodeType] ?? null
   const literals = data.literals || {}
 
   const connectedInputs = new Set(
-    edges.filter(e => e.target === node.id && e.type !== 'exec')
+    edges
+      .filter(e => e.target === node.id && e.type !== 'exec')
       .map(e => (e.targetHandle || '').replace('data-in-', ''))
   )
 
@@ -141,33 +220,43 @@ export default function PropertiesPanel({ selectedNodeId, nodes, edges, catalog,
   }
 
   return (
-    <div className="w-64 flex flex-col border-l border-[var(--border)] bg-[var(--card)] flex-shrink-0 overflow-hidden">
-      <div className="px-3 py-2 border-b border-[var(--border)] text-[11px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider flex-shrink-0">
-        Propiedades
-      </div>
-      <ScrollArea className="flex-1">
-        <div className="divide-y divide-[var(--border)]">
+    <div style={{ width: 240, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, overflow: 'hidden' }}>
+      <div style={headerStyle}>Propiedades</div>
 
-          <div className="p-3 space-y-3">
-            <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Nodo</div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-[var(--muted-foreground)]">Tipo</label>
-              <div className="text-xs font-semibold text-[var(--primary)] py-0.5">{data.nodeType}</div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+
+        {/* Nodo */}
+        <div style={{ padding: '12px 16px' }}>
+          <div style={sectionLabel}>Nodo</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <span style={fieldLabel}>Tipo</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>{data.nodeType}</span>
+                {meta && (
+                  <span style={{
+                    fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                    border: '1px solid var(--border)', color: 'var(--muted-foreground)',
+                  }}>{meta.is_exec_node ? 'exec' : 'pure'}</span>
+                )}
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-[var(--muted-foreground)]">ID</label>
+            <div>
+              <span style={fieldLabel}>ID</span>
               <Input
                 defaultValue={node.id}
                 onBlur={e => updateId(e.target.value.trim())}
                 onKeyDown={e => { if (e.key === 'Enter') updateId((e.target as HTMLInputElement).value.trim()) }}
-                className="h-7 text-xs bg-[var(--secondary)] border-[var(--border)] text-[var(--foreground)]"
+                style={{ height: 32, fontSize: 13 }}
               />
             </div>
           </div>
+        </div>
 
-          {editablePins.length > 0 && (
-            <div className="p-3 space-y-3">
-              <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Inputs literales</div>
+        {/* Inputs literales */}
+        {editablePins.length > 0 && (
+          <Section title="Inputs">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {editablePins.map(p => (
                 <LiteralField
                   key={p.name}
@@ -179,37 +268,64 @@ export default function PropertiesPanel({ selectedNodeId, nodes, edges, catalog,
                 />
               ))}
             </div>
-          )}
+          </Section>
+        )}
 
-          {connectedInputs.size > 0 && (
-            <div className="p-3 space-y-2">
-              <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Conectados</div>
-              {[...connectedInputs].map(pin => (
-                <div key={pin} className="text-[11px] text-[var(--muted-foreground)]">{pin} ← arista</div>
-              ))}
+        {/* Inputs conectados */}
+        {connectedInputs.size > 0 && (
+          <Section title="Conectados" defaultOpen={false}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[...connectedInputs].map(pin => {
+                const pinSpec = meta?.inputs.find(p => p.name === pin)
+                const color = typeColor(pinSpec?.type ?? 'Any')
+                return (
+                  <div key={pin} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{pin}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 'auto' }}>← arista</span>
+                  </div>
+                )
+              })}
             </div>
-          )}
+          </Section>
+        )}
 
-          {nodeErrors.length > 0 && (
-            <div className="p-3 space-y-2">
-              <div className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">Errores</div>
+        {/* Outputs (informativo) */}
+        {meta && meta.outputs.length > 0 && (
+          <Section title="Outputs" defaultOpen={false}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {meta.outputs.map(p => {
+                const color = typeColor(p.type)
+                return (
+                  <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{p.name}</span>
+                    <span style={{ fontSize: 11, color, marginLeft: 'auto' }}>{p.type}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </Section>
+        )}
+
+        {/* Errores */}
+        {nodeErrors.length > 0 && (
+          <Section title="Errores">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {nodeErrors.map((e, i) => (
-                <div key={i} className="text-[11px] text-red-400 font-mono border-b border-[var(--border)] pb-1">{e}</div>
+                <div key={i} style={{
+                  fontSize: 11, fontFamily: 'monospace',
+                  color: 'var(--destructive)',
+                  background: 'rgba(239,68,68,0.08)',
+                  borderRadius: 5, padding: '6px 8px',
+                  lineHeight: 1.5,
+                }}>{e}</div>
               ))}
             </div>
-          )}
+          </Section>
+        )}
 
-          {meta && (
-            <div className="p-3 space-y-2">
-              <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Info</div>
-              <div className="flex gap-1 flex-wrap">
-                <Badge variant="outline" className="text-[10px] h-4 px-1">{meta.is_exec_node ? 'exec' : 'pure'}</Badge>
-                <Badge variant="outline" className="text-[10px] h-4 px-1">{meta.decorator.replace('_node', '')}</Badge>
-              </div>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 }
