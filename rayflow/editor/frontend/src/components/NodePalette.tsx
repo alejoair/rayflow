@@ -103,6 +103,7 @@ function Section({ label, nodes, onDragStart }: { label: string; nodes: NodeSpec
 }
 
 export default function NodePalette({ catalog }: Props) {
+  const [open, setOpen] = useState(true)
   const [search, setSearch] = useState('')
 
   const { builtin, custom } = useMemo(() => {
@@ -123,44 +124,60 @@ export default function NodePalette({ catalog }: Props) {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      flex: 1,
+      flex: open ? 1 : 0,
       overflow: 'hidden',
       minHeight: 0,
+      flexShrink: open ? 1 : 0,
     }}>
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border)',
-        fontSize: 11,
-        fontWeight: 600,
-        color: 'var(--muted-foreground)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.07em',
-        flexShrink: 0,
-      }}>
-        Nodos
-      </div>
-      <div style={{ padding: '10px 12px', flexShrink: 0 }}>
-        <Input
-          placeholder="Buscar..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ height: 32, fontSize: 13 }}
-          className="bg-[var(--secondary)] border-[var(--border)] text-[var(--foreground)]"
-        />
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 16px' }}>
-        {builtin.length === 0 && custom.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13, padding: '24px 0' }}>
-            Sin resultados
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 12px 10px 16px',
+          background: 'none',
+          border: 'none',
+          borderBottom: open ? '1px solid var(--border)' : 'none',
+          cursor: 'pointer',
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--muted-foreground)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.07em',
+          flexShrink: 0,
+        }}
+      >
+        <span>Nodos</span>
+        <span style={{ fontSize: 10, transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
+      </button>
+      {open && (
+        <>
+          <div style={{ padding: '10px 12px', flexShrink: 0 }}>
+            <Input
+              placeholder="Buscar..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ height: 32, fontSize: 13 }}
+              className="bg-[var(--secondary)] border-[var(--border)] text-[var(--foreground)]"
+            />
           </div>
-        )}
-        {builtin.length > 0 && (
-          <Section label="Builtin" nodes={builtin} onDragStart={onDragStart} />
-        )}
-        {custom.length > 0 && (
-          <Section label="Custom" nodes={custom} onDragStart={onDragStart} />
-        )}
-      </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 16px' }}>
+            {builtin.length === 0 && custom.length === 0 && (
+              <div style={{ textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13, padding: '24px 0' }}>
+                Sin resultados
+              </div>
+            )}
+            {builtin.length > 0 && (
+              <Section label="Builtin" nodes={builtin} onDragStart={onDragStart} />
+            )}
+            {custom.length > 0 && (
+              <Section label="Custom" nodes={custom} onDragStart={onDragStart} />
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
