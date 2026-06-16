@@ -12,6 +12,7 @@ import PropertiesPanel from '@/components/PropertiesPanel'
 import RunsPanel from '@/components/RunsPanel'
 import FlowSettingsDialog from '@/components/FlowSettingsDialog'
 import VariablesPanel from '@/components/VariablesPanel'
+import CustomNodesPanel from '@/components/CustomNodesPanel'
 import type { FlowDef } from '@/lib/api'
 
 interface Toast { id: number; msg: string; type: 'info' | 'success' | 'error' }
@@ -79,7 +80,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  useEffect(() => {
+  const refreshCatalog = useCallback(() => {
     getNodes()
       .then(list => {
         const m: Record<string, typeof list[0]> = {}
@@ -112,6 +113,10 @@ export default function App() {
         }))
       })
       .catch(console.error)
+  }, [setCatalog])
+
+  useEffect(() => {
+    refreshCatalog()
     getFlows()
       .then(data => setFlowList(data.flows || []))
       .catch(console.error)
@@ -385,6 +390,7 @@ export default function App() {
             variables={tab?.flowDef?.variables ?? []}
             onChange={updateVariables}
           />
+          <CustomNodesPanel onReload={refreshCatalog} />
         </div>
         <FlowCanvas onSelectNode={setSelectedNodeId} onToast={addToast} />
         <PropertiesPanel

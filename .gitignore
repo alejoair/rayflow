@@ -12,6 +12,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!rayflow/editor/frontend/src/lib/
 lib64/
 parts/
 sdist/

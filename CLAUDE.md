@@ -44,41 +44,38 @@ Editor visual (browser) ←→ FastAPI (rayflow/server.py) ←→ Ray actors/tas
 ## Frontend (editor visual)
 
 ### Stack
-- **React 18** + **htm** (sin build, vía ESM importmap)
+- **React 18** + **TypeScript** + **Vite**
 - **@xyflow/react 12**: canvas de grafos
-- Todos los módulos se cargan desde CDN (`esm.sh`)
+- **shadcn/ui** (componentes: Button, Input, Dialog, Select, etc.)
+- **@uiw/react-codemirror** + **@codemirror/lang-python**: editor de código Python para nodos custom
+- Build: `npm run build` desde `rayflow/editor/frontend/` → genera `rayflow/editor/static/dist/`
 
-### Importmap crítico (`editor/static/index.html`)
-```json
-{
-  "react":         "https://esm.sh/react@18.3.1",
-  "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-  "htm":           "https://esm.sh/htm@3.1.1",
-  "@xyflow/react": "https://esm.sh/@xyflow/react@12.3.6?external=react,react-dom"
-}
+```bash
+cd rayflow/editor/frontend
+npm install
+npm run build      # build de producción
+npm run dev        # servidor de desarrollo (puerto 5173)
+npx tsc --noEmit   # verificar tipos sin compilar
 ```
 
-**Importante**: `@xyflow/react` debe usar `?external=react,react-dom` para evitar instancias duplicadas de React. Todos los componentes deben ligar `htm` a `createElement` localmente:
+### Componentes clave (`src/components/`)
+| Archivo | Rol |
+|---------|-----|
+| `App.tsx` | Raíz: layout, carga de catálogo y lista de flows |
+| `FlowCanvas.tsx` | Canvas React Flow, animaciones de ejecución |
+| `NodeCard.tsx` | Renderizado de nodo en el canvas (handles, pines, badge RAY/LOCAL) |
+| `NodePalette.tsx` | Sidebar izq: paleta de nodos arrastrables (colapsable) |
+| `VariablesPanel.tsx` | Sidebar izq: gestión de variables del flow (colapsable) |
+| `CustomNodesPanel.tsx` | Sidebar izq: editor CodeMirror de nodos custom (colapsable) |
+| `PropertiesPanel.tsx` | Sidebar der: propiedades del nodo seleccionado |
+| `RunsPanel.tsx` | Footer: ejecutar flow, historial de runs con duración |
+| `FlowSettingsDialog.tsx` | Modal de inputs/outputs del flow |
 
-```js
-import htm from 'htm';
-import { createElement, useState } from 'react';
-const html = htm.bind(createElement);
-```
-
-**Nunca** usar `import { html } from 'htm/react'` — genera instancias duplicadas de React.
-
-### Archivos del editor
-- `editor/static/index.html` — punto de entrada, importmap
-- `editor/static/App.js` — componente raíz
-- `editor/static/FlowCanvas.js` — canvas React Flow
-- `editor/static/NodePalette.js` — paleta de nodos (sidebar izquierdo)
-- `editor/static/NodeCard.js` — renderizado de nodos en el canvas
-- `editor/static/PropertiesPanel.js` — panel de propiedades (sidebar derecho)
-- `editor/static/FlowManager.js` — header: selección, creación y borrado de flows
-- `editor/static/RunPanel.js` — footer: ejecución de flows
-- `editor/static/api.js` — cliente HTTP para la API del editor
-- `editor/static/translator.js` — conversión entre formato rayflow JSON y React Flow
+### Otros archivos clave
+- `src/lib/api.ts` — cliente HTTP tipado (todas las llamadas al backend)
+- `src/lib/translator.ts` — conversión flowDef JSON ↔ React Flow nodes/edges
+- `src/store/flowStore.ts` — Zustand store (tabs, runs, catálogo, animMinMs)
+- `src/hooks/useRunStream.ts` — SSE streaming + sistema de animación con agrupación paralela
 
 ## Sistema de nodos
 
@@ -117,7 +114,9 @@ El servidor carga nodos desde:
 1. `rayflow/nodes/builtin/` — nodos built-in del paquete
 2. `./custom_nodes/` — nodos del usuario en el directorio de trabajo
 
-## API REST del editor (`rayflow/editor/routes.py`)
+## API REST del editor
+
+### Flows (`rayflow/editor/routes.py`)
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -128,10 +127,25 @@ El servidor carga nodos desde:
 | `PUT` | `/editor/flows/{name}` | Actualizar flow |
 | `DELETE` | `/editor/flows/{name}` | Borrar flow |
 | `POST` | `/editor/validate` | Validar flow (body = flow JSON completo) |
-| `POST` | `/editor/flows/{name}/run` | Ejecutar flow |
+| `POST` | `/editor/flows/{name}/load` | Cargar flow en Ray (precaché) |
+| `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
+| `POST` | `/editor/flows/{name}/run` | Ejecutar flow (SSE stream) |
 | `POST` | `/editor/flows/{name}/serve-events` | Suscribir al event bus |
 | `DELETE` | `/editor/flows/{name}/serve-events/{graph_id}` | Desuscribir |
 | `GET` | `/editor/types/check` | Verificar compatibilidad de tipos |
+
+### Nodos custom (`rayflow/editor/custom_nodes_routes.py`)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/editor/custom-nodes` | Lista archivos `.py` en `custom_nodes/` |
+| `GET` | `/editor/custom-nodes/{name}/source` | Código fuente de un nodo |
+| `POST` | `/editor/custom-nodes` | Crear nuevo archivo (body: `{name, source?}`) |
+| `PUT` | `/editor/custom-nodes/{name}/source` | Guardar código editado |
+| `DELETE` | `/editor/custom-nodes/{name}` | Eliminar archivo |
+| `POST` | `/editor/custom-nodes/reload` | Recargar catálogo desde disco (hot reload) |
+
+El endpoint de guardar/crear valida sintaxis Python con `ast.parse()` antes de escribir el archivo, y llama `reset_catalog()` + `get_catalog()` para hacer hot reload sin reiniciar el servidor. Los módulos `custom_nodes.*` cacheados en `sys.modules` se eliminan antes del reload para forzar reimportación.
 
 ## Schema de un flow (JSON)
 
@@ -231,15 +245,17 @@ No usar el componente `<Badge>` de shadcn (tiene problemas de tipos). Usar spans
 
 | Archivo | Responsabilidad |
 |---------|----------------|
-| `rayflow/server.py` | FastAPI app, monta editor estático y router del editor |
-| `rayflow/editor/routes.py` | Endpoints del editor visual |
+| `rayflow/server.py` | FastAPI app, monta editor estático y ambos routers |
+| `rayflow/editor/routes.py` | Endpoints de flows, catálogo y ejecución |
+| `rayflow/editor/custom_nodes_routes.py` | CRUD de nodos custom + hot reload del catálogo |
 | `rayflow/editor/storage.py` | CRUD de flows en disco |
-| `rayflow/engine/executor.py` | `FlowEngine` (actor Ray async), `FlowExecutor` |
+| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local), `FlowExecutor` |
 | `rayflow/build/validator.py` | `flatten()`, `build()`, validación de tipos |
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext` |
-| `rayflow/nodes/registry.py` | Catálogo global de nodos |
+| `rayflow/nodes/loader.py` | `NodeCatalog`: registro, aliases, carga desde disco |
+| `rayflow/nodes/registry.py` | Singleton del catálogo, `reset_catalog()` para hot reload |
 | `rayflow/state/actor.py` | `GraphState` — variables y outputs por ejecución |
 | `rayflow/events/bus.py` | `EventBroker` — pub/sub entre flows |
-| `rayflow/api.py` | API pública: `run()`, `run_async()`, `serve_events()`, `stop()` |
+| `rayflow/api.py` | API pública: `run()`, `load()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
 | `rayflow/workspace.py` | Convenciones de directorio: `custom_nodes/`, `flows/` |

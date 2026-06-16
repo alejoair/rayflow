@@ -76,9 +76,11 @@ def create_app(served: dict[str, ServedFlow]):
     from fastapi.staticfiles import StaticFiles
     from rayflow.api import run
     from rayflow.editor.routes import router as editor_router
+    from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
 
     app = FastAPI(title="Rayflow", version="0.1.0")
     app.include_router(editor_router)
+    app.include_router(custom_nodes_router)
 
     _static_dir = _Path(__file__).parent / "editor" / "static"
     _dist_dir = _static_dir / "dist"
