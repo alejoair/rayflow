@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import type { NodeSpec } from '@/lib/api'
 
 const BUILTIN_TYPES = new Set([
-  'OnStart','FlowInput','FlowOutput','Branch','Sequence','Parallel','ForEach','Map',
+  'OnStart','FlowOutput','Branch','Sequence','Parallel','ForEach','Map',
   'Get','Set','CallFlow','OnEvent','EmitEvent',
   'Add','GreaterThan','ToInt','ToFloat','ToStr','ToBool',
 ])
@@ -121,13 +121,11 @@ export default function NodePalette({ catalog }: Props) {
 
   return (
     <div style={{
-      width: 224,
       display: 'flex',
       flexDirection: 'column',
-      borderRight: '1px solid var(--border)',
-      background: 'var(--card)',
-      flexShrink: 0,
+      flex: 1,
       overflow: 'hidden',
+      minHeight: 0,
     }}>
       <div style={{
         padding: '12px 16px',

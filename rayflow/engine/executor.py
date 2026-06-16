@@ -166,7 +166,7 @@ class FlowEngine:
                 self._output_refs.update({k: ray.get(v) for k, v in resolved.items()})
             return []
 
-        if name in ("FlowInput", "OnEvent") and rnode.node_def.subflow_of is not None:
+        if name in ("OnStart", "OnEvent") and rnode.node_def.subflow_of is not None:
             self._write_node_outputs(node_id, {k: ray.get(v) for k, v in resolved.items()})
             targets = rnode.exec_targets.get("exec_out", [])
             if len(targets) > 1:

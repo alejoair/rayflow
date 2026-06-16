@@ -48,19 +48,10 @@ class _MapCaptureCtx:
 
 @engine_node
 class OnStart:
-    """Punto de entrada para flows sin parámetros."""
-    exec_out = ExecOutput()
+    """Punto de entrada del flow.
 
-    async def run(self, ctx: ExecContext) -> None:
-        await ctx.fire("exec_out")
-
-
-@engine_node
-class FlowInput:
-    """Punto de entrada para flows con parámetros.
-
-    Sus data outputs se generan en build a partir de los `inputs` del flow.
-    El ExecContext expone los valores de entrada via set_output antes de llamar run().
+    Sus data outputs se generan en build a partir de los `inputs` declarados
+    en el flow. El engine inyecta los valores antes de llamar run().
     """
     exec_out = ExecOutput()
 

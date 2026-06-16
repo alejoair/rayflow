@@ -11,6 +11,7 @@ import FlowCanvas from '@/components/FlowCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import RunsPanel from '@/components/RunsPanel'
 import FlowSettingsDialog from '@/components/FlowSettingsDialog'
+import VariablesPanel from '@/components/VariablesPanel'
 import type { FlowDef } from '@/lib/api'
 
 interface Toast { id: number; msg: string; type: 'info' | 'success' | 'error' }
@@ -68,6 +69,7 @@ export default function App() {
     tabs, activeTabName,
     openTab, closeTab, setActiveTab,
     setNodes, setEdges, setDirty, setValidationErrors,
+    updateVariables,
     getActiveTab,
   } = useFlowStore()
 
@@ -88,7 +90,7 @@ export default function App() {
           tabs: s.tabs.map(tab => {
             if (!tab.flowDef) return tab
             const fiMeta = {
-              ...(m['FlowInput'] ?? { type: 'FlowInput', decorator: 'engine_node', is_exec_node: true, has_exec_in: false, has_exec_out: true, is_parallel: false, exec_outputs: ['exec_out'] }),
+              ...(m['OnStart'] ?? { type: 'OnStart', decorator: 'engine_node', is_exec_node: true, has_exec_in: false, has_exec_out: true, is_parallel: false, exec_outputs: ['exec_out'] }),
               outputs: Object.entries(tab.flowDef.inputs || {}).map(([name, type]) => ({ name, type, kind: 'output' as const, required: false })),
               inputs: [],
             }
@@ -101,7 +103,7 @@ export default function App() {
               ...tab,
               nodes: tab.nodes.map(n => {
                 const nodeType = (n.data as { nodeType: string }).nodeType
-                if (nodeType === 'FlowInput') return { ...n, data: { ...n.data, meta: fiMeta } }
+                if (nodeType === 'OnStart') return { ...n, data: { ...n.data, meta: fiMeta } }
                 if (nodeType === 'FlowOutput') return { ...n, data: { ...n.data, meta: foMeta } }
                 return { ...n, data: { ...n.data, meta: m[nodeType] ?? (n.data as { meta: unknown }).meta } }
               }),
@@ -176,7 +178,7 @@ export default function App() {
 
     // Meta sintética para FlowInput y FlowOutput con los nuevos pines
     const newFlowInputMeta = {
-      ...(catalog['FlowInput'] ?? { type: 'FlowInput', decorator: 'engine_node', is_exec_node: true, has_exec_in: false, has_exec_out: true, is_parallel: false, exec_outputs: ['exec_out'] }),
+      ...(catalog['OnStart'] ?? { type: 'OnStart', decorator: 'engine_node', is_exec_node: true, has_exec_in: false, has_exec_out: true, is_parallel: false, exec_outputs: ['exec_out'] }),
       outputs: Object.entries(inputs).map(([name, type]) => ({ name, type, kind: 'output' as const, required: false })),
       inputs: [],
     }
@@ -193,7 +195,7 @@ export default function App() {
         // Actualiza la meta de FlowInput/FlowOutput en los nodos del canvas
         nodes: t.nodes.map(n => {
           const nodeType = (n.data as { nodeType: string }).nodeType
-          if (nodeType === 'FlowInput') return { ...n, data: { ...n.data, meta: newFlowInputMeta } }
+          if (nodeType === 'OnStart') return { ...n, data: { ...n.data, meta: newFlowInputMeta } }
           if (nodeType === 'FlowOutput') return { ...n, data: { ...n.data, meta: newFlowOutputMeta } }
           return n
         }),
@@ -368,7 +370,22 @@ export default function App() {
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        <NodePalette catalog={catalog} />
+        {/* Sidebar izquierdo */}
+        <div style={{
+          width: 224,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRight: '1px solid var(--border)',
+          background: 'var(--card)',
+          flexShrink: 0,
+          overflow: 'hidden',
+        }}>
+          <NodePalette catalog={catalog} />
+          <VariablesPanel
+            variables={tab?.flowDef?.variables ?? []}
+            onChange={updateVariables}
+          />
+        </div>
         <FlowCanvas onSelectNode={setSelectedNodeId} onToast={addToast} />
         <PropertiesPanel
           selectedNodeId={selectedNodeId}

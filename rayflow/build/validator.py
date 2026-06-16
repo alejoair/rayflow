@@ -247,7 +247,7 @@ def _splice_subflow(sub_flat: FlowDef, cf_id: str, cf_def: NodeDef,
     for nd in nodes:
         if nd.subflow_of is not None:
             continue  # nodo de un subgrafo más profundo — ya empalmado
-        if nd.type in ("FlowInput", "OnStart", "OnEvent"):
+        if nd.type in ("OnStart", "OnEvent"):
             entry_id = nd.id
             nd.subflow_of = cf_id
             nd.iface = sub_iface
@@ -323,13 +323,13 @@ def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta
     flow_inputs = iface["inputs"] if iface else flow.inputs
     flow_outputs = iface["outputs"] if iface else flow.outputs
 
-    if meta.name in ("FlowInput", "OnEvent"):
+    if meta.name in ("OnStart", "OnEvent"):
         meta = copy.copy(meta)
         meta.outputs = list(meta.outputs) + [
             PinSpec(name=name, kind="data_out", type=type_str)
             for name, type_str in flow_inputs.items()
         ]
-        # En un FlowInput spliced, los mismos nombres son también data inputs:
+        # En un OnStart/OnEvent spliced, los mismos nombres son también data inputs:
         # entran del CallFlow y se reexponen como outputs al subgrafo.
         if node_def is not None and node_def.subflow_of is not None:
             meta.inputs = list(meta.inputs) + [
@@ -571,13 +571,13 @@ def _check_exec_cycles(nodes: dict[str, ResolvedNode]) -> None:
 def _find_entry(nodes: dict[str, ResolvedNode]) -> str:
     # Los entry/output de subgrafos spliced llevan subflow_of: no cuentan como
     # entrada/salida del flow raíz.
-    entry_types = {"OnStart", "FlowInput", "OnEvent"}
+    entry_types = {"OnStart", "OnEvent"}
     entries = [
         nid for nid, rn in nodes.items()
         if rn.meta.name in entry_types and rn.node_def.subflow_of is None
     ]
     if not entries:
-        raise BuildError("El flow no tiene nodo de entrada (OnStart, FlowInput u OnEvent)")
+        raise BuildError("El flow no tiene nodo de entrada (OnStart u OnEvent)")
     if len(entries) > 1:
         raise BuildError(f"El flow tiene más de un nodo de entrada: {entries}")
     return entries[0]

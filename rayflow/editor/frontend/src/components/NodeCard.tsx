@@ -83,8 +83,8 @@ export default function NodeCard({ data, selected, runStatus }: NodeCardProps) {
                 id={`data-in-${p.name}`}
                 style={{ background: 'var(--card)', borderColor: color, left: 6 }}
               />
-              <span className="rf-pin-label">{p.name}</span>
               <span className="rf-pin-type" style={{ color }}>{p.type}</span>
+              <span className="rf-pin-label">{p.name}</span>
             </div>
           )
         })}
@@ -92,8 +92,8 @@ export default function NodeCard({ data, selected, runStatus }: NodeCardProps) {
           const color = typeColor(p.type)
           return (
             <div key={p.name} className="rf-pin-row output" style={{ paddingRight: 24 }}>
-              <span className="rf-pin-type" style={{ color }}>{p.type}</span>
               <span className="rf-pin-label">{p.name}</span>
+              <span className="rf-pin-type" style={{ color }}>{p.type}</span>
               <Handle
                 type="source"
                 position={Position.Right}

@@ -155,7 +155,6 @@ body {
   position: relative;
   min-height: 24px;
 }
-.rf-pin-row.output { flex-direction: row-reverse; }
 .rf-pin-label { font-size: 11px; color: var(--muted-foreground); flex: 1; }
 .rf-pin-row.output .rf-pin-label { text-align: right; }
 .rf-pin-type { font-size: 10px; font-weight: 500; }

@@ -5,7 +5,7 @@ import {
   type Connection, type NodeTypes,
 } from '@xyflow/react'
 import { useFlowStore } from '@/store/flowStore'
-import { typeCheck } from '@/lib/api'
+import { typeCheck, type NodeSpec } from '@/lib/api'
 import NodeCard from './NodeCard'
 
 let nodeCounter = 1
@@ -70,8 +70,12 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
     const tgtPin = (params.targetHandle || '').replace('data-in-', '')
     const srcNode = tab?.nodes.find(n => n.id === params.source)
     const tgtNode = tab?.nodes.find(n => n.id === params.target)
-    const srcMeta = srcNode ? catalog[(srcNode.data as { nodeType: string }).nodeType] : null
-    const tgtMeta = tgtNode ? catalog[(tgtNode.data as { nodeType: string }).nodeType] : null
+    // Usar la meta del nodo (puede ser enriquecida para OnStart/FlowOutput)
+    // y caer al catálogo global solo si no está disponible en el nodo
+    const srcMeta = (srcNode?.data as { meta?: NodeSpec }).meta
+      ?? (srcNode ? catalog[(srcNode.data as { nodeType: string }).nodeType] : null)
+    const tgtMeta = (tgtNode?.data as { meta?: NodeSpec }).meta
+      ?? (tgtNode ? catalog[(tgtNode.data as { nodeType: string }).nodeType] : null)
     const fromType = srcMeta?.outputs?.find(p => p.name === srcPin)?.type || 'Any'
     const toType = tgtMeta?.inputs?.find(p => p.name === tgtPin)?.type || 'Any'
 

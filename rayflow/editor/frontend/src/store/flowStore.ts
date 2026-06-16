@@ -58,6 +58,7 @@ interface FlowStore {
   setEdges: (edges: Edge[]) => void
   setDirty: (dirty: boolean) => void
   setValidationErrors: (errors: string[]) => void
+  updateVariables: (vars: FlowDef['variables']) => void
 
   addRun: (tabName: string, run: Run) => void
   updateRun: (tabName: string, runId: string, patch: Partial<Run>) => void
@@ -186,6 +187,18 @@ export const useFlowStore = create<FlowStore>()(
         const name = get().activeTabName
         if (!name) return
         set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, dirty }) }))
+      },
+
+      updateVariables: (vars) => {
+        const name = get().activeTabName
+        if (!name) return
+        set(s => ({
+          tabs: s.tabs.map(t => t.name !== name ? t : {
+            ...t,
+            flowDef: t.flowDef ? { ...t.flowDef, variables: vars } : t.flowDef,
+            dirty: true,
+          }),
+        }))
       },
 
       setValidationErrors: (errors) => {
