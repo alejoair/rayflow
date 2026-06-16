@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/* Mapeo de tokens shadcn → variables de tema Tailwind v4.
+   Tailwind v4 usa --color-* para bg-*, text-*, border-*, etc.
+   Esto permite que clases como bg-primary, text-muted-foreground funcionen. */
+@theme {
+  --color-background:          #13131f;
+  --color-foreground:          #e2e8f0;
+  --color-card:                #1e1e2e;
+  --color-card-foreground:     #e2e8f0;
+  --color-popover:             #1e1e2e;
+  --color-popover-foreground:  #e2e8f0;
+  --color-primary:             #6366f1;
+  --color-primary-foreground:  #ffffff;
+  --color-secondary:           #27273a;
+  --color-secondary-foreground:#e2e8f0;
+  --color-muted:               #27273a;
+  --color-muted-foreground:    #94a3b8;
+  --color-accent:              #27273a;
+  --color-accent-foreground:   #e2e8f0;
+  --color-destructive:         #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border:              #383854;
+  --color-input:               #27273a;
+  --color-ring:                #6366f1;
+  --radius: 0.5rem;
+}
+
+:root {
+  --exec-color: #f59e0b;
+  --background: #13131f;
+  --foreground: #e2e8f0;
+  --card: #1e1e2e;
+  --card-foreground: #e2e8f0;
+  --popover: #1e1e2e;
+  --popover-foreground: #e2e8f0;
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: #27273a;
+  --secondary-foreground: #e2e8f0;
+  --muted: #27273a;
+  --muted-foreground: #94a3b8;
+  --accent: #27273a;
+  --accent-foreground: #e2e8f0;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #383854;
+  --input: #27273a;
+  --ring: #6366f1;
+  --radius: 0.5rem;
+
+  --type-int: #6366f1;
+  --type-float: #8b5cf6;
+  --type-str: #10b981;
+  --type-bool: #f59e0b;
+  --type-list: #06b6d4;
+  --type-dict: #ec4899;
+  --type-any: #6b7280;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root { height: 100vh; display: flex; flex-direction: column; }
+
+/* ── React Flow overrides ── */
+.react-flow__background { background: var(--background) !important; }
+.react-flow__minimap {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+}
+.react-flow__controls {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+}
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  fill: var(--muted-foreground) !important;
+}
+.react-flow__controls-button:hover { fill: var(--foreground) !important; }
+.react-flow__edge-path { stroke-width: 2 !important; }
+.react-flow__handle {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  border: 2px solid currentColor !important;
+  background: var(--card) !important;
+}
+
+/* ── Node card ── */
+.rf-node {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  min-width: 160px;
+  font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  transition: border-color 0.15s;
+}
+.rf-node.selected { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+.rf-node.has-error { border-color: var(--destructive); }
+.rf-node.node-running {
+  border-color: var(--exec-color);
+  animation: pulse-exec 1s infinite;
+}
+.rf-node.node-done { border-color: #10b981; }
+
+@keyframes pulse-exec {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245,158,11,0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(245,158,11,0.5); }
+}
+
+.rf-node-header {
+  background: var(--secondary);
+  border-radius: 8px 8px 0 0;
+  padding: 7px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.rf-node-header-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--exec-color);
+  flex-shrink: 0;
+}
+.rf-node-body { padding: 6px 0; }
+.rf-pin-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 10px;
+  gap: 6px;
+  position: relative;
+  min-height: 24px;
+}
+.rf-pin-row.output { flex-direction: row-reverse; }
+.rf-pin-label { font-size: 11px; color: var(--muted-foreground); flex: 1; }
+.rf-pin-row.output .rf-pin-label { text-align: right; }
+.rf-pin-type { font-size: 10px; font-weight: 500; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

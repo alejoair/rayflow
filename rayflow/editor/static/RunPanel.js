@@ -1,5 +1,6 @@
-import { html } from 'htm/react';
-import { useState } from 'react';
+import htm from 'htm';
+import { createElement, useState } from 'react';
+const html = htm.bind(createElement);
 import { runFlow } from './api.js';
 
 export default function RunPanel({ activeFlow, validationErrors }) {
@@ -52,31 +53,29 @@ export default function RunPanel({ activeFlow, validationErrors }) {
           <div class="run-section">
             <div class="run-label">Inputs</div>
             ${Object.entries(flowInputs).map(([name, type]) => html`
-              <div key=${name} class="prop-field" style=${{ marginBottom: 6 }}>
-                <label style=${{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3, display:'block' }}>
-                  ${name} <span style=${{ color: 'var(--type-any)' }}>(${type})</span>
-                </label>
-                <input
-                  type=${type === 'int' || type === 'float' ? 'number' : 'text'}
-                  class="prop-input"
-                  style=${{ width: 140 }}
-                  placeholder="${name}..."
-                  value=${inputs[name] ?? ''}
-                  onInput=${e => setInput(name, e.target.value)}
-                />
-              </div>
+              <sl-input
+                key=${name}
+                label=${`${name} (${type})`}
+                type=${type === 'int' || type === 'float' ? 'number' : 'text'}
+                size="small"
+                style=${{ width: 160 }}
+                placeholder="${name}..."
+                value=${inputs[name] ?? ''}
+                onsl-input=${e => setInput(name, e.target.value)}
+              ></sl-input>
             `)}
           </div>
         `}
 
-        <div class="run-section">
-          <button
-            class="btn btn-primary"
-            onClick=${handleRun}
-            disabled=${running || validationErrors.length > 0}
+        <div class="run-section" style=${{ justifyContent: 'flex-end', paddingTop: Object.keys(flowInputs).length ? 18 : 0 }}>
+          <sl-button
+            variant="primary"
+            onclick=${handleRun}
+            ?disabled=${running || validationErrors.length > 0}
+            size="small"
           >
             ${running ? '⏳ Ejecutando...' : '▶ Ejecutar'}
-          </button>
+          </sl-button>
           ${validationErrors.length > 0 && html`
             <div style=${{ fontSize: 11, color: 'var(--error-color)', marginTop: 4 }}>
               ${validationErrors.length} error(es) de validación

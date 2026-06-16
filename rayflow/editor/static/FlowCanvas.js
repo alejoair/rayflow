@@ -1,5 +1,6 @@
-import { html } from 'htm/react';
-import { useCallback, useRef } from 'react';
+import htm from 'htm';
+import { createElement, useCallback, useRef } from 'react';
+const html = htm.bind(createElement);
 import {
   ReactFlow, Background, Controls, MiniMap,
   addEdge, BackgroundVariant,

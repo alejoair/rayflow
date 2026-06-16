@@ -21,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-rayflow = "rayflow.cli:main"
+rayflow = "rayflow.cli.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]

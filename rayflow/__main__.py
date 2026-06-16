@@ -1,4 +1,4 @@
-from rayflow.cli import main
+from rayflow.cli.main import cli
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli())

@@ -1,4 +1,6 @@
-:root {
+:root,
+.sl-theme-dark {
+  /* Rayflow tokens */
   --exec-color: #f59e0b;
   --type-int: #6366f1;
   --type-float: #8b5cf6;
@@ -16,6 +18,27 @@
   --text-muted: #94a3b8;
   --accent: #6366f1;
   --success: #10b981;
+
+  /* Shoelace theme overrides */
+  --sl-color-primary-600: #6366f1;
+  --sl-color-primary-700: #4f46e5;
+  --sl-color-neutral-0: var(--surface);
+  --sl-color-neutral-100: var(--surface2);
+  --sl-color-neutral-200: var(--border);
+  --sl-color-neutral-700: var(--text-muted);
+  --sl-color-neutral-900: var(--text);
+  --sl-input-background-color: var(--surface2);
+  --sl-input-border-color: var(--border);
+  --sl-input-color: var(--text);
+  --sl-input-font-size-small: 12px;
+  --sl-input-height-small: 28px;
+  --sl-panel-background-color: var(--surface);
+  --sl-panel-border-color: var(--border);
+  --sl-overlay-background-color: rgba(0,0,0,0.6);
+  --sl-z-index-dialog: 1000;
+  --sl-border-radius-medium: 8px;
+  --sl-font-size-small: 12px;
+  --sl-font-size-medium: 13px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -150,50 +173,8 @@ body {
 
 /* ── Flow Manager (header) ── */
 .logo { font-weight: 700; font-size: 14px; color: var(--accent); margin-right: 4px; }
-
-.btn {
-  padding: 5px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface2);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 0.1s;
-  white-space: nowrap;
-}
-.btn:hover { background: var(--border); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { background: #4f46e5; }
-.btn-danger { background: #450a0a; border-color: #7f1d1d; color: #fca5a5; }
-.btn-danger:hover { background: #7f1d1d; }
-.btn-sm { padding: 3px 8px; font-size: 11px; }
-
-.flow-select {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 5px 10px;
-  font-size: 12px;
-  outline: none;
-  min-width: 180px;
-}
-.flow-select:focus { border-color: var(--accent); }
-
 .header-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
 .header-spacer { flex: 1; }
-
-.status-badge {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 20px;
-  font-weight: 500;
-}
-.status-valid { background: #052e16; color: #6ee7b7; }
-.status-invalid { background: #450a0a; color: #fca5a5; }
-.status-unknown { background: var(--surface2); color: var(--text-muted); }
 
 /* ── Canvas ── */
 .canvas-wrap {
@@ -284,24 +265,6 @@ body {
 .prop-section:last-child { border-bottom: none; }
 .prop-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; font-weight: 600; }
 
-.prop-field { margin-bottom: 8px; }
-.prop-field label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
-.prop-input {
-  width: 100%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text);
-  padding: 5px 8px;
-  font-size: 12px;
-  outline: none;
-  font-family: inherit;
-}
-.prop-input:focus { border-color: var(--accent); }
-.prop-input.textarea { resize: vertical; min-height: 60px; font-family: monospace; font-size: 11px; }
-.prop-checkbox { display: flex; align-items: center; gap: 6px; }
-.prop-checkbox input { accent-color: var(--accent); width: 14px; height: 14px; }
-
 .no-selection {
   padding: 24px 16px;
   text-align: center;
@@ -333,28 +296,6 @@ body {
 }
 .run-output.error { border-color: var(--error-color); color: #fca5a5; }
 .run-output.success { border-color: var(--success); color: #d1fae5; }
-
-/* ── Modal ── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  min-width: 360px;
-  max-width: 480px;
-  width: 90%;
-}
-.modal-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
-.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
 /* ── Validation errors ── */
 .error-list { padding: 8px 12px; }

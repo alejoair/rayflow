@@ -1,5 +1,6 @@
-import { html } from 'htm/react';
-import { useState } from 'react';
+import htm from 'htm';
+import { createElement, useState, useRef, useEffect } from 'react';
+const html = htm.bind(createElement);
 import { createFlow, deleteFlow } from './api.js';
 
 function NewFlowModal({ onClose, onCreate }) {
@@ -7,6 +8,16 @@ function NewFlowModal({ onClose, onCreate }) {
   const [inputsRaw, setInputsRaw] = useState('{}');
   const [outputsRaw, setOutputsRaw] = useState('{}');
   const [err, setErr] = useState('');
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (el) {
+      el.show();
+      el.addEventListener('sl-after-hide', onClose);
+      return () => el.removeEventListener('sl-after-hide', onClose);
+    }
+  }, []);
 
   async function handleCreate() {
     setErr('');
@@ -17,33 +28,62 @@ function NewFlowModal({ onClose, onCreate }) {
     try {
       const flow = await createFlow({ name: name.trim(), version: '1', inputs, outputs, variables: [], events: [], nodes: [] });
       onCreate(flow);
-      onClose();
+      dialogRef.current?.hide();
     } catch (e) { setErr(e.message); }
   }
 
   return html`
-    <div class="modal-overlay" onClick=${e => e.target === e.currentTarget && onClose()}>
-      <div class="modal">
-        <div class="modal-title">Nuevo flow</div>
-        <div class="prop-field">
-          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Nombre</label>
-          <input class="prop-input" value=${name} onInput=${e => setName(e.target.value)} placeholder="mi_flow" autoFocus />
-        </div>
-        <div class="prop-field">
-          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Inputs JSON <span style=${{ color:'var(--text-muted)' }}>ej: {"x":"int"}</span></label>
-          <textarea class="prop-input textarea" style=${{ height:56 }} value=${inputsRaw} onInput=${e => setInputsRaw(e.target.value)} />
-        </div>
-        <div class="prop-field">
-          <label style=${{ display:'block', marginBottom:3, fontSize:12 }}>Outputs JSON</label>
-          <textarea class="prop-input textarea" style=${{ height:56 }} value=${outputsRaw} onInput=${e => setOutputsRaw(e.target.value)} />
-        </div>
-        ${err && html`<div style=${{ color:'var(--error-color)', fontSize:12, marginTop:6 }}>${err}</div>`}
-        <div class="modal-footer">
-          <button class="btn" onClick=${onClose}>Cancelar</button>
-          <button class="btn btn-primary" onClick=${handleCreate}>Crear</button>
-        </div>
+    <sl-dialog ref=${dialogRef} label="Nuevo flow" style=${{ '--width': '420px' }}>
+      <div style=${{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <sl-input
+          label="Nombre"
+          placeholder="mi_flow"
+          value=${name}
+          onsl-input=${e => setName(e.target.value)}
+          autofocus
+        ></sl-input>
+        <sl-textarea
+          label='Inputs JSON  (ej: {"x":"int"})'
+          rows="2"
+          value=${inputsRaw}
+          onsl-input=${e => setInputsRaw(e.target.value)}
+        ></sl-textarea>
+        <sl-textarea
+          label="Outputs JSON"
+          rows="2"
+          value=${outputsRaw}
+          onsl-input=${e => setOutputsRaw(e.target.value)}
+        ></sl-textarea>
+        ${err && html`<sl-alert variant="danger" open>${err}</sl-alert>`}
       </div>
-    </div>
+      <div slot="footer" style=${{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <sl-button onclick=${() => dialogRef.current?.hide()}>Cancelar</sl-button>
+        <sl-button variant="primary" onclick=${handleCreate}>Crear</sl-button>
+      </div>
+    </sl-dialog>
+  `;
+}
+
+function DeleteModal({ name, onClose, onConfirm }) {
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (el) {
+      el.show();
+      el.addEventListener('sl-after-hide', onClose);
+      return () => el.removeEventListener('sl-after-hide', onClose);
+    }
+  }, []);
+
+  return html`
+    <sl-dialog ref=${dialogRef} label='¿Borrar "${name}"?'>
+      <p style=${{ fontSize: 13, color: 'var(--text-muted)' }}>Esta acción no se puede deshacer.</p>
+      <div slot="footer" style=${{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <sl-button onclick=${() => dialogRef.current?.hide()}>Cancelar</sl-button>
+        <sl-button variant="danger" onclick=${onConfirm}>Borrar</sl-button>
+      </div>
+    </sl-dialog>
   `;
 }
 
@@ -67,44 +107,40 @@ export default function FlowManager({ flows, activeFlow, onSelectFlow, onFlowCre
       <span class="logo">Rayflow</span>
       <div class="header-sep"></div>
 
-      <select class="flow-select" value=${activeFlow?.name ?? ''} onChange=${e => onSelectFlow(e.target.value)}>
-        <option value="">— Abrir flow —</option>
-        ${flows.map(f => html`<option key=${f.name} value=${f.name}>${f.name}</option>`)}
-      </select>
+      <sl-select
+        value=${activeFlow?.name ?? ''}
+        placeholder="— Abrir flow —"
+        style=${{ minWidth: 200 }}
+        onsl-change=${e => onSelectFlow(e.target.value)}
+        size="small"
+        clearable
+      >
+        ${flows.map(f => html`<sl-option key=${f.name} value=${f.name}>${f.name}</sl-option>`)}
+      </sl-select>
 
-      <button class="btn btn-sm" onClick=${() => setShowNew(true)}>+ Nuevo</button>
+      <sl-button size="small" onclick=${() => setShowNew(true)}>+ Nuevo</sl-button>
       <div class="header-sep"></div>
 
       ${activeFlow && html`
-        <button class="btn btn-sm btn-primary" onClick=${onSave} disabled=${saving}>${saving ? 'Guardando…' : '💾 Guardar'}</button>
-        <button class="btn btn-sm" onClick=${onValidate}>✓ Validar</button>
-        <button class="btn btn-sm btn-danger" onClick=${() => setConfirmDelete(true)}>🗑</button>
+        <sl-button size="small" variant="primary" onclick=${onSave} ?disabled=${saving}>
+          ${saving ? 'Guardando…' : '💾 Guardar'}
+        </sl-button>
+        <sl-button size="small" onclick=${onValidate}>✓ Validar</sl-button>
+        <sl-button size="small" variant="danger" onclick=${() => setConfirmDelete(true)}>🗑</sl-button>
         <div class="header-sep"></div>
       `}
 
       <div class="header-spacer"></div>
 
       ${activeFlow && html`
-        <span class=${'status-badge status-' + validStatus}>
+        <sl-badge variant=${validStatus === 'valid' ? 'success' : validStatus === 'invalid' ? 'danger' : 'neutral'} pill>
           ${validStatus === 'valid' ? '✓ Válido' : validStatus === 'invalid' ? `✗ ${validationErrors.length} error(es)` : '—'}
-        </span>
+        </sl-badge>
       `}
-      ${!activeFlow && html`<span style=${{ color:'var(--text-muted)', fontSize:12 }}>Ningún flow abierto</span>`}
+      ${!activeFlow && html`<span style=${{ color: 'var(--text-muted)', fontSize: 12 }}>Ningún flow abierto</span>`}
     </header>
 
     ${showNew && html`<${NewFlowModal} onClose=${() => setShowNew(false)} onCreate=${onFlowCreated} />`}
-
-    ${confirmDelete && html`
-      <div class="modal-overlay" onClick=${e => e.target===e.currentTarget && setConfirmDelete(false)}>
-        <div class="modal">
-          <div class="modal-title">¿Borrar "${activeFlow?.name}"?</div>
-          <p style=${{ fontSize:13, color:'var(--text-muted)', marginTop:8 }}>Esta acción no se puede deshacer.</p>
-          <div class="modal-footer">
-            <button class="btn" onClick=${() => setConfirmDelete(false)}>Cancelar</button>
-            <button class="btn btn-danger" onClick=${handleDelete}>Borrar</button>
-          </div>
-        </div>
-      </div>
-    `}
+    ${confirmDelete && html`<${DeleteModal} name=${activeFlow?.name} onClose=${() => setConfirmDelete(false)} onConfirm=${handleDelete} />`}
   `;
 }

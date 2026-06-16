@@ -1,5 +1,6 @@
-import { html } from 'htm/react';
-import { useState, useMemo } from 'react';
+import htm from 'htm';
+import { createElement, useState, useMemo } from 'react';
+const html = htm.bind(createElement);
 
 const BUILTIN_TYPES = new Set([
   'OnStart','FlowInput','FlowOutput','Branch','Sequence','Parallel','ForEach','Map',

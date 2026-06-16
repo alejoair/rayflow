@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import Response
 
 from rayflow.build.validator import BuildError, build
 from rayflow.nodes.registry import get_catalog
@@ -194,10 +195,11 @@ async def update_flow(name: str, flow_data: Any = Body(...)) -> dict[str, Any]:
 
 
 @router.delete("/flows/{name}", status_code=204)
-async def delete_editor_flow(name: str) -> None:
+async def delete_editor_flow(name: str) -> Response:
     """Elimina un flow del directorio flows/."""
     if not delete_flow(name):
         raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +266,7 @@ async def serve_flow_events(name: str) -> dict[str, Any]:
 
 
 @router.delete("/flows/{name}/serve-events/{graph_id}", status_code=204)
-async def stop_flow_events(name: str, graph_id: str) -> None:
+async def stop_flow_events(name: str, graph_id: str) -> Response:
     """Desuscribe un flow residente del bus de eventos."""
     from rayflow.api import stop
 
@@ -276,3 +278,4 @@ async def stop_flow_events(name: str, graph_id: str) -> None:
         stop(graph_id, flow_def.events)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error desuscribiendo el flow: {e}")
+    return Response(status_code=204)

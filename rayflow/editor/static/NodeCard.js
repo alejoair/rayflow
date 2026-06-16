@@ -1,4 +1,6 @@
-import { html } from 'htm/react';
+import htm from 'htm';
+import { createElement } from 'react';
+const html = htm.bind(createElement);
 import { Handle, Position } from '@xyflow/react';
 import { typeColor } from './translator.js';
 

@@ -1,5 +1,6 @@
-import { html } from 'htm/react';
-import { useState, useEffect, useCallback } from 'react';
+import htm from 'htm';
+import { createElement, useState, useEffect, useCallback } from 'react';
+const html = htm.bind(createElement);
 import { useNodesState, useEdgesState, addEdge } from '@xyflow/react';
 import { getNodes, getFlows, getFlow, updateFlow, validateFlow } from './api.js';
 import { flowDefToRF, rfToFlowDef } from './translator.js';
