@@ -27,5 +27,8 @@ rayflow = "rayflow.cli.main:cli"
 where = ["."]
 include = ["rayflow*"]
 
+[tool.setuptools.package-data]
+"rayflow.editor.static" = ["dist/**/*", "*.html", "*.js", "*.css"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
