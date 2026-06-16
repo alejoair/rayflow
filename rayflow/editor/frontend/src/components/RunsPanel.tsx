@@ -14,7 +14,7 @@ function statusDot(status: Run['status']) {
 }
 
 function statusLabel(status: Run['status']) {
-  if (status === 'running') return 'corriendo'
+  if (status === 'running') return 'ejecutando'
   if (status === 'done') return 'listo'
   if (status === 'error') return 'error'
   return 'idle'
@@ -125,7 +125,7 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
             disabled={hasErrors || isBusy}
             style={{ height: 32, fontSize: 13, flex: 1 }}
           >
-            {preparing ? '⏳ Preparando…' : isRunning ? '⏳ Corriendo…' : '▶ Ejecutar'}
+            {isBusy ? '⏳ Ejecutando…' : '▶ Ejecutar'}
           </Button>
           {isLoaded && !isBusy && (
             <button

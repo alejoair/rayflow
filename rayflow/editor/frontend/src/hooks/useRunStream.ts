@@ -86,105 +86,130 @@ export function useRunStream(tabName: string) {
       }))
     }
 
-    // Cola de eventos recibidos del servidor
-    const eventQueue: RunEvent[] = []
+    // ─── Sistema de agrupación por ventana de tiempo ─────────────────────────
+    // Eventos que llegan dentro de BATCH_WINDOW_MS entre sí se reproducen juntos
+    // (son nodos paralelos). Después de cada grupo se espera animMinMs.
+    const BATCH_WINDOW_MS = 50
+
+    const groups: RunEvent[][] = []
+    let pendingGroup: RunEvent[] = []
+    let groupTimer: ReturnType<typeof setTimeout> | null = null
     let playing = false
 
-    // Reproduce la cola secuencialmente: cada evento significativo espera animMinMs
-    // antes de aplicar el siguiente. Así la ejecución siempre se ve paso a paso.
-    const playNext = () => {
-      if (eventQueue.length === 0) { playing = false; return }
+    const playNextGroup = () => {
+      if (groups.length === 0) { playing = false; return }
       playing = true
-      const evt = eventQueue.shift()!
+      const group = groups.shift()!
 
-      console.log('[SSE queue]', evt)
-      patchRun(r => ({ logs: [...r.logs, evt] }))
+      console.log('[anim] grupo', group.map(e => e.event))
 
-      if (evt.event === 'node_start' && evt.node_id) {
-        const nodeId = evt.node_id
-        patchRun(r => ({ activeNodes: new Set([...r.activeNodes, nodeId]) }))
-        setTimeout(playNext, animMinMs)
+      // ¿Hay un evento terminal en el grupo?
+      const terminal = group.find(e => e.event === 'flow_done' || e.event === 'flow_error')
 
-      } else if (evt.event === 'node_done' && evt.node_id) {
-        const nodeId = evt.node_id
-        const currentRun = useFlowStore.getState().tabs.find(t => t.name === tabName)
-          ?.runs.find(r => r.runId === runId)
+      // Aplicar todos los eventos no-terminales del grupo al store simultáneamente
+      const nonTerminal = group.filter(e => e.event !== 'flow_done' && e.event !== 'flow_error')
+      if (nonTerminal.length > 0) applyGroup(nonTerminal)
 
-        // Si el nodo ya está en doneNodes, el engine lo reporta tarde (padre que espera hijos)
-        // No lo re-animamos, simplemente pasamos al siguiente evento
-        if (currentRun?.doneNodes.has(nodeId)) {
-          playNext()
-          return
-        }
-
-        // Activar data edges salientes
-        const tabEdges = useFlowStore.getState().tabs.find(t => t.name === tabName)?.edges ?? []
-        const dataEdgeKeys = tabEdges
-          .filter(e => e.source === nodeId && e.type !== 'exec' && !e.id?.startsWith('exec-'))
-          .map(e => `data:${e.source}-${e.target}`)
-
-        // Si el nodo no tuvo node_start (ej: FlowOutput), lo animamos brevemente como activo antes de done
-        const needsStart = !currentRun?.activeNodes.has(nodeId)
-        if (needsStart) {
-          patchRun(r => ({ activeNodes: new Set([...r.activeNodes, nodeId]) }))
-        }
-
+      if (terminal) {
         setTimeout(() => {
-          patchRun(r => ({
-            activeNodes: new Set([...r.activeNodes].filter(n => n !== nodeId)),
-            doneNodes: new Set([...r.doneNodes, nodeId]),
-            activeEdges: dataEdgeKeys.length > 0 ? new Set([...r.activeEdges, ...dataEdgeKeys]) : r.activeEdges,
-          }))
-          if (dataEdgeKeys.length > 0) {
-            setTimeout(() => patchRun(r => ({
-              activeEdges: new Set([...r.activeEdges].filter(k => !dataEdgeKeys.includes(k))),
-            })), animMinMs)
+          if (terminal.event === 'flow_done') {
+            const result = (terminal as unknown as Record<string, unknown>).outputs as Record<string, unknown>
+              ?? (terminal as unknown as Record<string, unknown>).result as Record<string, unknown>
+            patchRun(() => ({ status: 'done', result, activeNodes: new Set(), activeEdges: new Set() }))
+          } else {
+            const error = (terminal as unknown as Record<string, unknown>).error as string
+            patchRun(() => ({ status: 'error', error, activeNodes: new Set(), activeEdges: new Set() }))
           }
-          setTimeout(playNext, animMinMs)
-        }, needsStart ? animMinMs : 0)
-
-      } else if (evt.event === 'edge_fire' && evt.from && evt.to) {
-        const isExec = evt.pin?.startsWith('exec') ?? true
-        const edgeKey = `${isExec ? 'exec' : 'data'}:${evt.from}-${evt.to}`
-        patchRun(r => ({ activeEdges: new Set([...r.activeEdges, edgeKey]) }))
-        setTimeout(() => {
-          patchRun(r => ({
-            activeEdges: new Set([...r.activeEdges].filter(e => e !== edgeKey)),
-          }))
-          playNext()
+          playing = false
         }, animMinMs)
-
-      } else if (evt.event === 'flow_done') {
-        const result = evt.outputs ?? (evt as unknown as Record<string, unknown>).result as Record<string, unknown>
-        patchRun(() => ({
-          status: 'done',
-          result,
-          activeNodes: new Set(),
-          activeEdges: new Set(),
-        }))
-        playing = false
-
-      } else if (evt.event === 'flow_error') {
-        const error = (evt as unknown as Record<string, unknown>).error as string
-        patchRun(() => ({
-          status: 'error',
-          error,
-          activeNodes: new Set(),
-          activeEdges: new Set(),
-        }))
-        playing = false
-
-      } else {
-        // evento desconocido — pasar inmediatamente al siguiente
-        playNext()
+        return
       }
+
+      setTimeout(playNextGroup, animMinMs)
+    }
+
+    const flushGroup = () => {
+      groupTimer = null
+      if (pendingGroup.length === 0) return
+      groups.push([...pendingGroup])
+      pendingGroup = []
+      if (!playing) playNextGroup()
     }
 
     const enqueue = (evt: RunEvent) => {
-      eventQueue.push(evt)
-      if (!playing) playNext()
+      pendingGroup.push(evt)
+      if (groupTimer !== null) clearTimeout(groupTimer)
+      groupTimer = setTimeout(flushGroup, BATCH_WINDOW_MS)
     }
 
+    const applyGroup = (group: RunEvent[]) => {
+      const tabEdges = useFlowStore.getState().tabs.find(t => t.name === tabName)?.edges ?? []
+
+      const edgeKeysToRemove: string[] = []
+
+      patchRun(r => {
+        const activeNodes = new Set(r.activeNodes)
+        const doneNodes = new Set(r.doneNodes)
+        const activeEdges = new Set(r.activeEdges)
+        const logs = [...r.logs, ...group]
+
+        for (const evt of group) {
+          if (evt.event === 'node_start' && evt.node_id) {
+            const nodeId = evt.node_id
+            activeNodes.add(nodeId)
+            // Nodos sin exec_in (ej: OnStart): emitir data edges salientes desde el inicio
+            const hasExecIn = tabEdges.some(e => e.target === nodeId && (e.type === 'exec' || e.id?.startsWith('exec-')))
+            if (!hasExecIn) {
+              tabEdges
+                .filter(e => e.source === nodeId && e.type !== 'exec' && !e.id?.startsWith('exec-'))
+                .forEach(e => {
+                  const k = `data:${e.source}-${e.target}`
+                  activeEdges.add(k)
+                  edgeKeysToRemove.push(k)
+                })
+            }
+          }
+
+          if (evt.event === 'node_done' && evt.node_id) {
+            const nodeId = evt.node_id
+            if (doneNodes.has(nodeId)) continue  // engine lo reporta tarde (padre esperando hijos)
+            // Nodo que no tuvo node_start (ej: FlowOutput): flash breve como activo
+            if (!activeNodes.has(nodeId)) activeNodes.add(nodeId)
+            activeNodes.delete(nodeId)
+            doneNodes.add(nodeId)
+            // Data edges salientes de nodos con exec_in
+            const hasExecIn = tabEdges.some(e => e.target === nodeId && (e.type === 'exec' || e.id?.startsWith('exec-')))
+            if (hasExecIn) {
+              tabEdges
+                .filter(e => e.source === nodeId && e.type !== 'exec' && !e.id?.startsWith('exec-'))
+                .forEach(e => {
+                  const k = `data:${e.source}-${e.target}`
+                  activeEdges.add(k)
+                  edgeKeysToRemove.push(k)
+                })
+            }
+          }
+
+          if (evt.event === 'edge_fire' && evt.from && evt.to) {
+            const isExec = evt.pin?.startsWith('exec') ?? true
+            const k = `${isExec ? 'exec' : 'data'}:${evt.from}-${evt.to}`
+            activeEdges.add(k)
+            edgeKeysToRemove.push(k)
+          }
+        }
+
+        return { logs, activeNodes, doneNodes, activeEdges }
+      })
+
+      // Limpiar edges activados en este grupo tras animMinMs
+      if (edgeKeysToRemove.length > 0) {
+        setTimeout(() => patchRun(r => ({
+          activeEdges: new Set([...r.activeEdges].filter(k => !edgeKeysToRemove.includes(k))),
+        })), animMinMs)
+      }
+    }
+
+    // ─── Lectura del stream SSE ───────────────────────────────────────────────
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -203,6 +228,12 @@ export function useRunStream(tabName: string) {
         console.log('[SSE]', evt)
         enqueue(evt)
       }
+    }
+
+    // Forzar flush del último grupo al cerrar el stream
+    if (groupTimer !== null) {
+      clearTimeout(groupTimer)
+      flushGroup()
     }
 
     return runId
