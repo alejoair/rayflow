@@ -97,6 +97,26 @@ body {
   stroke-width: 3 !important;
   filter: drop-shadow(0 0 4px rgba(99,102,241,0.6));
 }
+
+/* Exec edges: punteado en reposo */
+.react-flow__edge.rf-edge-exec .react-flow__edge-path {
+  stroke: var(--exec-color) !important;
+  stroke-width: 2.5 !important;
+  stroke-dasharray: 6 3 !important;
+}
+/* Exec edge activo: sólido + glow + dash animado via react-flow__edge--animated */
+.react-flow__edge.rf-edge-active-exec .react-flow__edge-path {
+  stroke: var(--exec-color) !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 6 3 !important;
+  filter: drop-shadow(0 0 6px rgba(245,158,11,0.9)) !important;
+}
+/* Data edge activo: glow azul */
+.react-flow__edge.rf-edge-active-data .react-flow__edge-path {
+  stroke: var(--primary) !important;
+  stroke-width: 2.5 !important;
+  filter: drop-shadow(0 0 5px rgba(99,102,241,0.8)) !important;
+}
 .react-flow__handle {
   width: 10px !important;
   height: 10px !important;

@@ -46,6 +46,9 @@ interface FlowStore {
   flowList: FlowMeta[]
   setFlowList: (list: FlowMeta[]) => void
 
+  animMinMs: number
+  setAnimMinMs: (ms: number) => void
+
   tabs: FlowTab[]
   activeTabName: string | null
 
@@ -127,6 +130,9 @@ export const useFlowStore = create<FlowStore>()(
 
       flowList: [],
       setFlowList: (flowList) => set({ flowList }),
+
+      animMinMs: 600,
+      setAnimMinMs: (animMinMs) => set({ animMinMs }),
 
       tabs: [],
       activeTabName: null,
@@ -249,6 +255,7 @@ export const useFlowStore = create<FlowStore>()(
       partialize: (state) => ({
         tabs: state.tabs,
         activeTabName: state.activeTabName,
+        animMinMs: state.animMinMs,
       }),
       // Al rehidratar, los Sets dentro de los runs vienen como arrays — los convertimos de vuelta
       onRehydrateStorage: () => (state) => {

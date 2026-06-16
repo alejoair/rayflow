@@ -31,6 +31,7 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
   const { setActiveRun } = useFlowStore()
   const { startRun, unload } = useRunStream(activeFlow?.name ?? '')
   const [inputs, setInputs] = useState<Record<string, string>>({})
+  const [preparing, setPreparing] = useState(false)
 
   if (!activeFlow || !tab) {
     return (
@@ -51,20 +52,27 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
   const isRunning = tab.runs.some(r => r.status === 'running')
   const hasErrors = validationErrors.length > 0
   const isLoaded = tab.loaded
+  const isBusy = preparing || isRunning
 
   async function handleRun() {
-    const coerced: Record<string, unknown> = {}
-    Object.entries(flowInputs).forEach(([name, type]) => {
-      const raw = inputs[name]
-      if (!raw && raw !== '0') return
-      const t = type.toLowerCase()
-      if (t === 'int') coerced[name] = parseInt(raw, 10)
-      else if (t === 'float') coerced[name] = parseFloat(raw)
-      else if (t === 'bool') coerced[name] = raw === 'true'
-      else if (t === 'list' || t === 'dict') { try { coerced[name] = JSON.parse(raw) } catch { coerced[name] = raw } }
-      else coerced[name] = raw
-    })
-    await startRun(coerced, { dirty: tab?.dirty ?? false, loaded: tab?.loaded ?? false, onSave })
+    if (isBusy) return
+    setPreparing(true)
+    try {
+      const coerced: Record<string, unknown> = {}
+      Object.entries(flowInputs).forEach(([name, type]) => {
+        const raw = inputs[name]
+        if (!raw && raw !== '0') return
+        const t = type.toLowerCase()
+        if (t === 'int') coerced[name] = parseInt(raw, 10)
+        else if (t === 'float') coerced[name] = parseFloat(raw)
+        else if (t === 'bool') coerced[name] = raw === 'true'
+        else if (t === 'list' || t === 'dict') { try { coerced[name] = JSON.parse(raw) } catch { coerced[name] = raw } }
+        else coerced[name] = raw
+      })
+      await startRun(coerced, { dirty: tab?.dirty ?? false, loaded: tab?.loaded ?? false, onSave })
+    } finally {
+      setPreparing(false)
+    }
   }
 
   const runs = tab.runs
@@ -114,12 +122,12 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
           <Button
             size="sm"
             onClick={handleRun}
-            disabled={hasErrors || isRunning}
+            disabled={hasErrors || isBusy}
             style={{ height: 32, fontSize: 13, flex: 1 }}
           >
-            {isRunning ? '⏳ Corriendo…' : '▶ Ejecutar'}
+            {preparing ? '⏳ Preparando…' : isRunning ? '⏳ Corriendo…' : '▶ Ejecutar'}
           </Button>
-          {isLoaded && !isRunning && (
+          {isLoaded && !isBusy && (
             <button
               onClick={unload}
               title="Descargar flow de Ray"

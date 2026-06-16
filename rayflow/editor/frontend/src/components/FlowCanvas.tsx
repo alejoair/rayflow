@@ -22,6 +22,8 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const tab = useFlowStore(s => s.getActiveTab())
   const catalog = useFlowStore(s => s.catalog)
+  const animMinMs = useFlowStore(s => s.animMinMs)
+  const setAnimMinMs = useFlowStore(s => s.setAnimMinMs)
   const { onNodesChange, onEdgesChange, setEdges, setNodes } = useFlowStore()
 
   const activeRun = tab?.runs.find(r => r.runId === tab.activeRunId)
@@ -58,8 +60,7 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
         ...params,
         id: `${params.source}-${params.sourceHandle}-${params.target}`,
         type: 'exec',
-        animated: true,
-        style: { stroke: 'var(--exec-color)', strokeWidth: 2.5 },
+        animated: false,
         data: { joinMode: 'single' },
       }
       setEdges(addEdge(execEdge as Parameters<typeof addEdge>[0], tab?.edges ?? []))
@@ -113,12 +114,16 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
   })
 
   const edges = tab.edges.map(e => {
-    if (!activeRun) return e
-    const key = `${e.source}-${e.target}`
-    const isActive = activeRun.activeEdges.has(key)
-    return isActive
-      ? { ...e, animated: true, style: { ...e.style, stroke: 'var(--exec-color)', strokeWidth: 3 } }
-      : e
+    const isExecEdge = e.type === 'exec' || (e.id?.startsWith('exec-') ?? false)
+    const execKey = `exec:${e.source}-${e.target}`
+    const dataKey = `data:${e.source}-${e.target}`
+    const key = isExecEdge ? execKey : dataKey
+    const isActive = !!(activeRun && activeRun.activeEdges.has(key))
+    const cls = [
+      isExecEdge ? 'rf-edge-exec' : 'rf-edge-data',
+      isActive ? (isExecEdge ? 'rf-edge-active-exec' : 'rf-edge-active-data') : '',
+    ].filter(Boolean).join(' ')
+    return { ...e, animated: isActive && isExecEdge, className: cls }
   })
 
   return (
@@ -143,6 +148,28 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
         <Controls />
         <MiniMap nodeColor="var(--secondary)" maskColor="rgba(0,0,0,0.4)" />
       </ReactFlow>
+
+      {/* Control de duración mínima de animación */}
+      <div style={{
+        position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: 'var(--card)', border: '1px solid var(--border)',
+        borderRadius: 8, padding: '5px 10px',
+        fontSize: 11, color: 'var(--muted-foreground)',
+        pointerEvents: 'all', zIndex: 10,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+      }}>
+        <span style={{ whiteSpace: 'nowrap' }}>Anim. mín.</span>
+        <input
+          type="range" min={0} max={2000} step={100}
+          value={animMinMs}
+          onChange={e => setAnimMinMs(Number(e.target.value))}
+          style={{ width: 80, accentColor: 'var(--primary)', cursor: 'pointer' }}
+        />
+        <span style={{ width: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+          {animMinMs}ms
+        </span>
+      </div>
     </div>
   )
 }

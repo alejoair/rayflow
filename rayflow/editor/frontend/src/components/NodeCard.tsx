@@ -3,12 +3,12 @@ import { typeColor } from '@/lib/translator'
 import type { NodeSpec } from '@/lib/api'
 
 interface NodeCardProps {
-  data: { nodeType: string; meta: NodeSpec | null; literals: Record<string, unknown> }
+  data: { nodeType: string; meta: NodeSpec | null; literals: Record<string, unknown>; runStatus?: 'idle' | 'running' | 'done' | 'error' }
   selected: boolean
-  runStatus?: 'idle' | 'running' | 'done' | 'error'
 }
 
-export default function NodeCard({ data, selected, runStatus }: NodeCardProps) {
+export default function NodeCard({ data, selected }: NodeCardProps) {
+  const runStatus = data.runStatus
   const { nodeType, meta } = data
 
   const cls = [
