@@ -71,17 +71,33 @@ function NodeItem({ node, onDragStart }: { node: NodeSpec; onDragStart: (e: Reac
   )
 }
 
-function SectionHeader({ label }: { label: string }) {
+function Section({ label, nodes, onDragStart }: { label: string; nodes: NodeSpec[]; onDragStart: (e: React.DragEvent, type: string) => void }) {
+  const [open, setOpen] = useState(true)
+
   return (
-    <div style={{
-      fontSize: 11,
-      fontWeight: 600,
-      color: 'var(--muted-foreground)',
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em',
-      padding: '12px 12px 6px',
-    }}>
-      {label}
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 12px 6px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--muted-foreground)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.07em',
+        }}
+      >
+        <span>{label}</span>
+        <span style={{ fontSize: 10, transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
+      </button>
+      {open && nodes.map(n => <NodeItem key={n.type} node={n} onDragStart={onDragStart} />)}
     </div>
   )
 }
@@ -141,16 +157,10 @@ export default function NodePalette({ catalog }: Props) {
           </div>
         )}
         {builtin.length > 0 && (
-          <>
-            <SectionHeader label="Builtin" />
-            {builtin.map(n => <NodeItem key={n.type} node={n} onDragStart={onDragStart} />)}
-          </>
+          <Section label="Builtin" nodes={builtin} onDragStart={onDragStart} />
         )}
         {custom.length > 0 && (
-          <>
-            <SectionHeader label="Custom" />
-            {custom.map(n => <NodeItem key={n.type} node={n} onDragStart={onDragStart} />)}
-          </>
+          <Section label="Custom" nodes={custom} onDragStart={onDragStart} />
         )}
       </div>
     </div>
