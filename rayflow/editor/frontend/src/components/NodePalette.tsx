@@ -124,10 +124,10 @@ export default function NodePalette({ catalog }: Props) {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      flex: open ? 1 : 0,
-      overflow: 'hidden',
-      minHeight: 0,
-      flexShrink: open ? 1 : 0,
+      ...(open
+        ? { flex: 1, overflow: 'hidden', minHeight: 0 }
+        : { flexShrink: 0 }
+      ),
     }}>
       <button
         onClick={() => setOpen(o => !o)}
