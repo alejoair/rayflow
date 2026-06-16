@@ -103,6 +103,13 @@ class NodeCatalog:
             )
         self._registry[meta.name] = (cls, meta)
 
+    def register_alias(self, alias: str, target: str) -> None:
+        """Registra `alias` apuntando a la misma clase y meta que `target`."""
+        entry = self._registry.get(target)
+        if entry is None:
+            raise ValueError(f"No se puede crear alias '{alias}': nodo '{target}' no está registrado")
+        self._registry[alias] = entry
+
     def get(self, name: str) -> tuple[type, NodeMeta] | None:
         return self._registry.get(name)
 

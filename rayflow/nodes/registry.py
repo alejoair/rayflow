@@ -26,6 +26,8 @@ def get_catalog(extra_dirs: list[str | Path] | None = None) -> NodeCatalog:
         _catalog = NodeCatalog()
         for module in _BUILTIN_MODULES:
             _register_module(_catalog, module)
+        # FlowInput es alias histórico de OnStart — mantener por compatibilidad con tests y flows guardados
+        _catalog.register_alias("FlowInput", "OnStart")
         _catalog.load_custom_nodes_package()
 
     if extra_dirs:
