@@ -37,6 +37,12 @@ export default function NodeCard({ data, selected }: NodeCardProps) {
   const inputs = meta.inputs || []
   const outputs = meta.outputs || []
 
+  const decorator = meta.decorator
+  const isRay = decorator === 'ray_node'
+  const runtimeBadge = isRay
+    ? { label: 'RAY', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' }
+    : { label: 'LOCAL', color: '#34d399', bg: 'rgba(52,211,153,0.10)' }
+
   return (
     <div className={cls}>
       <div className="rf-node-header" style={{ paddingLeft: hasExecIn ? 24 : 10, paddingRight: execOutputs.length > 0 ? 24 : 10 }}>
@@ -57,7 +63,13 @@ export default function NodeCard({ data, selected }: NodeCardProps) {
           />
         )}
         {hasExecIn && <span className="rf-node-header-dot" />}
-        <span>{nodeType}</span>
+        <span style={{ flex: 1 }}>{nodeType}</span>
+        <span style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+          color: runtimeBadge.color, background: runtimeBadge.bg,
+          borderRadius: 4, padding: '1px 5px', lineHeight: '16px',
+          flexShrink: 0,
+        }}>{runtimeBadge.label}</span>
       </div>
 
       {execOutputs.slice(1).map(pin => (
