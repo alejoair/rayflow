@@ -206,39 +206,84 @@ async def delete_editor_flow(name: str) -> Response:
 # Ejecución desde el editor
 # ---------------------------------------------------------------------------
 
-@router.post("/flows/{name}/run")
-async def run_editor_flow(name: str, inputs: Any = Body(default=None)) -> dict[str, Any]:
-    """Ejecuta un flow con los inputs dados.
+@router.post("/flows/{name}/load", status_code=200)
+async def load_editor_flow(name: str) -> dict[str, Any]:
+    """Carga un flow en Ray: inicializa actores y GraphState persistente.
 
-    A diferencia de POST /flows/{name}/run (que usa run_async → worker Ray),
-    aquí ejecutamos con run() en un thread pool del driver. Esto garantiza que
-    los custom nodes cargados vía --nodes-dir (load_directory) estén disponibles,
-    ya que el catálogo singleton del driver ya los tiene registrados.
-
-    Limitación: @ray_node custom nodes siguen requiriendo custom_nodes/ para
-    ser distribuibles a los workers Ray (restricción de serialización).
+    Idempotente — si ya está cargado lo recarga (resetea el estado).
     """
     import asyncio
     from functools import partial
-    from rayflow.api import run as run_sync
+    from rayflow.api import load as load_flow_api
 
     data = get_flow_dict(name)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+    try:
+        loop = asyncio.get_event_loop()
+        graph_id = await loop.run_in_executor(None, partial(load_flow_api, data))
+        return {"graph_id": graph_id, "flow": name, "loaded": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error cargando el flow: {e}")
+
+
+@router.delete("/flows/{name}/load", status_code=200)
+async def unload_editor_flow(name: str) -> dict[str, Any]:
+    """Descarga un flow de Ray, destruyendo sus actores y GraphState."""
+    from rayflow.api import unload as unload_flow_api
+    unload_flow_api(name)
+    return {"flow": name, "loaded": False}
+
+
+@router.get("/flows/{name}/loaded")
+async def flow_loaded_status(name: str) -> dict[str, Any]:
+    """Devuelve si el flow está actualmente cargado en Ray."""
+    from rayflow.api import is_flow_loaded
+    return {"flow": name, "loaded": is_flow_loaded(name)}
+
+
+@router.post("/flows/{name}/run")
+async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
+    """Ejecuta un flow (cargándolo si es necesario) con streaming SSE.
+
+    Devuelve un stream de eventos: node_start, node_done, edge_fire, flow_done, flow_error.
+    """
+    import asyncio
+    import json
+    from functools import partial
+    from fastapi.responses import StreamingResponse
+    from rayflow.api import execute as execute_flow, load as load_flow_api, is_flow_loaded
 
     if inputs is None:
         inputs = {}
     if not isinstance(inputs, dict):
         raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON de inputs")
 
-    try:
-        # run() llama asyncio.run() internamente — no puede usarse directamente
-        # desde una corrutina. run_in_executor lo ejecuta en un thread del pool
-        # donde no hay event loop activo, así asyncio.run() funciona correctamente.
+    data = get_flow_dict(name)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+
+    # Cargar si no está cargado
+    if not is_flow_loaded(name):
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, partial(run_sync, data, **inputs))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error ejecutando el flow: {e}")
+        try:
+            await loop.run_in_executor(None, partial(load_flow_api, data))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error cargando el flow: {e}")
+
+    def event_generator():
+        try:
+            for evt in execute_flow(name, inputs):
+                yield f"data: {json.dumps(evt)}\n\n"
+        except Exception as e:
+            import json as _json
+            yield f"data: {_json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------

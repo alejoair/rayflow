@@ -33,6 +33,7 @@ export interface FlowTab {
   nodes: Node[]
   edges: Edge[]
   dirty: boolean
+  loaded: boolean
   validationErrors: string[]
   runs: Run[]
   activeRunId: string | null
@@ -57,6 +58,7 @@ interface FlowStore {
   setNodes: (nodes: Node[]) => void
   setEdges: (edges: Edge[]) => void
   setDirty: (dirty: boolean) => void
+  setLoaded: (loaded: boolean) => void
   setValidationErrors: (errors: string[]) => void
   updateVariables: (vars: FlowDef['variables']) => void
 
@@ -134,7 +136,7 @@ export const useFlowStore = create<FlowStore>()(
         if (existing) { set({ activeTabName: flowDef.name }); return }
         const tab: FlowTab = {
           name: flowDef.name, flowDef, nodes, edges,
-          dirty: false, validationErrors: [], runs: [], activeRunId: null,
+          dirty: false, loaded: false, validationErrors: [], runs: [], activeRunId: null,
         }
         set(s => ({ tabs: [...s.tabs, tab], activeTabName: flowDef.name }))
       },
@@ -187,6 +189,12 @@ export const useFlowStore = create<FlowStore>()(
         const name = get().activeTabName
         if (!name) return
         set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, dirty }) }))
+      },
+
+      setLoaded: (loaded) => {
+        const name = get().activeTabName
+        if (!name) return
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, loaded }) }))
       },
 
       updateVariables: (vars) => {

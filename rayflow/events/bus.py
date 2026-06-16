@@ -49,10 +49,9 @@ class EventBroker:
         """
         self._publish_count[event_name] = self._publish_count.get(event_name, 0) + 1
         subs = self._subscriptions.get(event_name, [])
-        for flow_source, _graph_id in subs:
-            # Importación diferida para evitar ciclos.
+        for flow_name, _graph_id in subs:
             from rayflow.api import _run_event_flow
-            _run_event_flow.remote(flow_source, event_name, payload)  # type: ignore[attr-defined]
+            _run_event_flow.remote(flow_name, event_name, payload)  # type: ignore[attr-defined]
         return len(subs)
 
     def list_subscriptions(self) -> dict[str, list[tuple[Any, str]]]:

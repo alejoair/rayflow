@@ -402,6 +402,7 @@ export default function App() {
       <RunsPanel
         activeFlow={tab?.flowDef ?? null}
         validationErrors={tab?.validationErrors ?? []}
+        onSave={handleSave}
       />
 
       {/* Flow settings */}

@@ -1,3 +1,3 @@
-from rayflow.api import run, run_async, serve_events, stop
+from rayflow.api import run, load, unload, execute, serve_events, stop
 
-__all__ = ["run", "run_async", "serve_events", "stop"]
+__all__ = ["run", "load", "unload", "execute", "serve_events", "stop"]

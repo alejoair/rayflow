@@ -1,45 +1,56 @@
 import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useFlowStore, type Run } from '@/store/flowStore'
 import { useRunStream } from '@/hooks/useRunStream'
+import { typeColor } from '@/lib/translator'
 import type { FlowMeta } from '@/lib/api'
 
-function statusColor(status: Run['status']) {
-  if (status === 'running') return 'bg-yellow-500'
-  if (status === 'done') return 'bg-green-500'
-  if (status === 'error') return 'bg-red-500'
-  return 'bg-gray-500'
+function statusDot(status: Run['status']) {
+  if (status === 'running') return '#facc15'
+  if (status === 'done') return '#10b981'
+  if (status === 'error') return 'var(--destructive)'
+  return 'var(--muted-foreground)'
 }
 
-function statusVariant(status: Run['status']): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'done') return 'default'
-  if (status === 'error') return 'destructive'
-  return 'secondary'
+function statusLabel(status: Run['status']) {
+  if (status === 'running') return 'corriendo'
+  if (status === 'done') return 'listo'
+  if (status === 'error') return 'error'
+  return 'idle'
 }
 
 interface Props {
   activeFlow: FlowMeta | null
   validationErrors: string[]
+  onSave: () => Promise<void>
 }
 
-export default function RunsPanel({ activeFlow, validationErrors }: Props) {
+export default function RunsPanel({ activeFlow, validationErrors, onSave }: Props) {
   const tab = useFlowStore(s => s.getActiveTab())
   const { setActiveRun } = useFlowStore()
-  const { startRun } = useRunStream(activeFlow?.name ?? '')
+  const { startRun, unload } = useRunStream(activeFlow?.name ?? '')
   const [inputs, setInputs] = useState<Record<string, string>>({})
 
   if (!activeFlow || !tab) {
     return (
-      <div className="border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 text-xs text-[var(--muted-foreground)]">
+      <div style={{
+        borderTop: '1px solid var(--border)',
+        background: 'var(--card)',
+        padding: '10px 16px',
+        fontSize: 13,
+        color: 'var(--muted-foreground)',
+        flexShrink: 0,
+      }}>
         Abre un flow para ejecutarlo
       </div>
     )
   }
 
-  const flowInputs = activeFlow.inputs || {}
+  const flowInputs = (activeFlow as { inputs?: Record<string, string> }).inputs || {}
+  const isRunning = tab.runs.some(r => r.status === 'running')
+  const hasErrors = validationErrors.length > 0
+  const isLoaded = tab.loaded
 
   async function handleRun() {
     const coerced: Record<string, unknown> = {}
@@ -53,7 +64,7 @@ export default function RunsPanel({ activeFlow, validationErrors }: Props) {
       else if (t === 'list' || t === 'dict') { try { coerced[name] = JSON.parse(raw) } catch { coerced[name] = raw } }
       else coerced[name] = raw
     })
-    await startRun(coerced)
+    await startRun(coerced, { dirty: tab?.dirty ?? false, loaded: tab?.loaded ?? false, onSave })
   }
 
   const runs = tab.runs
@@ -61,88 +72,173 @@ export default function RunsPanel({ activeFlow, validationErrors }: Props) {
   const activeRun = runs.find(r => r.runId === activeRunId)
 
   return (
-    <div className="border-t border-[var(--border)] bg-[var(--card)] flex flex-shrink-0" style={{ maxHeight: 220 }}>
+    <div style={{
+      borderTop: '1px solid var(--border)',
+      background: 'var(--card)',
+      display: 'flex',
+      flexShrink: 0,
+      height: 200,
+      overflow: 'hidden',
+    }}>
 
-      {/* Inputs + botón */}
-      <div className="flex items-start gap-3 p-3 border-r border-[var(--border)] flex-shrink-0">
-        {Object.keys(flowInputs).length > 0 && (
-          <div className="flex gap-2 flex-wrap items-end">
-            {Object.entries(flowInputs).map(([name, type]) => (
-              <div key={name} className="flex flex-col gap-0.5">
-                <label className="text-[10px] text-[var(--muted-foreground)]">{name} ({type})</label>
-                <Input
-                  type={type === 'int' || type === 'float' ? 'number' : 'text'}
-                  placeholder={name}
-                  value={inputs[name] ?? ''}
-                  onChange={e => setInputs(p => ({ ...p, [name]: e.target.value }))}
-                  className="h-7 w-28 text-xs bg-[var(--secondary)] border-[var(--border)] text-[var(--foreground)]"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="flex flex-col gap-1 justify-end" style={{ paddingTop: Object.keys(flowInputs).length ? 18 : 0 }}>
+      {/* Zona izquierda: inputs + botón */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: '12px 16px',
+        borderRight: '1px solid var(--border)',
+        flexShrink: 0,
+        minWidth: 160,
+        justifyContent: 'center',
+      }}>
+        {Object.entries(flowInputs).map(([name, type]) => {
+          const color = typeColor(type)
+          return (
+            <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', gap: 5, alignItems: 'center' }}>
+                <span style={{ color }}>{type}</span>
+                <span>{name}</span>
+              </label>
+              <Input
+                type={type === 'int' || type === 'float' ? 'number' : 'text'}
+                placeholder={name}
+                value={inputs[name] ?? ''}
+                onChange={e => setInputs(p => ({ ...p, [name]: e.target.value }))}
+                style={{ height: 32, width: 140, fontSize: 13 }}
+              />
+            </div>
+          )
+        })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Button
             size="sm"
             onClick={handleRun}
-            disabled={validationErrors.length > 0 || tab.runs.some(r => r.status === 'running')}
-            className="h-7 text-xs"
+            disabled={hasErrors || isRunning}
+            style={{ height: 32, fontSize: 13, flex: 1 }}
           >
-            ▶ Ejecutar
+            {isRunning ? '⏳ Corriendo…' : '▶ Ejecutar'}
           </Button>
-          {validationErrors.length > 0 && (
-            <div className="text-[10px] text-red-400">{validationErrors.length} error(es)</div>
+          {isLoaded && !isRunning && (
+            <button
+              onClick={unload}
+              title="Descargar flow de Ray"
+              style={{
+                height: 32, width: 32, borderRadius: 6, border: '1px solid var(--border)',
+                background: 'transparent', cursor: 'pointer', fontSize: 14,
+                color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--destructive)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+            >⏹</button>
           )}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isLoaded ? '#10b981' : 'var(--muted-foreground)', flexShrink: 0 }} />
+          <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+            {isLoaded ? 'cargado en Ray' : 'no cargado'}
+          </span>
+          {tab.dirty && <span style={{ fontSize: 11, color: 'var(--primary)' }}>● cambios sin guardar</span>}
+        </div>
+        {hasErrors && (
+          <div style={{ fontSize: 11, color: 'var(--destructive)' }}>{validationErrors.length} error(es)</div>
+        )}
       </div>
 
-      {/* Historial de runs */}
+      {/* Zona central: historial de runs */}
       {runs.length > 0 && (
-        <div className="flex gap-2 p-3 overflow-x-auto items-start">
-          {runs.map(run => (
-            <button
-              key={run.runId}
-              onClick={() => setActiveRun(activeFlow.name, run.runId)}
-              className={`flex flex-col gap-1 p-2 rounded border text-left flex-shrink-0 transition-colors ${
-                run.runId === activeRunId
-                  ? 'border-[var(--primary)] bg-[var(--secondary)]'
-                  : 'border-[var(--border)] hover:border-[var(--muted-foreground)]'
-              }`}
-              style={{ minWidth: 100 }}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor(run.status)}`} />
-                <span className="text-[10px] text-[var(--muted-foreground)]">
-                  {new Date(run.startedAt).toLocaleTimeString()}
-                </span>
-              </div>
-              <Badge variant={statusVariant(run.status)} className="text-[10px] h-4 px-1 w-fit">
-                {run.status}
-              </Badge>
-              {run.status === 'done' && run.result && (
-                <pre className="text-[10px] text-green-400 mt-1 max-w-[160px] overflow-hidden text-ellipsis">
-                  {JSON.stringify(run.result)}
-                </pre>
-              )}
-              {run.status === 'error' && (
-                <div className="text-[10px] text-red-400 mt-1 max-w-[160px] overflow-hidden text-ellipsis">
-                  {run.error}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          padding: '12px 8px',
+          borderRight: '1px solid var(--border)',
+          overflowY: 'auto',
+          flexShrink: 0,
+          width: 160,
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)',
+            textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, padding: '0 4px',
+          }}>Runs</div>
+          {[...runs].reverse().map(run => {
+            const isActive = run.runId === activeRunId
+            const dot = statusDot(run.status)
+            return (
+              <button
+                key={run.runId}
+                onClick={() => setActiveRun(activeFlow.name, run.runId)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 8px',
+                  borderRadius: 6,
+                  border: `1px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`,
+                  background: isActive ? 'var(--secondary)' : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, overflow: 'hidden' }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                    {new Date(run.startedAt).toLocaleTimeString()}
+                  </span>
+                  <span style={{ fontSize: 11, color: dot, fontWeight: 500 }}>{statusLabel(run.status)}</span>
                 </div>
-              )}
-            </button>
-          ))}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* Resultado del run activo */}
-      {activeRun?.status === 'done' && activeRun.result && (
-        <div className="p-3 border-l border-[var(--border)] flex-shrink-0">
-          <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-1">Resultado</div>
-          <ScrollArea className="max-h-40">
-            <pre className="text-[11px] text-green-400 font-mono">{JSON.stringify(activeRun.result, null, 2)}</pre>
-          </ScrollArea>
+      {/* Zona derecha: detalle del run activo */}
+      {activeRun && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {activeRun.status === 'running' && (
+            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#facc15', flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Ejecutando…</span>
+            </div>
+          )}
+
+          {activeRun.status === 'done' && (
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Completado</span>
+              </div>
+              <pre style={{
+                fontSize: 12, fontFamily: 'monospace',
+                color: activeRun.result && Object.keys(activeRun.result).length > 0 ? '#10b981' : 'var(--muted-foreground)',
+                margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+              }}>
+                {activeRun.result && Object.keys(activeRun.result).length > 0
+                  ? JSON.stringify(activeRun.result, null, 2)
+                  : '{}'}
+              </pre>
+            </div>
+          )}
+
+          {activeRun.status === 'error' && (
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--destructive)', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--destructive)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Error</span>
+              </div>
+              <div style={{
+                fontSize: 12, fontFamily: 'monospace', color: 'var(--destructive)',
+                background: 'rgba(239,68,68,0.08)', borderRadius: 5, padding: '6px 8px',
+              }}>{activeRun.error ?? 'Error desconocido'}</div>
+            </div>
+          )}
+
         </div>
       )}
+
     </div>
   )
 }

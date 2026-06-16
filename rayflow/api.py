@@ -2,97 +2,165 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import ray
 
 from rayflow.schema.loader import load_flow
 from rayflow.nodes.registry import get_catalog
 from rayflow.build.validator import build
-from rayflow.engine.executor import FlowExecutor
+from rayflow.engine.executor import (
+    load_flow_into_ray,
+    unload_flow_from_ray,
+    get_loaded_flow,
+    is_flow_loaded,
+)
 
 
-def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
-    """Carga, valida y ejecuta un flow de forma síncrona.
+def load(source: str | Path | dict) -> str:
+    """Carga un flow en Ray: crea actores y GraphState persistente.
 
-    Args:
-        source: Ruta a un .json, dict ya parseado, o FlowDef.
-        **inputs: Valores de los data inputs declarados en `FlowInput`.
+    Idempotente: si el flow ya está cargado, lo recarga (destruye y recrea).
 
     Returns:
-        Dict con los outputs declarados en `FlowOutput`, ya materializados.
+        graph_id del flow cargado (= nombre del flow).
     """
     _ensure_ray()
     flow_def = load_flow(source)
     catalog = get_catalog()
     built = build(flow_def, catalog)
-    return FlowExecutor(built, inputs).execute()
+    lf = load_flow_into_ray(built)
+    return lf.graph_id
 
 
-def run_async(source: str | Path | dict, **inputs: Any):
-    """Lanza la ejecución en un task de Ray y devuelve un ObjectRef awaitable.
+def unload(name: str) -> None:
+    """Descarga un flow de Ray, destruyendo sus actores y GraphState."""
+    unload_flow_from_ray(name)
 
-    `await rayflow.run_async(...)` o `ray.get(rayflow.run_async(...))` entregan
-    los mismos outputs que run().
+
+def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[dict, None, None]:
+    """Ejecuta un flow ya cargado y hace streaming de eventos.
+
+    Yields dicts con eventos: node_start, node_done, edge_fire, flow_done, flow_error.
+    Si el flow no está cargado, lo carga automáticamente primero.
+    """
+    import time
+
+    _ensure_ray()
+
+    if not is_flow_loaded(name):
+        load(name)
+
+    lf = get_loaded_flow(name)
+
+    from rayflow.state.queue import RunQueue
+    queue = RunQueue.options(
+        name=f"queue_{uuid.uuid4().hex[:8]}",
+        namespace="rayflow",
+        lifetime="detached",
+    ).remote()
+
+    ref = lf.execute(flow_inputs or {}, queue)
+
+    # Drain la queue mientras el engine corre
+    done = False
+    while not done:
+        events = ray.get(queue.drain.remote())
+        for evt in events:
+            yield evt
+            if evt.get("event") in ("flow_done", "flow_error"):
+                done = True
+                break
+        if not done:
+            time.sleep(0.05)
+
+    try:
+        ray.kill(queue)
+    except Exception:
+        pass
+
+    # Propagar excepción si el engine falló
+    if not done:
+        ray.get(ref)
+
+
+def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
+    """Carga, ejecuta y descarga un flow. Wrapper de compatibilidad one-shot.
+
+    Para flows stateful usar load() + execute() + unload().
     """
     _ensure_ray()
-    # _run_flow_task es picklable y reconstruye el flow dentro del worker.
-    return _run_flow_task.remote(source, inputs)
+    flow_def = load_flow(source)
+    name = flow_def.name
+    load(source)
+    try:
+        result: dict[str, Any] = {}
+        for evt in execute(name, inputs):
+            if evt.get("event") == "flow_done":
+                result = evt.get("result", {})
+            elif evt.get("event") == "flow_error":
+                raise RuntimeError(evt.get("error", "Error desconocido"))
+        return result
+    finally:
+        unload(name)
 
 
 def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = None) -> str:
-    """Registra un flow por evento en el bus global y lo deja residente.
+    """Carga un flow en Ray y lo suscribe al bus de eventos.
 
-    Distinto de la API REST (`rayflow serve` en el CLI): esto suscribe el flow
-    al bus de eventos interno para que se dispare al emitirse uno de sus eventos.
+    El flow queda residente: cada vez que se emita uno de sus eventos
+    declarados, el engine existente recibe execute() con el payload.
 
     Returns:
-        graph_id único asignado a este flow residente.
+        graph_id asignado (= nombre del flow).
     """
     _ensure_ray()
-    from rayflow.events.bus import get_event_broker
-
     flow_def = load_flow(source)
     catalog = get_catalog(extra_node_dirs)
-    build(flow_def, catalog)  # validación temprana
+    built = build(flow_def, catalog)
 
-    graph_id = str(uuid.uuid4())
+    graph_id = load_flow_into_ray(built).graph_id
+
+    from rayflow.events.bus import get_event_broker
     broker = get_event_broker()
-    # source tal cual (ruta o dict) — str() perdería un dict inline.
     for event_name in flow_def.events:
-        ray.get(broker.subscribe.remote(event_name, source, graph_id))
+        ray.get(broker.subscribe.remote(event_name, flow_def.name, graph_id))
+
     return graph_id
 
 
 def stop(graph_id: str, event_names: list[str]) -> None:
-    """Desuscribe un flow residente del broker de eventos."""
+    """Desuscribe un flow del bus de eventos y lo descarga de Ray."""
     from rayflow.events.bus import get_event_broker
     broker = get_event_broker()
     for event_name in event_names:
         ray.get(broker.unsubscribe.remote(event_name, graph_id))
+    unload_flow_from_ray(graph_id)
 
 
 @ray.remote
-def _run_flow_task(source: Any, inputs: dict[str, Any]) -> dict[str, Any]:
-    """Task de Ray que ejecuta un flow (usado por run_async y por eventos)."""
-    flow_def = load_flow(source)
-    catalog = get_catalog()
-    built = build(flow_def, catalog)
-    return FlowExecutor(built, inputs).execute()
+def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
+    """Task de Ray que ejecuta un flow residente al recibir un evento."""
+    import uuid as _uuid
+    from rayflow.state.queue import RunQueue
 
+    lf = get_loaded_flow(flow_name)
+    if lf is None:
+        return
 
-@ray.remote
-def _run_event_flow(source: Any, event_name: str, payload: Any) -> None:
-    """Ejecuta un flow disparado por evento (fire-and-forget).
+    queue = RunQueue.options(
+        name=f"queue_{_uuid.uuid4().hex[:8]}",
+        namespace="rayflow",
+        lifetime="detached",
+    ).remote()
 
-    El engine escribe los flow_inputs como outputs del entry node; al pasar
-    'payload' con ese nombre, el output `payload` del OnEvent queda poblado y
-    el subgrafo del flow receptor puede consumirlo como "on.payload".
-    """
-    flow_def = load_flow(source)
-    catalog = get_catalog()
-    built = build(flow_def, catalog)
-    FlowExecutor(built, {"payload": payload}).execute()
+    try:
+        ray.get(lf.execute({"payload": payload}, queue))
+    finally:
+        try:
+            ray.kill(queue)
+        except Exception:
+            pass
 
 
 def _ensure_ray() -> None:
@@ -102,13 +170,7 @@ def _ensure_ray() -> None:
         kwargs: dict[str, Any] = {"ignore_reinit_error": True, "namespace": "rayflow"}
         env = runtime_env()
         if env is not None:
-            # Distribuye custom_nodes/ a todos los workers Ray (py_modules), así
-            # los nodos custom son importables en cualquier proceso del cluster.
             kwargs["runtime_env"] = env
         ray.init(**kwargs)
-        # Garantiza que el broker de eventos existe en el cluster desde el inicio.
-        # Sin esto, el broker se crearía la primera vez que alguien llame
-        # get_event_broker(), con el riesgo de que suscripciones hechas antes
-        # de ray.init se pierdan silenciosamente tras un reinicio de Ray.
         from rayflow.events.bus import get_event_broker
         get_event_broker()

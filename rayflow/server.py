@@ -74,7 +74,7 @@ def create_app(served: dict[str, ServedFlow]):
     from pathlib import Path as _Path
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.staticfiles import StaticFiles
-    from rayflow.api import run_async
+    from rayflow.api import run
     from rayflow.editor.routes import router as editor_router
 
     app = FastAPI(title="Rayflow", version="0.1.0")
@@ -103,6 +103,7 @@ def create_app(served: dict[str, ServedFlow]):
 
     @app.post("/flows/{name}/run")
     async def run_flow(name: str, inputs: Any = Body(default=None)) -> dict[str, Any]:
+        import asyncio
         sf = served.get(name)
         if sf is None:
             raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
@@ -114,12 +115,9 @@ def create_app(served: dict[str, ServedFlow]):
                 status_code=400, detail="Body debe ser un objeto JSON de inputs"
             )
 
-        # Ejecuta el flow sin bloquear el event loop: run_async devuelve un
-        # ObjectRef de Ray, awaitable directamente. Cada ejecución se aísla por
-        # su propio graph_id UUID.
-        ref = run_async(sf.source, **inputs)
+        loop = asyncio.get_event_loop()
         try:
-            outputs = await ref
+            outputs = await loop.run_in_executor(None, lambda: run(sf.source, **inputs))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error ejecutando el flow: {e}")
         return outputs

@@ -19,77 +19,94 @@ def _var_key(state_path: str | None, var_name: str) -> str:
 
 @ray.remote
 class FlowEngine:
-    """Motor de ejecución de un flow ya construido (BuiltFlow).
+    """Motor de ejecución stateful de un flow ya construido (BuiltFlow).
 
-    Actor Ray async con nombre "engine_{graph_id}". Los nodos acceden a él via
-    ExecContext usando ray.get_actor() — misma mecánica que GraphState. Esto
-    permite que todos los nodos (tanto @engine_node como @ray_node) puedan hacer
-    ctx.fire() bloqueante independientemente de dónde corran.
+    El actor vive mientras el flow esté cargado. El GraphState y los actores
+    @ray_node se crean en __init__ y persisten entre ejecuciones — las variables
+    mantienen su valor entre requests.
 
-    Los actores @ray_node se crean en el driver (FlowExecutor) y se pasan como
-    handles serializables — así se evita la doble serialización de py_class.
+    Cada llamada a execute() es serializada por Ray (event loop del actor):
+    si llega un segundo request mientras el primero corre, espera en la cola.
+
+    Emite eventos a una RunQueue por ejecución para streaming SSE al cliente.
     """
 
     def __init__(
         self,
         built: BuiltFlow,
-        flow_inputs: dict[str, Any],
-        graph_id: str,
         actors: dict[str, Any],
     ):
         self._built = built
-        self._flow_inputs = flow_inputs or {}
-        self._graph_id = graph_id
-        self._state: GraphState | None = None
+        self._actors: dict[str, Any] = actors
+
+        # GraphState persistente — se inicializa con los defaults de variables
+        var_defaults = {v.name: v.default for v in self._built.flow_def.variables}
+        self._state = GraphState.options(
+            name=f"gs_{self._get_graph_id()}",
+            namespace="rayflow",
+            lifetime="detached",
+        ).remote(var_defaults)
+
+        # Estado por ejecución — se resetea en cada execute()
         self._output_refs: dict[str, Any] = {}
-        self._actors: dict[str, Any] = actors  # handles pre-creados en el driver
         self._exec_arrivals: dict[str, set[str]] = {}
+        self._run_queue: Any | None = None  # handle a RunQueue activo
+
+    def _get_graph_id(self) -> str:
+        # El graph_id se deriva del nombre del actor engine — se asigna en LoadedFlow
+        # Usamos el nombre del flow como base estable
+        return self._built.flow_def.name
 
     # ------------------------------------------------------------------
-    # API pública — llamada por nodos via ExecContext
+    # API pública
     # ------------------------------------------------------------------
+
+    async def execute(self, flow_inputs: dict[str, Any], queue_ref: Any) -> dict[str, Any]:
+        """Ejecuta el flow con los inputs dados, emitiendo eventos a queue_ref."""
+        self._run_queue = queue_ref
+        self._output_refs = {}
+        self._exec_arrivals = {}
+
+        for node_id, rnode in self._built.nodes.items():
+            if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
+                self._exec_arrivals[node_id] = set()
+
+        self._write_node_outputs(self._built.entry_node_id, dict(flow_inputs))
+
+        try:
+            await self._run_loop(self._built.entry_node_id)
+            result = dict(self._output_refs)
+            ray.get(queue_ref.push.remote({"event": "flow_done", "result": result, "ts": time.time()}))
+            return result
+        except Exception as e:
+            ray.get(queue_ref.push.remote({"event": "flow_error", "error": str(e), "ts": time.time()}))
+            raise
 
     async def fire(self, source_node_id: str, pin_name: str) -> None:
-        """Dispara los targets del exec output indicado y espera a que completen."""
         rnode = self._built.nodes[source_node_id]
         targets = rnode.exec_targets.get(pin_name, [])
+        if targets:
+            ray.get(self._run_queue.push.remote({
+                "event": "edge_fire",
+                "from": source_node_id,
+                "to": targets[0],
+                "pin": pin_name,
+                "ts": time.time(),
+            }))
         if len(targets) > 1:
             await asyncio.gather(*[self._run_loop(t, source_node_id) for t in targets])
         elif targets:
             await self._run_loop(targets[0], source_node_id)
 
     async def set_output(self, node_id: str, pin_name: str, value: Any) -> None:
-        """Escribe un data output de un nodo en el GraphState."""
         ray.get(self._state.set_node_outputs.remote(node_id, {pin_name: value}))
 
     async def get_exec_outputs(self, node_id: str, exclude: list[str]) -> list[str]:
-        """Devuelve los exec output pins de un nodo excepto los excluidos."""
         rnode = self._built.nodes[node_id]
         return [p for p in rnode.meta.exec_outputs if p not in exclude]
 
-    # ------------------------------------------------------------------
-    # Ejecución principal
-    # ------------------------------------------------------------------
-
-    async def execute(self) -> dict[str, Any]:
-        """Inicializa estado, ejecuta el flow y devuelve los outputs."""
-        var_defaults = {v.name: v.default for v in self._built.flow_def.variables}
-        self._state = GraphState.options(
-            name=f"gs_{self._graph_id}", namespace="rayflow", lifetime="detached"
-        ).remote(var_defaults)
-
-        for node_id, rnode in self._built.nodes.items():
-            if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
-                self._exec_arrivals[node_id] = set()
-
-        self._write_node_outputs(self._built.entry_node_id, dict(self._flow_inputs))
-        await self._run_loop(self._built.entry_node_id)
-
-        ray.kill(self._state)
-        return self._output_refs
-
-    def _get_actor(self, node_id: str) -> Any:
-        return self._actors[node_id]
+    def get_graph_id(self) -> str:
+        return self._get_graph_id()
 
     # ------------------------------------------------------------------
     # Ciclo interno
@@ -98,7 +115,7 @@ class FlowEngine:
     async def _run_loop(self, entry_id: str, arrived_from: str | None = None) -> None:
         if not self._is_ready(entry_id, arrived_from):
             return
-        next_ids = await self._fire(entry_id)
+        next_ids = await self._fire_node(entry_id)
         if len(next_ids) > 1:
             await asyncio.gather(*[self._run_loop(nid, entry_id) for nid in next_ids])
         elif next_ids:
@@ -112,7 +129,7 @@ class FlowEngine:
             arrivals.add(arrived_from)
         return len(arrivals) >= len(self._built.nodes[node_id].exec_sources)
 
-    async def _fire(self, node_id: str) -> list[str]:
+    async def _fire_node(self, node_id: str) -> list[str]:
         rnode = self._built.nodes[node_id]
         if rnode.node_def.subflow_entry is not None:
             return await self._fire_callflow_node(node_id, rnode)
@@ -121,12 +138,11 @@ class FlowEngine:
         return await self._fire_ray_node(node_id, rnode)
 
     # ------------------------------------------------------------------
-    # CallFlow — subgrafo inline orquestado por el engine
+    # CallFlow
     # ------------------------------------------------------------------
 
     async def _fire_callflow_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         started_at = time.time()
-
         entry_id = rnode.node_def.subflow_entry
         exit_id = rnode.node_def.subflow_exit
 
@@ -153,7 +169,7 @@ class FlowEngine:
         return rnode.exec_targets.get("exec_out", [])
 
     # ------------------------------------------------------------------
-    # @engine_node y @parallel_node — ejecutado localmente
+    # @engine_node y @parallel_node
     # ------------------------------------------------------------------
 
     async def _fire_engine_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
@@ -175,17 +191,15 @@ class FlowEngine:
                 await self._run_loop(targets[0], node_id)
             return []
 
+        graph_id = self._get_graph_id()
         ctx = ExecContext(
-            node_id, self._graph_id, rnode.state_path,
+            node_id, graph_id, rnode.state_path,
             _output_writer=lambda nid, pin, val: self._write_node_outputs(nid, {pin: val}),
         )
 
         started_at = time.time()
-        # Escribir meta inicial antes de run() para que downstream pueda leerla
-        # aunque el nodo dispare ctx.fire() durante su ejecución.
-        self._write_node_outputs(node_id, {
-            "meta": self._build_meta(node_id, rnode, started_at, 0.0)
-        })
+        self._emit_node_start(node_id, rnode)
+        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, 0.0)})
 
         run_fn = getattr(rnode.meta.py_class, "run", None)
         if run_fn is not None:
@@ -198,32 +212,58 @@ class FlowEngine:
                     f"Nodo '{name}' (id={node_id}) devolvió data por return "
                     f"({list(result)}). Usa ctx.set_output(pin, valor)."
                 )
+
         duration_ms = (time.time() - started_at) * 1000
-        self._write_node_outputs(node_id, {
-            "meta": self._build_meta(node_id, rnode, started_at, duration_ms)
-        })
+        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
+        self._emit_node_done(node_id, rnode, duration_ms)
         return []
 
     # ------------------------------------------------------------------
-    # @ray_node — actor Ray, localizado por nombre en el cluster
+    # @ray_node
     # ------------------------------------------------------------------
 
     async def _fire_ray_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
-        actor = self._get_actor(node_id)
+        actor = self._actors[node_id]
         resolved = self._resolve_inputs(rnode)
 
-        ctx = ExecContext(node_id, self._graph_id, rnode.state_path)
+        graph_id = self._get_graph_id()
+        ctx = ExecContext(node_id, graph_id, rnode.state_path)
+
         started_at = time.time()
-        # Meta inicial: downstream puede leerla si ctx.fire() ocurre durante run()
-        self._write_node_outputs(node_id, {
-            "meta": self._build_meta(node_id, rnode, started_at, 0.0)
-        })
+        self._emit_node_start(node_id, rnode)
+        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, 0.0)})
+
         await actor.run_with_ctx.remote(ctx, **resolved)
+
         duration_ms = (time.time() - started_at) * 1000
-        self._write_node_outputs(node_id, {
-            "meta": self._build_meta(node_id, rnode, started_at, duration_ms)
-        })
+        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
+        self._emit_node_done(node_id, rnode, duration_ms)
         return []
+
+    # ------------------------------------------------------------------
+    # Emisión de eventos a la RunQueue
+    # ------------------------------------------------------------------
+
+    def _emit_node_start(self, node_id: str, rnode: ResolvedNode) -> None:
+        if self._run_queue is None:
+            return
+        ray.get(self._run_queue.push.remote({
+            "event": "node_start",
+            "node_id": node_id,
+            "node_type": rnode.meta.name,
+            "ts": time.time(),
+        }))
+
+    def _emit_node_done(self, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
+        if self._run_queue is None:
+            return
+        ray.get(self._run_queue.push.remote({
+            "event": "node_done",
+            "node_id": node_id,
+            "node_type": rnode.meta.name,
+            "duration_ms": round(duration_ms, 3),
+            "ts": time.time(),
+        }))
 
     # ------------------------------------------------------------------
     # Resolución de data inputs
@@ -245,23 +285,16 @@ class FlowEngine:
         src_pin = res_pin.source_pin
         src_rnode = self._built.nodes.get(src_id)
 
-        # 1) Output vigente en el state
         ref = ray.get(self._state.get_node_output.remote(src_id, src_pin))
         if ref is not None:
             if isinstance(ref, ray.ObjectRef):
                 ref = ray.get(ref)
             return ray.put(ref)
 
-        # 2a/2b) Nodo pure (sin exec pins) — @engine_node o @ray_node: misma firma
-        # run(self, ctx, **inputs) -> dict. Se evalúa inline en el engine en ambos casos:
-        # el decorator solo indica preferencia de dónde correr; para pure nodes (lazy,
-        # sin side-effects de exec flow) la evaluación inline es equivalente y evita
-        # problemas de serialización de ray_handle en procesos remotos.
         if src_rnode and not src_rnode.meta.is_exec_node:
             value = self._eval_pure_engine_node(src_rnode, src_pin)
             return ray.put(value)
 
-        # 3) Fallback: default del pin consumidor
         consumer_pin = next(
             (p for p in rnode.meta.inputs if p.name == pin_name), None
         )
@@ -269,11 +302,10 @@ class FlowEngine:
         return ray.put(default)
 
     def _eval_pure_engine_node(self, rnode: ResolvedNode, src_pin: str) -> Any:
-        """Evalúa un @engine_node sin exec pins bajo demanda (pure node / lazy)."""
         resolved = self._resolve_inputs(rnode)
         inputs = {k: ray.get(v) for k, v in resolved.items()}
-
-        ctx = ExecContext(rnode.node_def.id, self._graph_id, rnode.state_path)
+        graph_id = self._get_graph_id()
+        ctx = ExecContext(rnode.node_def.id, graph_id, rnode.state_path)
         run_fn = getattr(rnode.meta.py_class, "run", None)
         if run_fn is None:
             return None
@@ -281,7 +313,7 @@ class FlowEngine:
         return outputs.get(src_pin)
 
     # ------------------------------------------------------------------
-    # State helpers
+    # Helpers
     # ------------------------------------------------------------------
 
     def _build_meta(self, node_id: str, rnode: ResolvedNode, started_at: float, duration_ms: float) -> dict:
@@ -298,27 +330,49 @@ class FlowEngine:
 
 
 # ---------------------------------------------------------------------------
-# Wrapper síncrono — crea el engine como actor Ray nombrado
+# LoadedFlow — ciclo de vida de un flow cargado en Ray
 # ---------------------------------------------------------------------------
 
-class FlowExecutor:
-    """Wrapper síncrono sobre FlowEngine para compatibilidad con api.py."""
+class LoadedFlow:
+    """Flow con actores Ray vivos y GraphState persistente.
 
-    def __init__(self, built: BuiltFlow, flow_inputs: dict[str, Any] | None = None):
-        self._built = built
-        self._flow_inputs = flow_inputs or {}
+    Se crea con LoadedFlow.load(built) y se destruye con .unload().
+    Entre requests, el GraphState mantiene el estado de variables.
+    """
 
-    def execute(self) -> dict[str, Any]:
-        graph_id = str(uuid.uuid4())
+    def __init__(self, graph_id: str, engine: Any, actors: dict[str, Any]):
+        self.graph_id = graph_id
+        self._engine = engine
+        self._actors = actors
 
-        # Spawn actores @ray_node en el driver: py_class está disponible aquí
-        # directamente (no hay doble serialización). Los handles son serializables
-        # y se pasan al FlowEngine actor.
+    @classmethod
+    def load(cls, built: BuiltFlow) -> "LoadedFlow":
+        graph_id = built.flow_def.name
+
+        # Destruir engine previo si existía (recarga)
+        try:
+            old = ray.get_actor(f"engine_{graph_id}", namespace="rayflow")
+            ray.kill(old)
+        except Exception:
+            pass
+        try:
+            old_gs = ray.get_actor(f"gs_{graph_id}", namespace="rayflow")
+            ray.kill(old_gs)
+        except Exception:
+            pass
+
+        # Spawn actores @ray_node
         actors: dict[str, Any] = {}
-        for node_id, rnode in self._built.nodes.items():
+        for node_id, rnode in built.nodes.items():
             if rnode.meta.is_engine_node or rnode.meta.is_parallel:
                 continue
             if rnode.meta.is_exec_node and rnode.meta.ray_handle is not None:
+                # Destruir actor previo si existe
+                try:
+                    old_actor = ray.get_actor(f"{node_id}_{graph_id}", namespace="rayflow")
+                    ray.kill(old_actor)
+                except Exception:
+                    pass
                 actor = rnode.meta.ray_handle.options(
                     name=f"{node_id}_{graph_id}",
                     namespace="rayflow",
@@ -330,17 +384,54 @@ class FlowExecutor:
             name=f"engine_{graph_id}",
             namespace="rayflow",
             lifetime="detached",
-        ).remote(self._built, self._flow_inputs, graph_id, actors)
+        ).remote(built, actors)
 
-        try:
-            return ray.get(engine.execute.remote())
-        finally:
-            for actor in actors.values():
-                try:
-                    ray.kill(actor)
-                except Exception:
-                    pass
+        return cls(graph_id, engine, actors)
+
+    def execute(self, flow_inputs: dict[str, Any], queue: Any) -> Any:
+        """Lanza execute() en el engine y devuelve el ObjectRef (no bloquea)."""
+        return self._engine.execute.remote(flow_inputs, queue)
+
+    def unload(self) -> None:
+        """Destruye todos los actores del flow."""
+        for actor in self._actors.values():
             try:
-                ray.kill(engine)
+                ray.kill(actor)
             except Exception:
                 pass
+        try:
+            ray.kill(self._engine)
+        except Exception:
+            pass
+        try:
+            gs = ray.get_actor(f"gs_{self.graph_id}", namespace="rayflow")
+            ray.kill(gs)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Registro global de flows cargados (en el proceso driver)
+# ---------------------------------------------------------------------------
+
+_loaded_flows: dict[str, LoadedFlow] = {}
+
+
+def get_loaded_flow(name: str) -> LoadedFlow | None:
+    return _loaded_flows.get(name)
+
+
+def load_flow_into_ray(built: BuiltFlow) -> LoadedFlow:
+    lf = LoadedFlow.load(built)
+    _loaded_flows[built.flow_def.name] = lf
+    return lf
+
+
+def unload_flow_from_ray(name: str) -> None:
+    lf = _loaded_flows.pop(name, None)
+    if lf:
+        lf.unload()
+
+
+def is_flow_loaded(name: str) -> bool:
+    return name in _loaded_flows

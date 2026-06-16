@@ -1,11 +1,27 @@
 import { useCallback } from 'react'
 import { useFlowStore, type Run, type RunEvent } from '@/store/flowStore'
-import { runFlow } from '@/lib/api'
+import { loadFlow, unloadFlow, runFlowUrl } from '@/lib/api'
 
 export function useRunStream(tabName: string) {
-  const { addRun, updateRun } = useFlowStore()
+  const { addRun, updateRun, setLoaded, setDirty } = useFlowStore()
 
-  const startRun = useCallback(async (inputs: Record<string, unknown>) => {
+  const startRun = useCallback(async (
+    inputs: Record<string, unknown>,
+    opts: { dirty: boolean; loaded: boolean; onSave: () => Promise<void> }
+  ) => {
+    const needsSave = opts.dirty || !opts.loaded
+    const needsLoad = opts.dirty || !opts.loaded
+
+    if (needsSave) {
+      await opts.onSave()
+      setDirty(false)
+    }
+
+    if (needsLoad) {
+      await loadFlow(tabName)
+      setLoaded(true)
+    }
+
     const runId = crypto.randomUUID()
     const run: Run = {
       runId,
@@ -18,14 +34,13 @@ export function useRunStream(tabName: string) {
     }
     addRun(tabName, run)
 
+    const url = runFlowUrl(tabName)
+    let response: Response
     try {
-      // Por ahora: ejecución simple sin streaming (hasta que el backend soporte SSE)
-      const result = await runFlow(tabName, inputs)
-      updateRun(tabName, runId, {
-        status: 'done',
-        result,
-        activeNodes: new Set(),
-        activeEdges: new Set(),
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inputs),
       })
     } catch (e) {
       updateRun(tabName, runId, {
@@ -34,31 +49,19 @@ export function useRunStream(tabName: string) {
         activeNodes: new Set(),
         activeEdges: new Set(),
       })
+      return runId
     }
 
-    return runId
-  }, [tabName, addRun, updateRun])
-
-  // Cuando el backend implemente SSE, reemplazar startRun con esta lógica:
-  const startRunSSE = useCallback(async (inputs: Record<string, unknown>) => {
-    const runId = crypto.randomUUID()
-    const run: Run = {
-      runId,
-      status: 'running',
-      activeNodes: new Set(),
-      doneNodes: new Set(),
-      activeEdges: new Set(),
-      logs: [],
-      startedAt: Date.now(),
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: response.statusText }))
+      updateRun(tabName, runId, {
+        status: 'error',
+        error: err.detail || response.statusText,
+        activeNodes: new Set(),
+        activeEdges: new Set(),
+      })
+      return runId
     }
-    addRun(tabName, run)
-
-    const url = `/editor/flows/${encodeURIComponent(tabName)}/run/stream`
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(inputs),
-    })
 
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
@@ -73,7 +76,12 @@ export function useRunStream(tabName: string) {
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue
-        const evt: RunEvent = JSON.parse(line.slice(6))
+        let evt: RunEvent
+        try {
+          evt = JSON.parse(line.slice(6))
+        } catch {
+          continue
+        }
 
         useFlowStore.setState(s => ({
           tabs: s.tabs.map(t => {
@@ -81,7 +89,7 @@ export function useRunStream(tabName: string) {
             const run = t.runs.find(r => r.runId === runId)
             if (!run) return t
 
-            const updatedRun = { ...run, logs: [...run.logs, evt] }
+            const updatedRun: Run = { ...run, logs: [...run.logs, evt] }
 
             if (evt.event === 'node_start' && evt.node_id) {
               updatedRun.activeNodes = new Set([...run.activeNodes, evt.node_id])
@@ -95,27 +103,25 @@ export function useRunStream(tabName: string) {
               updatedRun.activeEdges = new Set([...run.activeEdges, edgeKey])
               setTimeout(() => {
                 useFlowStore.setState(s2 => ({
-                  tabs: s2.tabs.map(t2 => {
-                    if (t2.name !== tabName) return t2
-                    return {
-                      ...t2,
-                      runs: t2.runs.map(r => r.runId !== runId ? r : {
-                        ...r,
-                        activeEdges: new Set([...r.activeEdges].filter(e => e !== edgeKey)),
-                      }),
-                    }
+                  tabs: s2.tabs.map(t2 => t2.name !== tabName ? t2 : {
+                    ...t2,
+                    runs: t2.runs.map(r => r.runId !== runId ? r : {
+                      ...r,
+                      activeEdges: new Set([...r.activeEdges].filter(e => e !== edgeKey)),
+                    }),
                   }),
                 }))
               }, 600)
             }
             if (evt.event === 'flow_done') {
               updatedRun.status = 'done'
-              updatedRun.result = evt.outputs
+              updatedRun.result = evt.outputs ?? (evt as unknown as Record<string, unknown>).result as Record<string, unknown>
               updatedRun.activeNodes = new Set()
               updatedRun.activeEdges = new Set()
             }
             if (evt.event === 'flow_error') {
               updatedRun.status = 'error'
+              updatedRun.error = (evt as unknown as Record<string, unknown>).error as string
               updatedRun.activeNodes = new Set()
               updatedRun.activeEdges = new Set()
             }
@@ -127,7 +133,14 @@ export function useRunStream(tabName: string) {
     }
 
     return runId
-  }, [tabName, addRun])
+  }, [tabName, addRun, updateRun, setLoaded, setDirty])
 
-  return { startRun, startRunSSE }
+  const unload = useCallback(async () => {
+    await unloadFlow(tabName)
+    useFlowStore.setState(s => ({
+      tabs: s.tabs.map(t => t.name !== tabName ? t : { ...t, loaded: false }),
+    }))
+  }, [tabName])
+
+  return { startRun, unload }
 }
