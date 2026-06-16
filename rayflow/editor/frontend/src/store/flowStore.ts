@@ -25,6 +25,7 @@ export interface Run {
   result?: Record<string, unknown>
   error?: string
   startedAt: number
+  endedAt?: number
 }
 
 export interface FlowTab {

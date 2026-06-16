@@ -20,6 +20,13 @@ function statusLabel(status: Run['status']) {
   return 'idle'
 }
 
+function formatDuration(startedAt: number, endedAt?: number): string {
+  if (!endedAt) return ''
+  const ms = endedAt - startedAt
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
 interface Props {
   activeFlow: FlowMeta | null
   validationErrors: string[]
@@ -194,7 +201,14 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
                   <span style={{ fontSize: 11, color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
                     {new Date(run.startedAt).toLocaleTimeString()}
                   </span>
-                  <span style={{ fontSize: 11, color: dot, fontWeight: 500 }}>{statusLabel(run.status)}</span>
+                  <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: dot, fontWeight: 500 }}>{statusLabel(run.status)}</span>
+                    {run.endedAt && (
+                      <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>
+                        {formatDuration(run.startedAt, run.endedAt)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </button>
             )
@@ -218,6 +232,11 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Completado</span>
+                {activeRun.endedAt && (
+                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 'auto' }}>
+                    {formatDuration(activeRun.startedAt, activeRun.endedAt)}
+                  </span>
+                )}
               </div>
               <pre style={{
                 fontSize: 12, fontFamily: 'monospace',
@@ -236,6 +255,11 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--destructive)', flexShrink: 0 }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--destructive)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Error</span>
+                {activeRun.endedAt && (
+                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 'auto' }}>
+                    {formatDuration(activeRun.startedAt, activeRun.endedAt)}
+                  </span>
+                )}
               </div>
               <div style={{
                 fontSize: 12, fontFamily: 'monospace', color: 'var(--destructive)',

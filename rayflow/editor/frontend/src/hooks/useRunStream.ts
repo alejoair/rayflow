@@ -115,10 +115,10 @@ export function useRunStream(tabName: string) {
           if (terminal.event === 'flow_done') {
             const result = (terminal as unknown as Record<string, unknown>).outputs as Record<string, unknown>
               ?? (terminal as unknown as Record<string, unknown>).result as Record<string, unknown>
-            patchRun(() => ({ status: 'done', result, activeNodes: new Set(), activeEdges: new Set() }))
+            patchRun(() => ({ status: 'done', result, endedAt: Date.now(), activeNodes: new Set(), activeEdges: new Set() }))
           } else {
             const error = (terminal as unknown as Record<string, unknown>).error as string
-            patchRun(() => ({ status: 'error', error, activeNodes: new Set(), activeEdges: new Set() }))
+            patchRun(() => ({ status: 'error', error, endedAt: Date.now(), activeNodes: new Set(), activeEdges: new Set() }))
           }
           playing = false
         }, animMinMs)
