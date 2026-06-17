@@ -21,7 +21,6 @@ Todos los nodos usan el mismo ExecContext: localiza el FlowEngine por nombre de
 actor Ray ("engine_{graph_id}") y puede hacer ctx.fire() bloqueante desde
 cualquier proceso del cluster — no hay distinción entre engine_node y ray_node.
 """
-import inspect
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -197,7 +196,6 @@ class NodeMeta:
     has_exec_out: bool = False
     is_exec_node: bool = False
     is_engine_node: bool = False
-    is_async: bool = False
     is_parallel: bool = False
 
     def __getstate__(self):
@@ -228,15 +226,11 @@ def ray_node(cls: type) -> type:
     """
     meta = _extract_meta(cls)
     meta.is_engine_node = False
-    meta.is_async = inspect.iscoroutinefunction(getattr(cls, "run", None))
-
     if meta.is_exec_node:
         original_run = cls.run
 
         async def run_with_ctx(self, ctx, **inputs):
-            result = original_run(self, ctx, **inputs)
-            if inspect.isawaitable(result):
-                await result
+            await original_run(self, ctx, **inputs)
 
         cls.run_with_ctx = run_with_ctx
 
@@ -260,7 +254,6 @@ def engine_node(cls: type) -> type:
     """
     meta = _extract_meta(cls)
     meta.is_engine_node = True
-    meta.is_async = False
     _strip_pin_descriptors(cls, meta)
     setattr(cls, _NODE_META_ATTR, meta)
     return cls

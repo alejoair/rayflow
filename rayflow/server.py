@@ -138,10 +138,21 @@ def create_app(served: dict[str, ServedFlow]):
 def serve(sources: list[str | Path], host: str = "127.0.0.1", port: int = 8000,
           extra_node_dirs: list[str | Path] | None = None) -> None:
     """Carga los flows, valida, y levanta el servidor REST (bloqueante)."""
+    import signal
     import uvicorn
     served = load_served_flows(sources, extra_node_dirs)
     app = create_app(served)
     names = ", ".join(served) or "(ninguno)"
     print(f"Rayflow sirviendo {len(served)} flow(s): {names}")
     print(f"  -> http://{host}:{port}/flows")
-    uvicorn.run(app, host=host, port=port)
+
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port))
+
+    def _shutdown(signum, frame):
+        server.should_exit = True
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    import asyncio
+    asyncio.run(server.serve())

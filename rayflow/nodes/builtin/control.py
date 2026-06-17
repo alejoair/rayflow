@@ -55,10 +55,6 @@ class OnStart:
     """
     exec_out = ExecOutput()
 
-    async def run(self, ctx: ExecContext) -> None:
-        await ctx.fire("exec_out")
-
-
 @engine_node
 class FlowOutput:
     """Punto de salida del flow.

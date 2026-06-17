@@ -29,10 +29,13 @@ def serve(files, host, port, nodes_dirs):
     ray.init(**kwargs)
     get_event_broker()
 
-    from rayflow.server import serve as _serve
-    _serve(
-        sources=list(files),
-        host=host,
-        port=port,
-        extra_node_dirs=list(nodes_dirs) or None,
-    )
+    try:
+        from rayflow.server import serve as _serve
+        _serve(
+            sources=list(files),
+            host=host,
+            port=port,
+            extra_node_dirs=list(nodes_dirs) or None,
+        )
+    finally:
+        ray.shutdown()

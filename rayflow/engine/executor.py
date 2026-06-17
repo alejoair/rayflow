@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-import inspect
 import time
 import uuid
 
@@ -71,35 +70,35 @@ class FlowEngine:
             if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
                 self._exec_arrivals[node_id] = set()
 
-        self._write_node_outputs(self._built.entry_node_id, dict(flow_inputs))
+        await self._write_node_outputs(self._built.entry_node_id, dict(flow_inputs))
 
         try:
             await self._run_loop(self._built.entry_node_id)
             result = dict(self._output_refs)
-            ray.get(queue_ref.push.remote({"event": "flow_done", "result": result, "ts": time.time()}))
+            await queue_ref.push.remote({"event": "flow_done", "result": result, "ts": time.time()})
             return result
         except Exception as e:
-            ray.get(queue_ref.push.remote({"event": "flow_error", "error": str(e), "ts": time.time()}))
+            await queue_ref.push.remote({"event": "flow_error", "error": str(e), "ts": time.time()})
             raise
 
     async def fire(self, source_node_id: str, pin_name: str) -> None:
         rnode = self._built.nodes[source_node_id]
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            ray.get(self._run_queue.push.remote({
+            await self._run_queue.push.remote({
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
                 "pin": pin_name,
                 "ts": time.time(),
-            }))
+            })
         if len(targets) > 1:
             await asyncio.gather(*[self._run_loop(t, source_node_id) for t in targets])
         elif targets:
             await self._run_loop(targets[0], source_node_id)
 
     async def set_output(self, node_id: str, pin_name: str, value: Any) -> None:
-        ray.get(self._state.set_node_outputs.remote(node_id, {pin_name: value}))
+        await self._state.set_node_outputs.remote(node_id, {pin_name: value})
 
     async def get_exec_outputs(self, node_id: str, exclude: list[str]) -> list[str]:
         rnode = self._built.nodes[node_id]
@@ -149,9 +148,9 @@ class FlowEngine:
         if rnode.node_def.subflow_vars:
             sub_state = self._built.nodes[entry_id].state_path
             for var_name, default in rnode.node_def.subflow_vars:
-                ray.get(self._state.set_variable.remote(
+                await self._state.set_variable.remote(
                     _var_key(sub_state, var_name), default
-                ))
+                )
 
         await self._run_loop(entry_id)
 
@@ -159,10 +158,10 @@ class FlowEngine:
         if exit_id is not None:
             exit_rnode = self._built.nodes[exit_id]
             for pin_name in exit_rnode.resolved_inputs:
-                result[pin_name] = ray.get(self._resolve_pin(exit_rnode, pin_name))
+                result[pin_name] = await self._resolve_pin(exit_rnode, pin_name)
 
         duration_ms = (time.time() - started_at) * 1000
-        self._write_node_outputs(node_id, {
+        await self._write_node_outputs(node_id, {
             "result": result,
             "meta": self._build_meta(node_id, rnode, started_at, duration_ms),
         })
@@ -174,16 +173,16 @@ class FlowEngine:
 
     async def _fire_engine_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         name = rnode.meta.name
-        resolved = self._resolve_inputs(rnode)
-        inputs = {k: ray.get(v) for k, v in resolved.items()}
+        resolved = await self._resolve_inputs(rnode)
+        inputs = {k: await v for k, v in resolved.items()}
 
         if name == "FlowOutput":
             if rnode.node_def.subflow_of is None:
-                self._output_refs.update({k: ray.get(v) for k, v in resolved.items()})
+                self._output_refs.update(inputs)
             return []
 
-        if name in ("OnStart", "OnEvent") and rnode.node_def.subflow_of is not None:
-            self._write_node_outputs(node_id, {k: ray.get(v) for k, v in resolved.items()})
+        if name in ("OnStart", "OnEvent"):
+            await self._write_node_outputs(node_id, inputs)
             targets = rnode.exec_targets.get("exec_out", [])
             if len(targets) > 1:
                 await asyncio.gather(*[self._run_loop(t, node_id) for t in targets])
@@ -194,28 +193,21 @@ class FlowEngine:
         graph_id = self._get_graph_id()
         ctx = ExecContext(
             node_id, graph_id, rnode.state_path,
-            _output_writer=lambda nid, pin, val: self._write_node_outputs(nid, {pin: val}),
+            _output_writer=lambda nid, pin, val: self._write_node_outputs_sync(nid, {pin: val}),
         )
 
         started_at = time.time()
-        self._emit_node_start(node_id, rnode)
-        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, 0.0)})
+        await self._emit_node_start(node_id, rnode)
+        await self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, 0.0)})
 
         run_fn = getattr(rnode.meta.py_class, "run", None)
         if run_fn is not None:
             instance = rnode.meta.py_class()
-            result = instance.run(ctx, **inputs)
-            if inspect.isawaitable(result):
-                result = await result
-            if result:
-                raise RuntimeError(
-                    f"Nodo '{name}' (id={node_id}) devolvió data por return "
-                    f"({list(result)}). Usa ctx.set_output(pin, valor)."
-                )
+            await instance.run(ctx, **inputs)
 
         duration_ms = (time.time() - started_at) * 1000
-        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
-        self._emit_node_done(node_id, rnode, duration_ms)
+        await self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
+        await self._emit_node_done(node_id, rnode, duration_ms)
         return []
 
     # ------------------------------------------------------------------
@@ -224,58 +216,58 @@ class FlowEngine:
 
     async def _fire_ray_node(self, node_id: str, rnode: ResolvedNode) -> list[str]:
         actor = self._actors[node_id]
-        resolved = self._resolve_inputs(rnode)
+        resolved = await self._resolve_inputs(rnode)
 
         graph_id = self._get_graph_id()
         ctx = ExecContext(node_id, graph_id, rnode.state_path)
 
         started_at = time.time()
-        self._emit_node_start(node_id, rnode)
-        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, 0.0)})
+        await self._emit_node_start(node_id, rnode)
+        await self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, 0.0)})
 
         await actor.run_with_ctx.remote(ctx, **resolved)
 
         duration_ms = (time.time() - started_at) * 1000
-        self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
-        self._emit_node_done(node_id, rnode, duration_ms)
+        await self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
+        await self._emit_node_done(node_id, rnode, duration_ms)
         return []
 
     # ------------------------------------------------------------------
     # Emisión de eventos a la RunQueue
     # ------------------------------------------------------------------
 
-    def _emit_node_start(self, node_id: str, rnode: ResolvedNode) -> None:
+    async def _emit_node_start(self, node_id: str, rnode: ResolvedNode) -> None:
         if self._run_queue is None:
             return
-        ray.get(self._run_queue.push.remote({
+        await self._run_queue.push.remote({
             "event": "node_start",
             "node_id": node_id,
             "node_type": rnode.meta.name,
             "ts": time.time(),
-        }))
+        })
 
-    def _emit_node_done(self, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
+    async def _emit_node_done(self, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
         if self._run_queue is None:
             return
-        ray.get(self._run_queue.push.remote({
+        await self._run_queue.push.remote({
             "event": "node_done",
             "node_id": node_id,
             "node_type": rnode.meta.name,
             "duration_ms": round(duration_ms, 3),
             "ts": time.time(),
-        }))
+        })
 
     # ------------------------------------------------------------------
     # Resolución de data inputs
     # ------------------------------------------------------------------
 
-    def _resolve_inputs(self, rnode: ResolvedNode) -> dict[str, Any]:
+    async def _resolve_inputs(self, rnode: ResolvedNode) -> dict[str, Any]:
         return {
-            pin_name: self._resolve_pin(rnode, pin_name)
+            pin_name: await self._resolve_pin(rnode, pin_name)
             for pin_name in rnode.resolved_inputs
         }
 
-    def _resolve_pin(self, rnode: ResolvedNode, pin_name: str) -> Any:
+    async def _resolve_pin(self, rnode: ResolvedNode, pin_name: str) -> Any:
         res_pin = rnode.resolved_inputs[pin_name]
 
         if not res_pin.is_ref:
@@ -285,14 +277,14 @@ class FlowEngine:
         src_pin = res_pin.source_pin
         src_rnode = self._built.nodes.get(src_id)
 
-        ref = ray.get(self._state.get_node_output.remote(src_id, src_pin))
+        ref = await self._state.get_node_output.remote(src_id, src_pin)
         if ref is not None:
             if isinstance(ref, ray.ObjectRef):
-                ref = ray.get(ref)
+                ref = await ref
             return ray.put(ref)
 
         if src_rnode and not src_rnode.meta.is_exec_node:
-            value = self._eval_pure_engine_node(src_rnode, src_pin)
+            value = await self._eval_pure_engine_node(src_rnode, src_pin)
             return ray.put(value)
 
         consumer_pin = next(
@@ -301,15 +293,15 @@ class FlowEngine:
         default = consumer_pin.default if consumer_pin and consumer_pin.has_default else None
         return ray.put(default)
 
-    def _eval_pure_engine_node(self, rnode: ResolvedNode, src_pin: str) -> Any:
-        resolved = self._resolve_inputs(rnode)
-        inputs = {k: ray.get(v) for k, v in resolved.items()}
+    async def _eval_pure_engine_node(self, rnode: ResolvedNode, src_pin: str) -> Any:
+        resolved = await self._resolve_inputs(rnode)
+        inputs = {k: await v for k, v in resolved.items()}
         graph_id = self._get_graph_id()
         ctx = ExecContext(rnode.node_def.id, graph_id, rnode.state_path)
         run_fn = getattr(rnode.meta.py_class, "run", None)
         if run_fn is None:
             return None
-        outputs = rnode.meta.py_class().run(ctx, **inputs) or {}
+        outputs = await rnode.meta.py_class().run(ctx, **inputs) or {}
         return outputs.get(src_pin)
 
     # ------------------------------------------------------------------
@@ -325,7 +317,12 @@ class FlowEngine:
             "duration_ms": round(duration_ms, 3),
         }
 
-    def _write_node_outputs(self, node_id: str, outputs: dict[str, Any]) -> None:
+    async def _write_node_outputs(self, node_id: str, outputs: dict[str, Any]) -> None:
+        await self._state.set_node_outputs.remote(node_id, outputs)
+
+    def _write_node_outputs_sync(self, node_id: str, outputs: dict[str, Any]) -> None:
+        # Variante síncrona para ctx.set_output() de engine_nodes, cuyo run()
+        # llama set_output de forma síncrona. Bloquea brevemente el event loop.
         ray.get(self._state.set_node_outputs.remote(node_id, outputs))
 
 

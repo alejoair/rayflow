@@ -21,7 +21,7 @@ class Get:
     variable_name = Input("str", default="")
     value = Output("Any")
 
-    def run(self, ctx: ExecContext, variable_name: str) -> dict:
+    async def run(self, ctx: ExecContext, variable_name: str) -> dict:
         return {"value": ctx.get_variable(variable_name)}
 
 

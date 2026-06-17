@@ -24,10 +24,6 @@ class OnEvent:
     exec_out = ExecOutput()
     payload = Output("Any")
 
-    async def run(self, ctx: ExecContext, event_name: str = "") -> None:
-        await ctx.fire("exec_out")
-
-
 @engine_node
 class EmitEvent:
     """Emite un evento al bus global. Fire-and-forget.

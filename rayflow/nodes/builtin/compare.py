@@ -14,7 +14,7 @@ class GreaterThan:
     b = Input("Any", default=0)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
+    async def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
         return {"result": a > b}
 
 
@@ -24,7 +24,7 @@ class LessThan:
     b = Input("Any", default=0)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
+    async def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
         return {"result": a < b}
 
 
@@ -34,7 +34,7 @@ class GreaterThanOrEqual:
     b = Input("Any", default=0)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
+    async def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
         return {"result": a >= b}
 
 
@@ -44,7 +44,7 @@ class LessThanOrEqual:
     b = Input("Any", default=0)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
+    async def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
         return {"result": a <= b}
 
 
@@ -54,7 +54,7 @@ class Equal:
     b = Input("Any", default=None)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
+    async def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
         return {"result": a == b}
 
 
@@ -64,7 +64,7 @@ class NotEqual:
     b = Input("Any", default=None)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
+    async def run(self, ctx: ExecContext, a: Any, b: Any) -> dict:
         return {"result": a != b}
 
 
@@ -73,7 +73,7 @@ class Not:
     value = Input("bool", default=False)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, value: bool) -> dict:
+    async def run(self, ctx: ExecContext, value: bool) -> dict:
         return {"result": not value}
 
 
@@ -83,7 +83,7 @@ class And:
     b = Input("bool", default=False)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: bool, b: bool) -> dict:
+    async def run(self, ctx: ExecContext, a: bool, b: bool) -> dict:
         return {"result": a and b}
 
 
@@ -93,5 +93,5 @@ class Or:
     b = Input("bool", default=False)
     result = Output("bool")
 
-    def run(self, ctx: ExecContext, a: bool, b: bool) -> dict:
+    async def run(self, ctx: ExecContext, a: bool, b: bool) -> dict:
         return {"result": a or b}
