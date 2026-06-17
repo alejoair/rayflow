@@ -167,20 +167,29 @@ export default function App() {
     }
     if (!valid) return
 
-    // Cargar en Ray en background
+    // Cargar en Ray en background, con reintentos para absorber el arranque lento de Ray
     useFlowStore.setState(s => ({
       tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loadingIntoRay: true }),
     }))
-    try {
-      await loadFlow(flowDef.name)
-      useFlowStore.setState(s => ({
-        tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loaded: true, loadingIntoRay: false, stale: false }),
-      }))
-    } catch {
-      useFlowStore.setState(s => ({
-        tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loadingIntoRay: false }),
-      }))
+    const MAX_RETRIES = 3
+    const RETRY_DELAY_MS = 3000
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        await loadFlow(flowDef.name)
+        useFlowStore.setState(s => ({
+          tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loaded: true, loadingIntoRay: false, stale: false }),
+        }))
+        return
+      } catch {
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
+        }
+      }
     }
+    // Todos los intentos fallaron
+    useFlowStore.setState(s => ({
+      tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loadingIntoRay: false }),
+    }))
   }
 
   async function handleOpenFlow(name: string) {
