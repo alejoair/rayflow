@@ -17,6 +17,18 @@ def cli():
               help="Directorio extra de nodos de usuario. Repetible.")
 def serve(files, host, port, nodes_dirs):
     """Lanza el servidor REST y el editor visual."""
+    import ray
+    from rayflow.workspace import ensure_workspace, runtime_env
+    from rayflow.events.bus import get_event_broker
+
+    ensure_workspace()
+    kwargs = {"ignore_reinit_error": True, "namespace": "rayflow"}
+    env = runtime_env()
+    if env is not None:
+        kwargs["runtime_env"] = env
+    ray.init(**kwargs)
+    get_event_broker()
+
     from rayflow.server import serve as _serve
     _serve(
         sources=list(files),

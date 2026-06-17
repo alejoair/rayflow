@@ -25,7 +25,6 @@ def load(source: str | Path | dict) -> str:
     Returns:
         graph_id del flow cargado (= nombre del flow).
     """
-    _ensure_ray()
     flow_def = load_flow(source)
     catalog = get_catalog()
     built = build(flow_def, catalog)
@@ -45,8 +44,6 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
     Si el flow no está cargado, lo carga automáticamente primero.
     """
     import time
-
-    _ensure_ray()
 
     if not is_flow_loaded(name):
         load(name)
@@ -89,7 +86,6 @@ def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
 
     Para flows stateful usar load() + execute() + unload().
     """
-    _ensure_ray()
     flow_def = load_flow(source)
     name = flow_def.name
     load(source)
@@ -114,7 +110,6 @@ def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = 
     Returns:
         graph_id asignado (= nombre del flow).
     """
-    _ensure_ray()
     flow_def = load_flow(source)
     catalog = get_catalog(extra_node_dirs)
     built = build(flow_def, catalog)
