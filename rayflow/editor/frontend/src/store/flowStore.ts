@@ -250,7 +250,7 @@ export const useFlowStore = create<FlowStore>()(
       },
     }),
     {
-      name: 'rayflow-ui-state',
+      name: 'rayflow-ui-state',  // sobrescrito por initWorkspaceStore() al arrancar
       storage: setAwareStorage,
       // Solo persistimos tabs y qué tab está activa; catalog y flowList se recargan del servidor
       partialize: (state) => ({
@@ -272,3 +272,21 @@ export const useFlowStore = create<FlowStore>()(
     }
   )
 )
+
+/**
+ * Cambia la clave de localStorage al namespace del workspace activo y rehidrata.
+ * Llamar una vez al arrancar, después de obtener el cwd del servidor.
+ *
+ * Cada workspace usa su propia clave: "rayflow-ws-<hash(cwd)>"
+ * así los tabs/animMinMs de carpetas distintas nunca se mezclan.
+ */
+export function initWorkspaceStore(cwd: string): void {
+  // Hash simple pero suficiente para distinguir rutas
+  let hash = 0
+  for (let i = 0; i < cwd.length; i++) {
+    hash = ((hash << 5) - hash + cwd.charCodeAt(i)) | 0
+  }
+  const key = `rayflow-ws-${Math.abs(hash).toString(36)}`
+  useFlowStore.persist.setOptions({ name: key })
+  useFlowStore.persist.rehydrate()
+}

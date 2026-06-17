@@ -67,6 +67,7 @@ export interface RunEvent {
   ts: number
 }
 
+export const getEditorInfo = () => apiFetch<{ cwd: string }>('/editor/info')
 export const getNodes = () => apiFetch<NodeSpec[]>('/editor/nodes')
 export const getFlows = () => apiFetch<{ flows: FlowMeta[] }>('/editor/flows')
 export const getFlow = (name: string) => apiFetch<FlowDef>(`/editor/flows/${encodeURIComponent(name)}`)

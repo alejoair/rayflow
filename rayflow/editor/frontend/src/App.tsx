@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useFlowStore } from '@/store/flowStore'
-import { getNodes, getFlows, getFlow, createFlow, deleteFlow, updateFlow, validateFlow } from '@/lib/api'
+import { useFlowStore, initWorkspaceStore } from '@/store/flowStore'
+import { getEditorInfo, getNodes, getFlows, getFlow, createFlow, deleteFlow, updateFlow, validateFlow } from '@/lib/api'
 import { flowDefToRF, rfToFlowDef } from '@/lib/translator'
 import NodePalette from '@/components/NodePalette'
 import FlowCanvas from '@/components/FlowCanvas'
@@ -64,6 +64,22 @@ function NewFlowDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (
 }
 
 export default function App() {
+  const [cwd, setCwd] = useState<string | null>(null)
+
+  // Primer efecto: obtener el cwd del servidor y apuntar el store al namespace correcto
+  useEffect(() => {
+    getEditorInfo()
+      .then(info => {
+        initWorkspaceStore(info.cwd)
+        setCwd(info.cwd)
+      })
+      .catch(() => {
+        // Si falla (servidor no disponible), usar clave genérica para no bloquear la UI
+        initWorkspaceStore('default')
+        setCwd('')
+      })
+  }, [])
+
   const {
     catalog, setCatalog,
     flowList, setFlowList,
@@ -116,11 +132,12 @@ export default function App() {
   }, [setCatalog])
 
   useEffect(() => {
+    if (cwd === null) return  // esperar hasta conocer el workspace
     refreshCatalog()
     getFlows()
       .then(data => setFlowList(data.flows || []))
       .catch(console.error)
-  }, [])
+  }, [cwd])
 
   function addToast(msg: string, type: Toast['type'] = 'info') {
     const id = Date.now() + Math.random()
@@ -305,6 +322,21 @@ export default function App() {
         </>)}
 
         <div style={{ flex: 1 }} />
+
+        {cwd !== null && (
+          <span title={cwd || 'workspace desconocido'} style={{
+            fontSize: 11,
+            color: 'var(--muted-foreground)',
+            maxWidth: 220,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            direction: 'rtl',  // muestra el final de la ruta (más informativo)
+            textAlign: 'left',
+          }}>
+            📁 {cwd || '—'}
+          </span>
+        )}
 
         {tab && (
           <span style={{

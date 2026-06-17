@@ -49,6 +49,13 @@ def _node_spec(node_type: str, meta) -> dict[str, Any]:
     }
 
 
+@router.get("/info")
+async def editor_info() -> dict[str, Any]:
+    """Información del workspace activo: cwd y versión."""
+    import os
+    return {"cwd": os.getcwd()}
+
+
 @router.get("/nodes")
 async def list_nodes() -> list[dict[str, Any]]:
     """Devuelve el catálogo completo de tipos de nodo con sus pines."""
