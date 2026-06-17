@@ -35,6 +35,8 @@ export interface FlowTab {
   edges: Edge[]
   dirty: boolean
   loaded: boolean
+  loadingIntoRay: boolean  // cargando en Ray en background
+  stale: boolean           // cargado pero con cambios estructurales sin recargar
   validationErrors: string[]
   runs: Run[]
   activeRunId: string | null
@@ -63,6 +65,8 @@ interface FlowStore {
   setEdges: (edges: Edge[]) => void
   setDirty: (dirty: boolean) => void
   setLoaded: (loaded: boolean) => void
+  setLoadingIntoRay: (loading: boolean) => void
+  setStale: (stale: boolean) => void
   setValidationErrors: (errors: string[]) => void
   updateVariables: (vars: FlowDef['variables']) => void
 
@@ -143,7 +147,8 @@ export const useFlowStore = create<FlowStore>()(
         if (existing) { set({ activeTabName: flowDef.name }); return }
         const tab: FlowTab = {
           name: flowDef.name, flowDef, nodes, edges,
-          dirty: false, loaded: false, validationErrors: [], runs: [], activeRunId: null,
+          dirty: false, loaded: false, loadingIntoRay: false, stale: false,
+          validationErrors: [], runs: [], activeRunId: null,
         }
         set(s => ({ tabs: [...s.tabs, tab], activeTabName: flowDef.name }))
       },
@@ -163,9 +168,13 @@ export const useFlowStore = create<FlowStore>()(
       onNodesChange: (changes) => {
         const name = get().activeTabName
         if (!name) return
+        // Cambios solo de posición no son estructurales — no marcan stale
+        const isStructural = changes.some(c => c.type !== 'position' && c.type !== 'select' && c.type !== 'dimensions')
         set(s => ({
-          tabs: s.tabs.map(t => t.name !== name ? t : {
-            ...t, nodes: applyNodeChanges(changes, t.nodes), dirty: true,
+          tabs: s.tabs.map(t => {
+            if (t.name !== name) return t
+            const stale = isStructural && t.loaded ? true : t.stale
+            return { ...t, nodes: applyNodeChanges(changes, t.nodes), dirty: true, stale }
           }),
         }))
       },
@@ -173,9 +182,12 @@ export const useFlowStore = create<FlowStore>()(
       onEdgesChange: (changes) => {
         const name = get().activeTabName
         if (!name) return
+        const isStructural = changes.some(c => c.type !== 'select')
         set(s => ({
-          tabs: s.tabs.map(t => t.name !== name ? t : {
-            ...t, edges: applyEdgeChanges(changes, t.edges), dirty: true,
+          tabs: s.tabs.map(t => {
+            if (t.name !== name) return t
+            const stale = isStructural && t.loaded ? true : t.stale
+            return { ...t, edges: applyEdgeChanges(changes, t.edges), dirty: true, stale }
           }),
         }))
       },
@@ -195,13 +207,32 @@ export const useFlowStore = create<FlowStore>()(
       setDirty: (dirty) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, dirty }) }))
+        set(s => ({
+          tabs: s.tabs.map(t => {
+            if (t.name !== name) return t
+            // Si el flow estaba cargado y ahora se marca dirty → stale
+            const stale = dirty && t.loaded ? true : dirty ? t.stale : false
+            return { ...t, dirty, stale }
+          }),
+        }))
       },
 
       setLoaded: (loaded) => {
         const name = get().activeTabName
         if (!name) return
         set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, loaded }) }))
+      },
+
+      setLoadingIntoRay: (loadingIntoRay) => {
+        const name = get().activeTabName
+        if (!name) return
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, loadingIntoRay }) }))
+      },
+
+      setStale: (stale) => {
+        const name = get().activeTabName
+        if (!name) return
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, stale }) }))
       },
 
       updateVariables: (vars) => {
@@ -263,6 +294,10 @@ export const useFlowStore = create<FlowStore>()(
         if (!state) return
         state.tabs = state.tabs.map(tab => ({
           ...tab,
+          // Al recargar la página, Ray ya no tiene el flow cargado
+          loaded: false,
+          loadingIntoRay: false,
+          stale: false,
           // Descarta runs en vuelo al recargar (status running no tiene sentido tras recarga)
           runs: tab.runs
             .filter(r => r.status !== 'running')

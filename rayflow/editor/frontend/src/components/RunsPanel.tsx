@@ -30,15 +30,13 @@ function formatDuration(startedAt: number, endedAt?: number): string {
 interface Props {
   activeFlow: FlowMeta | null
   validationErrors: string[]
-  onSave: () => Promise<void>
 }
 
-export default function RunsPanel({ activeFlow, validationErrors, onSave }: Props) {
+export default function RunsPanel({ activeFlow, validationErrors }: Props) {
   const tab = useFlowStore(s => s.getActiveTab())
   const { setActiveRun } = useFlowStore()
   const { startRun, unload } = useRunStream(activeFlow?.name ?? '')
   const [inputs, setInputs] = useState<Record<string, string>>({})
-  const [preparing, setPreparing] = useState(false)
 
   if (!activeFlow || !tab) {
     return (
@@ -59,27 +57,24 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
   const isRunning = tab.runs.some(r => r.status === 'running')
   const hasErrors = validationErrors.length > 0
   const isLoaded = tab.loaded
-  const isBusy = preparing || isRunning
+  const isLoading = tab.loadingIntoRay
+  const isStale = tab.stale
+  const canRun = isLoaded && !isLoading && !isRunning && !hasErrors
 
   async function handleRun() {
-    if (isBusy) return
-    setPreparing(true)
-    try {
-      const coerced: Record<string, unknown> = {}
-      Object.entries(flowInputs).forEach(([name, type]) => {
-        const raw = inputs[name]
-        if (!raw && raw !== '0') return
-        const t = type.toLowerCase()
-        if (t === 'int') coerced[name] = parseInt(raw, 10)
-        else if (t === 'float') coerced[name] = parseFloat(raw)
-        else if (t === 'bool') coerced[name] = raw === 'true'
-        else if (t === 'list' || t === 'dict') { try { coerced[name] = JSON.parse(raw) } catch { coerced[name] = raw } }
-        else coerced[name] = raw
-      })
-      await startRun(coerced, { dirty: tab?.dirty ?? false, loaded: tab?.loaded ?? false, onSave })
-    } finally {
-      setPreparing(false)
-    }
+    if (!canRun) return
+    const coerced: Record<string, unknown> = {}
+    Object.entries(flowInputs).forEach(([name, type]) => {
+      const raw = inputs[name]
+      if (!raw && raw !== '0') return
+      const t = type.toLowerCase()
+      if (t === 'int') coerced[name] = parseInt(raw, 10)
+      else if (t === 'float') coerced[name] = parseFloat(raw)
+      else if (t === 'bool') coerced[name] = raw === 'true'
+      else if (t === 'list' || t === 'dict') { try { coerced[name] = JSON.parse(raw) } catch { coerced[name] = raw } }
+      else coerced[name] = raw
+    })
+    await startRun(coerced)
   }
 
   const runs = tab.runs
@@ -129,12 +124,12 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
           <Button
             size="sm"
             onClick={handleRun}
-            disabled={hasErrors || isBusy}
+            disabled={!canRun}
             style={{ height: 32, fontSize: 13, flex: 1 }}
           >
-            {isBusy ? '⏳ Ejecutando…' : '▶ Ejecutar'}
+            {isRunning ? '⏳ Ejecutando…' : '▶ Test flow'}
           </Button>
-          {isLoaded && !isBusy && (
+          {isLoaded && !isLoading && !isRunning && (
             <button
               onClick={unload}
               title="Descargar flow de Ray"
@@ -148,16 +143,25 @@ export default function RunsPanel({ activeFlow, validationErrors, onSave }: Prop
             >⏹</button>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isLoaded ? '#10b981' : 'var(--muted-foreground)', flexShrink: 0 }} />
-          <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
-            {isLoaded ? 'cargado en Ray' : 'no cargado'}
-          </span>
-          {tab.dirty && <span style={{ fontSize: 11, color: 'var(--primary)' }}>● cambios sin guardar</span>}
+
+        {/* Indicador de estado */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: isLoading ? '#f59e0b' : isLoaded ? '#10b981' : 'var(--muted-foreground)',
+            }} />
+            <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+              {isLoading ? 'cargando en Ray…' : isLoaded ? 'listo' : hasErrors ? 'no cargado' : 'no cargado'}
+            </span>
+          </div>
+          {isStale && (
+            <span style={{ fontSize: 11, color: '#f59e0b' }}>⚠ cambios sin guardar</span>
+          )}
+          {hasErrors && (
+            <span style={{ fontSize: 11, color: 'var(--destructive)' }}>{validationErrors.length} error(es)</span>
+          )}
         </div>
-        {hasErrors && (
-          <div style={{ fontSize: 11, color: 'var(--destructive)' }}>{validationErrors.length} error(es)</div>
-        )}
       </div>
 
       {/* Zona central: historial de runs */}

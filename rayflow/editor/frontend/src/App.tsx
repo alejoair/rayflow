@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFlowStore, initWorkspaceStore } from '@/store/flowStore'
-import { getEditorInfo, getNodes, getFlows, getFlow, createFlow, deleteFlow, updateFlow, validateFlow } from '@/lib/api'
+import { getEditorInfo, getNodes, getFlows, getFlow, createFlow, deleteFlow, updateFlow, validateFlow, loadFlow } from '@/lib/api'
 import { flowDefToRF, rfToFlowDef } from '@/lib/translator'
 import NodePalette from '@/components/NodePalette'
 import FlowCanvas from '@/components/FlowCanvas'
@@ -145,6 +145,44 @@ export default function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500)
   }
 
+  // Valida el flow activo y, si es válido, lo carga en Ray en background.
+  // tabName es opcional: si se omite usa el tab activo.
+  async function autoLoadFlow(flowDef: Parameters<typeof rfToFlowDef>[2] & { name: string }, nodes: Parameters<typeof rfToFlowDef>[0], edges: Parameters<typeof rfToFlowDef>[1]) {
+    // Validar primero
+    const fd = rfToFlowDef(nodes, edges, {
+      name: flowDef.name, version: flowDef.version || '1',
+      inputs: flowDef.inputs || {}, outputs: flowDef.outputs || {},
+      variables: flowDef.variables || [], events: flowDef.events || [],
+    })
+    let valid = false
+    try {
+      const result = await validateFlow(fd)
+      // Actualizar errores en el tab correspondiente
+      useFlowStore.setState(s => ({
+        tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, validationErrors: result.errors || [] }),
+      }))
+      valid = result.valid
+    } catch {
+      return
+    }
+    if (!valid) return
+
+    // Cargar en Ray en background
+    useFlowStore.setState(s => ({
+      tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loadingIntoRay: true }),
+    }))
+    try {
+      await loadFlow(flowDef.name)
+      useFlowStore.setState(s => ({
+        tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loaded: true, loadingIntoRay: false, stale: false }),
+      }))
+    } catch {
+      useFlowStore.setState(s => ({
+        tabs: s.tabs.map(t => t.name !== flowDef.name ? t : { ...t, loadingIntoRay: false }),
+      }))
+    }
+  }
+
   async function handleOpenFlow(name: string) {
     if (!name) return
     const existing = tabs.find(t => t.name === name)
@@ -153,6 +191,8 @@ export default function App() {
       const data = await getFlow(name)
       const { nodes, edges } = flowDefToRF(data, catalog)
       openTab(data, nodes, edges)
+      // Validar y cargar en Ray en background sin bloquear la UI
+      autoLoadFlow(data, nodes, edges)
     } catch (e) { addToast(`Error abriendo: ${(e as Error).message}`, 'error') }
   }
 
@@ -172,6 +212,8 @@ export default function App() {
       await updateFlow(tab.name, flowDef)
       setDirty(false)
       addToast('Flow guardado', 'success')
+      // Recargar en Ray automáticamente tras guardar
+      autoLoadFlow(tab.flowDef, tab.nodes, tab.edges)
     } catch (e) { addToast(`Error guardando: ${(e as Error).message}`, 'error') }
     finally { setSaving(false) }
   }
@@ -440,7 +482,6 @@ export default function App() {
       <RunsPanel
         activeFlow={tab?.flowDef ?? null}
         validationErrors={tab?.validationErrors ?? []}
-        onSave={handleSave}
       />
 
       {/* Flow settings */}

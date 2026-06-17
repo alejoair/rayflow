@@ -1,32 +1,11 @@
 import { useCallback } from 'react'
 import { useFlowStore, type Run, type RunEvent } from '@/store/flowStore'
-import { loadFlow, unloadFlow, runFlowUrl } from '@/lib/api'
+import { unloadFlow, runFlowUrl } from '@/lib/api'
 
 export function useRunStream(tabName: string) {
-  const { addRun, updateRun, setLoaded, setDirty, animMinMs } = useFlowStore()
+  const { addRun, updateRun, animMinMs } = useFlowStore()
 
-  const startRun = useCallback(async (
-    inputs: Record<string, unknown>,
-    opts: { dirty: boolean; loaded: boolean; onSave: () => Promise<void> }
-  ) => {
-    const needsSave = opts.dirty || !opts.loaded
-    const needsLoad = opts.dirty || !opts.loaded
-
-    console.log('[run] dirty=%s loaded=%s → needsSave=%s needsLoad=%s', opts.dirty, opts.loaded, needsSave, needsLoad)
-
-    if (needsSave) {
-      console.log('[run] saving flow...')
-      await opts.onSave()
-      setDirty(false)
-      console.log('[run] saved')
-    }
-
-    if (needsLoad) {
-      console.log('[run] loading flow into Ray...')
-      await loadFlow(tabName)
-      setLoaded(true)
-      console.log('[run] loaded')
-    }
+  const startRun = useCallback(async (inputs: Record<string, unknown>) => {
 
     const runId = crypto.randomUUID()
     const run: Run = {
@@ -41,7 +20,6 @@ export function useRunStream(tabName: string) {
     addRun(tabName, run)
 
     const url = runFlowUrl(tabName)
-    console.log('[run] POST', url, inputs)
     let response: Response
     try {
       response = await fetch(url, {
@@ -59,11 +37,8 @@ export function useRunStream(tabName: string) {
       return runId
     }
 
-    console.log('[run] response status', response.status, response.headers.get('content-type'))
-
     if (!response.ok) {
       const err = await response.json().catch(() => ({ detail: response.statusText }))
-      console.error('[run] error response', err)
       updateRun(tabName, runId, {
         status: 'error',
         error: err.detail || response.statusText,
@@ -100,8 +75,6 @@ export function useRunStream(tabName: string) {
       if (groups.length === 0) { playing = false; return }
       playing = true
       const group = groups.shift()!
-
-      console.log('[anim] grupo', group.map(e => e.event))
 
       // ¿Hay un evento terminal en el grupo?
       const terminal = group.find(e => e.event === 'flow_done' || e.event === 'flow_error')
@@ -225,7 +198,6 @@ export function useRunStream(tabName: string) {
         } catch {
           continue
         }
-        console.log('[SSE]', evt)
         enqueue(evt)
       }
     }
@@ -237,7 +209,7 @@ export function useRunStream(tabName: string) {
     }
 
     return runId
-  }, [tabName, addRun, updateRun, setLoaded, setDirty, animMinMs])
+  }, [tabName, addRun, updateRun, animMinMs])
 
   const unload = useCallback(async () => {
     await unloadFlow(tabName)
