@@ -340,10 +340,11 @@ class LoadedFlow:
     Entre requests, el GraphState mantiene el estado de variables.
     """
 
-    def __init__(self, graph_id: str, engine: Any, actors: dict[str, Any]):
+    def __init__(self, graph_id: str, engine: Any, actors: dict[str, Any], flow_def=None):
         self.graph_id = graph_id
         self._engine = engine
         self._actors = actors
+        self.flow_def = flow_def  # FlowDef original para inspección de interfaz
 
     @classmethod
     def load(cls, built: BuiltFlow) -> "LoadedFlow":
@@ -386,7 +387,7 @@ class LoadedFlow:
             lifetime="detached",
         ).remote(built, actors)
 
-        return cls(graph_id, engine, actors)
+        return cls(graph_id, engine, actors, flow_def=built.flow_def)
 
     def execute(self, flow_inputs: dict[str, Any], queue: Any) -> Any:
         """Lanza execute() en el engine y devuelve el ObjectRef (no bloquea)."""

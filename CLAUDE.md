@@ -133,7 +133,8 @@ El servidor carga nodos desde:
 | `POST` | `/editor/validate` | Validar flow (body = flow JSON completo) |
 | `POST` | `/editor/flows/{name}/load` | Cargar flow en Ray (precaché) |
 | `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
-| `GET` | `/editor/flows/{name}/loaded` | Estado de carga del flow |
+| `GET` | `/editor/flows/loaded` | Lista todos los flows cargados en Ray con su interfaz (inputs/outputs) |
+| `GET` | `/editor/flows/{name}/loaded` | Estado de carga de un flow concreto |
 | `POST` | `/editor/flows/{name}/run` | Ejecutar flow (SSE stream) |
 | `POST` | `/editor/flows/{name}/serve-events` | Suscribir al event bus |
 | `DELETE` | `/editor/flows/{name}/serve-events/{graph_id}` | Desuscribir |

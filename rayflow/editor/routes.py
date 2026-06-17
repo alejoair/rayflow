@@ -148,6 +148,24 @@ async def list_editor_flows() -> dict[str, Any]:
     }
 
 
+@router.get("/flows/loaded")
+async def list_loaded_flows() -> dict[str, Any]:
+    """Lista todos los flows actualmente cargados en Ray con su interfaz pública."""
+    from rayflow.engine.executor import _loaded_flows
+    result = []
+    for name, lf in _loaded_flows.items():
+        entry: dict[str, Any] = {"flow": name}
+        if lf.flow_def is not None:
+            entry["inputs"] = {
+                k: {"type": v} for k, v in lf.flow_def.inputs.items()
+            }
+            entry["outputs"] = {
+                k: {"type": v} for k, v in lf.flow_def.outputs.items()
+            }
+        result.append(entry)
+    return {"loaded": result, "count": len(result)}
+
+
 @router.get("/flows/{name}")
 async def get_editor_flow(name: str) -> dict[str, Any]:
     """Devuelve el FlowDef completo de un flow por nombre."""

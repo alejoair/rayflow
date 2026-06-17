@@ -42,8 +42,16 @@ class ServedFlow:
         return {
             "name": self.flow_def.name,
             "version": self.flow_def.version,
-            "inputs": dict(self.flow_def.inputs),
-            "outputs": dict(self.flow_def.outputs),
+            "endpoint": f"/flows/{self.flow_def.name}/run",
+            "method": "POST",
+            "inputs": {
+                name: {"type": type_str, "required": True}
+                for name, type_str in self.flow_def.inputs.items()
+            },
+            "outputs": {
+                name: {"type": type_str}
+                for name, type_str in self.flow_def.outputs.items()
+            },
         }
 
 
