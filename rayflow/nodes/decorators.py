@@ -86,6 +86,7 @@ class ExecContext:
         graph_id: str,
         state_path: str | None = None,
         _output_writer=None,
+        _fire_handler=None,
     ):
         self._node_id = node_id
         self._graph_id = graph_id
@@ -93,6 +94,7 @@ class ExecContext:
         self._engine_handle = None
         self._state_handle = None
         self._output_writer = _output_writer  # solo válido localmente
+        self._fire_handler = _fire_handler    # solo válido localmente
 
     def __getstate__(self):
         # Excluir handles y callbacks — se reacquieren bajo demanda.
@@ -103,6 +105,7 @@ class ExecContext:
             "_engine_handle": None,
             "_state_handle": None,
             "_output_writer": None,
+            "_fire_handler": None,
         }
 
     def __setstate__(self, state):
@@ -129,7 +132,10 @@ class ExecContext:
 
     async def fire(self, pin_name: str) -> None:
         """Dispara el exec output indicado (bloqueante: ejecuta el subgrafo completo)."""
-        await self._engine().fire.remote(self._node_id, pin_name)
+        if self._fire_handler is not None:
+            await self._fire_handler(pin_name)
+        else:
+            await self._engine().fire.remote(self._node_id, pin_name)
 
     def set_output(self, pin_name: str, value: Any) -> None:
         """Escribe un data output del nodo actual en el GraphState."""

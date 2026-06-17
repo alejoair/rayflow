@@ -97,6 +97,21 @@ class FlowEngine:
         elif targets:
             await self._run_loop(targets[0], source_node_id)
 
+    async def _local_fire(self, source_node_id: str, rnode: Any, pin_name: str) -> None:
+        targets = rnode.exec_targets.get(pin_name, [])
+        if targets:
+            await self._run_queue.push.remote({
+                "event": "edge_fire",
+                "from": source_node_id,
+                "to": targets[0],
+                "pin": pin_name,
+                "ts": time.time(),
+            })
+        if len(targets) > 1:
+            await asyncio.gather(*[self._run_loop(t, source_node_id) for t in targets])
+        elif targets:
+            await self._run_loop(targets[0], source_node_id)
+
     async def set_output(self, node_id: str, pin_name: str, value: Any) -> None:
         await self._state.set_node_outputs.remote(node_id, {pin_name: value})
 
@@ -194,6 +209,7 @@ class FlowEngine:
         ctx = ExecContext(
             node_id, graph_id, rnode.state_path,
             _output_writer=lambda nid, pin, val: self._write_node_outputs_sync(nid, {pin: val}),
+            _fire_handler=lambda pin: self._local_fire(node_id, rnode, pin),
         )
 
         started_at = time.time()
