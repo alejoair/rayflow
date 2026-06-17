@@ -120,7 +120,11 @@ El servidor carga nodos desde:
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
+| `GET` | `/editor/info` | Workspace activo: `{cwd}` |
 | `GET` | `/editor/nodes` | Catálogo de nodos disponibles |
+| `GET` | `/editor/nodes/{node_type}` | Spec de un tipo de nodo concreto |
+| `GET` | `/editor/types` | Tipos canónicos y reglas de compatibilidad |
+| `POST` | `/editor/type-check` | Verificar compatibilidad entre dos tipos |
 | `GET` | `/editor/flows` | Lista flows en `flows/` |
 | `GET` | `/editor/flows/{name}` | Flow JSON |
 | `POST` | `/editor/flows` | Crear flow |
@@ -129,10 +133,10 @@ El servidor carga nodos desde:
 | `POST` | `/editor/validate` | Validar flow (body = flow JSON completo) |
 | `POST` | `/editor/flows/{name}/load` | Cargar flow en Ray (precaché) |
 | `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
+| `GET` | `/editor/flows/{name}/loaded` | Estado de carga del flow |
 | `POST` | `/editor/flows/{name}/run` | Ejecutar flow (SSE stream) |
 | `POST` | `/editor/flows/{name}/serve-events` | Suscribir al event bus |
 | `DELETE` | `/editor/flows/{name}/serve-events/{graph_id}` | Desuscribir |
-| `GET` | `/editor/types/check` | Verificar compatibilidad de tipos |
 
 ### Nodos custom (`rayflow/editor/custom_nodes_routes.py`)
 
@@ -158,12 +162,14 @@ El endpoint de guardar/crear valida sintaxis Python con `ast.parse()` antes de e
   "variables": [{ "name": "contador", "type": "int", "default": 0 }],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "OnStart" },
     { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
   ]
 }
 ```
+
+`FlowInput` existe como alias de `OnStart` por compatibilidad hacia atrás, pero el nombre canónico es `OnStart`.
 
 Los flows se guardan en `flows/` dentro del directorio de trabajo.
 
@@ -241,6 +247,50 @@ No usar el componente `<Badge>` de shadcn (tiene problemas de tipos). Usar spans
 }}>etiqueta</span>
 ```
 
+## Ciclo de vida de un flow en Ray
+
+```
+load(flow_json)
+  └─ build()               # valida + produce BuiltFlow
+  └─ LoadedFlow.load()
+       ├─ spawn @ray_node actors  (uno por nodo exec con decorator ray_node)
+       ├─ spawn FlowEngine actor  (engine_{flow_name}, lifetime="detached")
+       └─ spawn GraphState actor  (gs_{flow_name}, lifetime="detached")
+
+execute(flow_name, inputs)
+  └─ crea RunQueue temporal (actor detached)
+  └─ engine.execute.remote(inputs, queue)  ← no bloquea
+  └─ driver drena queue (sleep 0.05s loop) → SSE al cliente
+  └─ al llegar flow_done/flow_error → kill RunQueue
+
+unload(flow_name)
+  └─ kill actors @ray_node + FlowEngine + GraphState
+```
+
+**GraphState** persiste entre ejecuciones del mismo flow cargado: las variables mantienen su valor entre requests. Se resetean los outputs de nodos en cada `execute()`, pero no las variables.
+
+**Serialización de `execute()`**: el `FlowEngine` es un actor Ray — si llega un segundo request mientras el primero corre, Ray lo encola (event loop del actor es secuencial).
+
+## Sistema de eventos
+
+```
+serve_events(flow_json)          # igual que load() + suscripción al broker
+  └─ EventBroker.subscribe(event_name, flow_name, graph_id)
+
+EmitEvent node → ctx.emit_event(name, payload)
+  └─ EventBroker.publish(name, payload)   # fire-and-forget
+       └─ _run_event_flow.remote(flow_name, name, payload)  # Ray task
+            └─ lf.execute({"payload": payload}, queue)
+
+stop(graph_id, event_names)
+  └─ EventBroker.unsubscribe() + unload()
+```
+
+- El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
+- Si nadie está suscrito al evento, se pierde — no hay persistencia.
+- Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
+- `OnEvent` puede coexistir con `OnStart` en el mismo flow (distintos puntos de entrada).
+
 ## Archivos clave del backend
 
 | Archivo | Responsabilidad |
@@ -249,13 +299,13 @@ No usar el componente `<Badge>` de shadcn (tiene problemas de tipos). Usar spans
 | `rayflow/editor/routes.py` | Endpoints de flows, catálogo y ejecución |
 | `rayflow/editor/custom_nodes_routes.py` | CRUD de nodos custom + hot reload del catálogo |
 | `rayflow/editor/storage.py` | CRUD de flows en disco |
-| `rayflow/engine/executor.py` | `FlowEngine` (clase Python local), `FlowExecutor` |
+| `rayflow/engine/executor.py` | `FlowEngine` (actor Ray), `LoadedFlow` (ciclo de vida) |
 | `rayflow/build/validator.py` | `flatten()`, `build()`, validación de tipos |
-| `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `ExecContext` |
+| `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `@parallel_node`, `ExecContext` |
 | `rayflow/nodes/loader.py` | `NodeCatalog`: registro, aliases, carga desde disco |
 | `rayflow/nodes/registry.py` | Singleton del catálogo, `reset_catalog()` para hot reload |
-| `rayflow/state/actor.py` | `GraphState` — variables y outputs por ejecución |
-| `rayflow/events/bus.py` | `EventBroker` — pub/sub entre flows |
-| `rayflow/api.py` | API pública: `run()`, `load()`, `serve_events()`, `stop()` |
+| `rayflow/state/actor.py` | `GraphState` — variables (persistentes) y outputs de nodos |
+| `rayflow/events/bus.py` | `EventBroker` — pub/sub fire-and-forget entre flows |
+| `rayflow/api.py` | API pública: `run()`, `load()`, `execute()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
 | `rayflow/workspace.py` | Convenciones de directorio: `custom_nodes/`, `flows/` |

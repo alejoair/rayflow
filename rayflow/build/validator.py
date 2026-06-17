@@ -571,16 +571,22 @@ def _check_exec_cycles(nodes: dict[str, ResolvedNode]) -> None:
 def _find_entry(nodes: dict[str, ResolvedNode]) -> str:
     # Los entry/output de subgrafos spliced llevan subflow_of: no cuentan como
     # entrada/salida del flow raíz.
-    entry_types = {"OnStart", "OnEvent"}
-    entries = [
+    on_starts = [
         nid for nid, rn in nodes.items()
-        if rn.meta.name in entry_types and rn.node_def.subflow_of is None
+        if rn.meta.name == "OnStart" and rn.node_def.subflow_of is None
     ]
-    if not entries:
+    on_events = [
+        nid for nid, rn in nodes.items()
+        if rn.meta.name == "OnEvent" and rn.node_def.subflow_of is None
+    ]
+    all_entries = on_starts + on_events
+    if not all_entries:
         raise BuildError("El flow no tiene nodo de entrada (OnStart u OnEvent)")
-    if len(entries) > 1:
-        raise BuildError(f"El flow tiene más de un nodo de entrada: {entries}")
-    return entries[0]
+    if len(on_starts) > 1:
+        raise BuildError(f"El flow tiene más de un nodo OnStart: {on_starts}")
+    # Preferir OnStart como punto de entrada para ejecución directa;
+    # si no hay OnStart, usar el primer OnEvent.
+    return on_starts[0] if on_starts else on_events[0]
 
 
 def _find_outputs(nodes: dict[str, ResolvedNode]) -> list[str]:
