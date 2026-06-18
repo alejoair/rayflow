@@ -78,19 +78,19 @@ npx tsc --noEmit   # verificar tipos sin compilar
 |---------|-----|
 | `App.tsx` | Raíz: layout, carga de catálogo y lista de flows |
 | `FlowCanvas.tsx` | Canvas React Flow, animaciones de ejecución |
-| `NodeCard.tsx` | Renderizado de nodo en el canvas (handles, pines, badge RAY/LOCAL) |
+| `NodeCard.tsx` | Renderizado de nodo en el canvas (handles, pines, badge RAY/LOCAL). `has-error` se activa para tipo desconocido O cuando `data.hasValidationError` es true (inyectado desde FlowCanvas) |
 | `NodePalette.tsx` | Sidebar izq: paleta de nodos arrastrables (colapsable) |
 | `VariablesPanel.tsx` | Sidebar izq: gestión de variables del flow (colapsable) |
 | `CustomNodesPanel.tsx` | Sidebar izq: editor CodeMirror de nodos custom (colapsable) |
 | `PropertiesPanel.tsx` | Sidebar der: propiedades del nodo seleccionado |
-| `RunsPanel.tsx` | Footer: ejecutar flow, historial de runs con duración |
+| `RunsPanel.tsx` | Footer: ejecutar flow, historial de runs con duración. Chip de estado clickable para cargar en Ray manualmente cuando el flow no está cargado |
 | `FlowSettingsDialog.tsx` | Modal de inputs/outputs del flow |
 
 ### Otros archivos clave
 - `src/lib/api.ts` — cliente HTTP tipado (todas las llamadas al backend)
 - `src/lib/translator.ts` — conversión flowDef JSON ↔ React Flow nodes/edges
-- `src/store/flowStore.ts` — Zustand store (tabs, runs, catálogo, animMinMs)
-- `src/hooks/useRunStream.ts` — SSE streaming + sistema de animación con agrupación paralela
+- `src/store/flowStore.ts` — Zustand store (tabs, runs, catálogo, animMinMs). Exporta `selectActiveTab` como selector puro — usar siempre en lugar de acceder al tab via destructuring directo
+- `src/hooks/useRunStream.ts` — SSE streaming + sistema de animación con agrupación paralela. Expone `abort()` para cancelar el stream SSE activo
 
 ## Sistema de nodos
 
@@ -167,7 +167,9 @@ ctx._fire_handler = _engine_fire
 
 ### RunQueue y eventos de ejecución (SSE)
 
-Por cada `execute()` se crea un actor `RunQueue` (detached, temporal). El FlowEngine empuja eventos a él; FastAPI los drena con polling `drain.remote()` cada 50ms y los reenvía como SSE al cliente.
+Por cada `execute()` se crea un actor `RunQueue` (detached, temporal). El FlowEngine empuja eventos a él; FastAPI los consume via `get()` bloqueante y los reenvía como SSE al cliente.
+
+`RunQueue` internamente usa `asyncio.Queue` — `push()` hace `put()` y `get()` bloquea hasta que llega el siguiente evento. El driver llama `await queue.get.remote()` desde un async generator, evitando el overhead de `run_in_executor` que FastAPI aplica a generadores síncronos.
 
 **Regla crítica de rendimiento**: los eventos `node_start`, `node_done` y `edge_fire` se empujan **fire-and-forget** (sin `await`):
 
@@ -175,9 +177,9 @@ Por cada `execute()` se crea un actor `RunQueue` (detached, temporal). El FlowEn
 self._run_queue.push.remote({...})  # NO await — fire-and-forget
 ```
 
-Si se usara `await`, el FlowEngine (actor Ray con event loop secuencial) bloquearía esperando la confirmación del push mientras el driver está drenando la misma queue, causando 5-7 segundos de latencia por run. El orden FIFO está garantizado por el event loop secuencial del actor `RunQueue`, así que `await` es innecesario para correctitud.
+Si se usara `await`, el FlowEngine (actor Ray con event loop secuencial) bloquearía esperando la confirmación del push. El orden FIFO está garantizado por el event loop secuencial del actor `RunQueue`, así que `await` es innecesario para correctitud.
 
-Solo `flow_done` y `flow_error` usan `await` — para garantizar que el evento llegue antes de que el driver deje de hacer polling.
+`flow_done` y `flow_error` sí usan `await` en el engine (`await queue_ref.push.remote(...)`) — para garantizar que el evento llegue antes de que el actor sea destruido.
 
 ### Descubrimiento de nodos
 El servidor carga nodos desde:
@@ -329,9 +331,9 @@ load(flow_json)
        └─ spawn GraphState actor  (gs_{flow_name}, lifetime="detached")
 
 execute(flow_name, inputs)
-  └─ crea RunQueue temporal (actor detached)
+  └─ crea RunQueue temporal (actor detached, asyncio.Queue interna)
   └─ engine.execute.remote(inputs, queue)  ← no bloquea
-  └─ driver drena queue (sleep 0.05s loop) → SSE al cliente
+  └─ driver consume queue via await queue.get.remote() → SSE al cliente
   └─ al llegar flow_done/flow_error → kill RunQueue
 
 unload(flow_name)
@@ -377,6 +379,6 @@ stop(graph_id, event_names)
 | `rayflow/nodes/registry.py` | Singleton del catálogo, `reset_catalog()` para hot reload |
 | `rayflow/state/actor.py` | `GraphState` — variables (persistentes) y outputs de nodos |
 | `rayflow/events/bus.py` | `EventBroker` — pub/sub fire-and-forget entre flows |
-| `rayflow/api.py` | API pública: `run()`, `load()`, `execute()`, `serve_events()`, `stop()` |
+| `rayflow/api.py` | API pública: `run()`, `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
 | `rayflow/workspace.py` | Convenciones de directorio: `custom_nodes/`, `flows/` |
