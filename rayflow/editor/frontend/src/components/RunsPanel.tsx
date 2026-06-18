@@ -132,7 +132,9 @@ export default function RunsPanel({ activeFlow, validationErrors }: Props) {
             disabled={!canRun}
             style={{ height: 32, fontSize: 13, flex: 1 }}
           >
-            {isRunning ? '⏳ Ejecutando…' : '▶ Test flow'}
+            {isRunning ? '⏳ Ejecutando…'
+              : isLoading ? '⏳ Cargando en Ray…'
+              : '▶ Test flow'}
           </Button>
           {isLoaded && !isLoading && !isRunning && (
             <button
@@ -151,20 +153,35 @@ export default function RunsPanel({ activeFlow, validationErrors }: Props) {
 
         {/* Indicador de estado */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '4px 8px', borderRadius: 5,
+            background: isLoading ? 'rgba(245,158,11,0.08)'
+              : isLoaded ? 'rgba(16,185,129,0.08)'
+              : hasErrors ? 'rgba(239,68,68,0.08)'
+              : 'transparent',
+            border: `1px solid ${isLoading ? 'rgba(245,158,11,0.25)'
+              : isLoaded ? 'rgba(16,185,129,0.25)'
+              : hasErrors ? 'rgba(239,68,68,0.25)'
+              : 'var(--border)'}`,
+          }}>
             <span style={{
-              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: isLoading ? '#f59e0b' : isLoaded ? '#10b981' : 'var(--muted-foreground)',
+              width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+              background: isLoading ? '#f59e0b' : isLoaded ? '#10b981' : hasErrors ? 'var(--destructive)' : '#475569',
             }} />
-            <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
-              {isLoading ? 'cargando en Ray…' : isLoaded ? 'listo' : hasErrors ? 'no cargado' : 'no cargado'}
+            <span style={{
+              fontSize: 11,
+              color: isLoading ? '#fcd34d' : isLoaded ? '#34d399' : hasErrors ? 'var(--destructive)' : 'var(--muted-foreground)',
+              fontWeight: 500,
+            }}>
+              {isLoading ? 'Cargando en Ray…'
+                : isLoaded ? 'Listo para ejecutar'
+                : hasErrors ? `${validationErrors.length} error(es) — no cargado`
+                : 'No cargado en Ray'}
             </span>
           </div>
           {isStale && (
-            <span style={{ fontSize: 11, color: '#f59e0b' }}>⚠ cambios sin guardar</span>
-          )}
-          {hasErrors && (
-            <span style={{ fontSize: 11, color: 'var(--destructive)' }}>{validationErrors.length} error(es)</span>
+            <span style={{ fontSize: 11, color: '#f59e0b', paddingLeft: 2 }}>⚠ cambios sin recargar — guarda para actualizar</span>
           )}
         </div>
       </div>
