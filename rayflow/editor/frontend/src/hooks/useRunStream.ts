@@ -1,9 +1,12 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useFlowStore, type Run, type RunEvent } from '@/store/flowStore'
 import { unloadFlow, runFlowUrl } from '@/lib/api'
 
 export function useRunStream(tabName: string) {
-  const { addRun, updateRun, animMinMs } = useFlowStore()
+  const { addRun, updateRun } = useFlowStore()
+  const animMinMs = useFlowStore(s => s.animMinMs)
+  const animMinMsRef = useRef(animMinMs)
+  useEffect(() => { animMinMsRef.current = animMinMs }, [animMinMs])
   const abortRef = useRef<(() => void) | null>(null)
 
   const startRun = useCallback(async (inputs: Record<string, unknown>) => {
@@ -101,11 +104,11 @@ export function useRunStream(tabName: string) {
             patchRun(() => ({ status: 'error', error, endedAt: Date.now(), activeNodes: new Set(), activeEdges: new Set() }))
           }
           playing = false
-        }, animMinMs)
+        }, animMinMsRef.current)
         return
       }
 
-      setTimeout(playNextGroup, animMinMs)
+      setTimeout(playNextGroup, animMinMsRef.current)
     }
 
     const flushGroup = () => {
@@ -185,7 +188,7 @@ export function useRunStream(tabName: string) {
       if (edgeKeysToRemove.length > 0) {
         setTimeout(() => patchRun(r => ({
           activeEdges: new Set([...r.activeEdges].filter(k => !edgeKeysToRemove.includes(k))),
-        })), animMinMs)
+        })), animMinMsRef.current)
       }
     }
 
@@ -216,7 +219,7 @@ export function useRunStream(tabName: string) {
     }
 
     return runId
-  }, [tabName, addRun, updateRun, animMinMs])
+  }, [tabName, addRun, updateRun])
 
   const unload = useCallback(async () => {
     await unloadFlow(tabName)

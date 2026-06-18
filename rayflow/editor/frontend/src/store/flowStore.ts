@@ -172,7 +172,7 @@ export const useFlowStore = create<FlowStore>()(
           tabs: s.tabs.map(t => {
             if (t.name !== name) return t
             const stale = isStructural && t.loaded ? true : t.stale
-            return { ...t, nodes: applyNodeChanges(changes, t.nodes), dirty: true, stale }
+            return { ...t, nodes: applyNodeChanges(changes, t.nodes), dirty: isStructural ? true : t.dirty, stale }
           }),
         }))
       },

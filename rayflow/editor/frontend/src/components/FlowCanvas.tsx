@@ -20,9 +20,10 @@ const nodeTypes: NodeTypes = { rayflowNode: NodeCard as never }
 interface Props {
   onSelectNode: (id: string | null) => void
   onToast: (msg: string, type?: 'info' | 'success' | 'error') => void
+  validationErrors: string[]
 }
 
-export default function FlowCanvas({ onSelectNode, onToast }: Props) {
+export default function FlowCanvas({ onSelectNode, onToast, validationErrors }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const tab = useFlowStore(selectActiveTab)
   const catalog = useFlowStore(s => s.catalog)
@@ -109,12 +110,14 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
     )
   }
 
-  // Aplicar estilos de run activo a nodos y edges
+  // Aplicar estilos de run activo y errores de validación a nodos
   const nodes = tab.nodes.map(n => {
-    if (!activeRun) return n
-    const runStatus = activeRun.activeNodes.has(n.id) ? 'running'
-      : activeRun.doneNodes.has(n.id) ? 'done' : 'idle'
-    return { ...n, data: { ...n.data, runStatus } }
+    const runStatus = activeRun
+      ? (activeRun.activeNodes.has(n.id) ? 'running' : activeRun.doneNodes.has(n.id) ? 'done' : 'idle')
+      : undefined
+    const hasValidationError = validationErrors.some(e => e.includes(n.id))
+    if (!runStatus && !hasValidationError) return n
+    return { ...n, data: { ...n.data, ...(runStatus ? { runStatus } : {}), hasValidationError } }
   })
 
   const edges = tab.edges.map(e => {

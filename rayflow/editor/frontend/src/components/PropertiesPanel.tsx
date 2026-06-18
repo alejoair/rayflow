@@ -278,11 +278,18 @@ export default function PropertiesPanel({
               {[...connectedInputs].map(pin => {
                 const pinSpec = meta?.inputs.find(p => p.name === pin)
                 const color = typeColor(pinSpec?.type ?? 'Any')
+                const sourceEdge = edges.find(e =>
+                  e.target === node.id &&
+                  e.type !== 'exec' &&
+                  (e.targetHandle || '').replace('data-in-', '') === pin
+                )
                 return (
                   <div key={pin} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
                     <span style={{ fontSize: 12, color: 'var(--foreground)' }}>{pin}</span>
-                    <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 'auto' }}>← arista</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 'auto' }}>
+                      ← {sourceEdge?.source ?? 'arista'}
+                    </span>
                   </div>
                 )
               })}

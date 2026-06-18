@@ -235,6 +235,12 @@ export default function App() {
     } catch (e) { addToast(`Error validando: ${(e as Error).message}`, 'error') }
   }
 
+  async function handleLoadIntoRay() {
+    const tab = selectActiveTab(useFlowStore.getState())
+    if (!tab?.flowDef) return
+    await autoLoadFlow(tab.flowDef, tab.nodes, tab.edges)
+  }
+
   function handleSaveSettings(inputs: Record<string, string>, outputs: Record<string, string>) {
     const tab = selectActiveTab(useFlowStore.getState())
     if (!tab?.flowDef) return
@@ -356,6 +362,12 @@ export default function App() {
             style={{ height: 32, fontSize: 13, padding: '0 12px' }}>
             ⚙ Flow
           </Button>
+          {tab && !tab.loaded && !tab.loadingIntoRay && tab.validationErrors.length === 0 && (
+            <Button size="sm" variant="outline" onClick={handleLoadIntoRay}
+              style={{ height: 32, fontSize: 13, padding: '0 12px', borderColor: 'rgba(16,185,129,0.4)', color: '#34d399' }}>
+              ⚡ Cargar en Ray
+            </Button>
+          )}
           <Button size="sm" variant="destructive" onClick={handleDelete}
             style={{ height: 32, fontSize: 13, padding: '0 12px' }}>
             🗑
@@ -466,7 +478,7 @@ export default function App() {
           />
           <CustomNodesPanel onReload={refreshCatalog} />
         </div>
-        <FlowCanvas onSelectNode={setSelectedNodeId} onToast={addToast} />
+        <FlowCanvas onSelectNode={setSelectedNodeId} onToast={addToast} validationErrors={tab?.validationErrors ?? []} />
         <PropertiesPanel
           selectedNodeId={selectedNodeId}
           nodes={tab?.nodes ?? []}
@@ -482,6 +494,7 @@ export default function App() {
       <RunsPanel
         activeFlow={tab?.flowDef ?? null}
         validationErrors={tab?.validationErrors ?? []}
+        onLoad={handleLoadIntoRay}
       />
 
       {/* Flow settings */}

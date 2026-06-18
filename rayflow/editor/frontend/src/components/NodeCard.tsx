@@ -3,7 +3,7 @@ import { typeColor } from '@/lib/translator'
 import type { NodeSpec } from '@/lib/api'
 
 interface NodeCardProps {
-  data: { nodeType: string; meta: NodeSpec | null; literals: Record<string, unknown>; runStatus?: 'idle' | 'running' | 'done' | 'error' }
+  data: { nodeType: string; meta: NodeSpec | null; literals: Record<string, unknown>; runStatus?: 'idle' | 'running' | 'done' | 'error'; hasValidationError?: boolean }
   selected: boolean
 }
 
@@ -14,7 +14,7 @@ export default function NodeCard({ data, selected }: NodeCardProps) {
   const cls = [
     'rf-node',
     selected ? 'selected' : '',
-    !meta ? 'has-error' : '',
+    (!meta || data.hasValidationError) ? 'has-error' : '',
     runStatus === 'running' ? 'node-running' : '',
     runStatus === 'done' ? 'node-done' : '',
   ].filter(Boolean).join(' ')
