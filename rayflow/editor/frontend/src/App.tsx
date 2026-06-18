@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useFlowStore, initWorkspaceStore } from '@/store/flowStore'
+import { useFlowStore, selectActiveTab, initWorkspaceStore } from '@/store/flowStore'
 import { getEditorInfo, getNodes, getFlows, getFlow, createFlow, deleteFlow, updateFlow, validateFlow, loadFlow } from '@/lib/api'
 import { flowDefToRF, rfToFlowDef } from '@/lib/translator'
 import NodePalette from '@/components/NodePalette'
@@ -87,8 +87,9 @@ export default function App() {
     openTab, closeTab, setActiveTab,
     setNodes, setEdges, setDirty, setValidationErrors,
     updateVariables,
-    getActiveTab,
   } = useFlowStore()
+
+  const tab = useFlowStore(selectActiveTab)
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -197,7 +198,7 @@ export default function App() {
   }
 
   async function handleSave() {
-    const tab = getActiveTab()
+    const tab = selectActiveTab(useFlowStore.getState())
     if (!tab?.flowDef) return
     setSaving(true)
     try {
@@ -219,7 +220,7 @@ export default function App() {
   }
 
   async function handleValidate() {
-    const tab = getActiveTab()
+    const tab = selectActiveTab(useFlowStore.getState())
     if (!tab?.flowDef) return
     try {
       const flowDef = rfToFlowDef(tab.nodes, tab.edges, {
@@ -235,7 +236,7 @@ export default function App() {
   }
 
   function handleSaveSettings(inputs: Record<string, string>, outputs: Record<string, string>) {
-    const tab = getActiveTab()
+    const tab = selectActiveTab(useFlowStore.getState())
     if (!tab?.flowDef) return
     const prevInputNames = new Set(Object.keys(tab.flowDef.inputs || {}))
     const removed = [...prevInputNames].filter(n => !Object.keys(inputs).includes(n))
@@ -275,7 +276,7 @@ export default function App() {
   }
 
   async function handleDelete() {
-    const tab = getActiveTab()
+    const tab = selectActiveTab(useFlowStore.getState())
     if (!tab) return
     if (!confirm(`¿Borrar "${tab.name}"?`)) return
     try {
@@ -287,7 +288,7 @@ export default function App() {
   }
 
   const handleUpdateNode = useCallback((nodeId: string, update: Record<string, unknown>) => {
-    const tab = useFlowStore.getState().getActiveTab()
+    const tab = selectActiveTab(useFlowStore.getState())
     if (!tab) return
     if (update.newId) {
       const newId = update.newId as string
@@ -305,7 +306,6 @@ export default function App() {
     setDirty(true)
   }, [setNodes, setEdges, setDirty])
 
-  const tab = getActiveTab()
   const validStatus = !tab ? 'unknown' : tab.validationErrors.length === 0 ? 'valid' : 'invalid'
 
   return (

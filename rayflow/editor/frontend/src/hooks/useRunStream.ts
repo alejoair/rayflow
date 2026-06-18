@@ -1,11 +1,15 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useFlowStore, type Run, type RunEvent } from '@/store/flowStore'
 import { unloadFlow, runFlowUrl } from '@/lib/api'
 
 export function useRunStream(tabName: string) {
   const { addRun, updateRun, animMinMs } = useFlowStore()
+  const abortRef = useRef<(() => void) | null>(null)
 
   const startRun = useCallback(async (inputs: Record<string, unknown>) => {
+
+    const controller = new AbortController()
+    abortRef.current = controller.abort.bind(controller)
 
     const runId = crypto.randomUUID()
     const run: Run = {
@@ -26,8 +30,11 @@ export function useRunStream(tabName: string) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(inputs),
+        signal: controller.signal,
       })
     } catch (e) {
+      // Cancelación intencional — no marcar como error
+      if ((e as Error).name === 'AbortError') return runId
       updateRun(tabName, runId, {
         status: 'error',
         error: (e as Error).message,
@@ -218,5 +225,10 @@ export function useRunStream(tabName: string) {
     }))
   }, [tabName])
 
-  return { startRun, unload }
+  const abort = useCallback(() => {
+    abortRef.current?.()
+    abortRef.current = null
+  }, [])
+
+  return { startRun, unload, abort }
 }

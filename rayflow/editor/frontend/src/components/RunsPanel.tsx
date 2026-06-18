@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useFlowStore, type Run } from '@/store/flowStore'
+import { useFlowStore, selectActiveTab, type Run } from '@/store/flowStore'
 import { useRunStream } from '@/hooks/useRunStream'
 import { typeColor } from '@/lib/translator'
 import type { FlowMeta } from '@/lib/api'
@@ -33,10 +33,15 @@ interface Props {
 }
 
 export default function RunsPanel({ activeFlow, validationErrors }: Props) {
-  const tab = useFlowStore(s => s.getActiveTab())
+  const tab = useFlowStore(selectActiveTab)
   const { setActiveRun } = useFlowStore()
-  const { startRun, unload } = useRunStream(activeFlow?.name ?? '')
+  const { startRun, unload, abort } = useRunStream(activeFlow?.name ?? '')
   const [inputs, setInputs] = useState<Record<string, string>>({})
+
+  // Cancelar stream SSE si el tab activo cambia mientras hay un run en vuelo
+  useEffect(() => {
+    return () => { abort() }
+  }, [activeFlow?.name])
 
   if (!activeFlow || !tab) {
     return (

@@ -4,12 +4,16 @@ import {
   addEdge, BackgroundVariant,
   type Connection, type NodeTypes,
 } from '@xyflow/react'
-import { useFlowStore } from '@/store/flowStore'
+import { useFlowStore, selectActiveTab } from '@/store/flowStore'
 import { typeCheck, type NodeSpec } from '@/lib/api'
 import NodeCard from './NodeCard'
 
-let nodeCounter = 1
-function freshId(type: string) { return `${type.toLowerCase()}_${nodeCounter++}` }
+function freshId(type: string, existingIds: Set<string>): string {
+  const base = type.toLowerCase()
+  let n = 1
+  while (existingIds.has(`${base}_${n}`)) n++
+  return `${base}_${n}`
+}
 
 const nodeTypes: NodeTypes = { rayflowNode: NodeCard as never }
 
@@ -20,7 +24,7 @@ interface Props {
 
 export default function FlowCanvas({ onSelectNode, onToast }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const tab = useFlowStore(s => s.getActiveTab())
+  const tab = useFlowStore(selectActiveTab)
   const catalog = useFlowStore(s => s.catalog)
   const animMinMs = useFlowStore(s => s.animMinMs)
   const setAnimMinMs = useFlowStore(s => s.setAnimMinMs)
@@ -44,7 +48,7 @@ export default function FlowCanvas({ onSelectNode, onToast }: Props) {
     if (!nodeType || !rfInstance || !wrapperRef.current) return
     const bounds = wrapperRef.current.getBoundingClientRect()
     const pos = rfInstance.screenToFlowPosition({ x: e.clientX - bounds.left, y: e.clientY - bounds.top })
-    const id = freshId(nodeType)
+    const id = freshId(nodeType, new Set((tab?.nodes ?? []).map(n => n.id)))
     setNodes([...(tab?.nodes ?? []), {
       id, type: 'rayflowNode', position: pos,
       data: { nodeType, meta: catalog[nodeType] ?? null, literals: {} },

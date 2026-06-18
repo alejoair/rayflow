@@ -73,8 +73,6 @@ interface FlowStore {
   addRun: (tabName: string, run: Run) => void
   updateRun: (tabName: string, runId: string, patch: Partial<Run>) => void
   setActiveRun: (tabName: string, runId: string | null) => void
-
-  getActiveTab: () => FlowTab | null
 }
 
 // Set no es serializable en JSON — lo convertimos a array al guardar y lo restauramos al cargar
@@ -274,11 +272,6 @@ export const useFlowStore = create<FlowStore>()(
           tabs: s.tabs.map(t => t.name !== tabName ? t : { ...t, activeRunId: runId }),
         }))
       },
-
-      getActiveTab: () => {
-        const { tabs, activeTabName } = get()
-        return tabs.find(t => t.name === activeTabName) ?? null
-      },
     }),
     {
       name: 'rayflow-ui-state',  // sobrescrito por initWorkspaceStore() al arrancar
@@ -307,6 +300,10 @@ export const useFlowStore = create<FlowStore>()(
     }
   )
 )
+
+/** Selector puro — cada componente se suscribe directamente a los datos del tab activo. */
+export const selectActiveTab = (s: FlowStore): FlowTab | null =>
+  s.tabs.find(t => t.name === s.activeTabName) ?? null
 
 /**
  * Cambia la clave de localStorage al namespace del workspace activo y rehidrata.
