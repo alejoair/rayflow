@@ -1,29 +1,28 @@
 """Actor Ray de cola de eventos por ejecución.
 
 Permite que el FlowEngine (actor remoto) publique eventos que FastAPI
-puede consumir via polling para reenviarlos como SSE al cliente HTTP.
+puede consumir via get() bloqueante para reenviarlos como SSE al cliente HTTP.
 """
 from __future__ import annotations
+import asyncio
 from typing import Any
 import ray
 
 
 @ray.remote
 class RunQueue:
-    """Cola FIFO de eventos de ejecución, accesible desde cualquier proceso Ray."""
+    """Cola FIFO de eventos de ejecución, accesible desde cualquier proceso Ray.
+
+    El engine llama push() fire-and-forget. El driver llama get() bloqueante
+    — se desbloquea en el momento exacto en que llega cada evento, sin polling.
+    """
 
     def __init__(self) -> None:
-        self._events: list[dict[str, Any]] = []
-        self._done = False
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
-    def push(self, event: dict[str, Any]) -> None:
-        self._events.append(event)
-        if event.get("event") in ("flow_done", "flow_error"):
-            self._done = True
+    async def push(self, event: dict[str, Any]) -> None:
+        await self._queue.put(event)
 
-    def drain(self) -> list[dict[str, Any]]:
-        events, self._events = self._events, []
-        return events
-
-    def is_done(self) -> bool:
-        return self._done
+    async def get(self, timeout: float = 300.0) -> dict[str, Any]:
+        """Bloquea hasta que haya un evento disponible o se agote el timeout."""
+        return await asyncio.wait_for(self._queue.get(), timeout)

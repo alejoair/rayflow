@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, AsyncGenerator, Generator
 
 import ray
 
@@ -43,8 +43,6 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
     Yields dicts con eventos: node_start, node_done, edge_fire, flow_done, flow_error.
     Si el flow no está cargado, lo carga automáticamente primero.
     """
-    import time
-
     if not is_flow_loaded(name):
         load(name)
 
@@ -57,28 +55,53 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
         lifetime="detached",
     ).remote()
 
-    ref = lf.execute(flow_inputs or {}, queue)
+    lf.execute(flow_inputs or {}, queue)
 
-    # Drain la queue mientras el engine corre
-    done = False
-    while not done:
-        events = ray.get(queue.drain.remote())
-        for evt in events:
+    # get() bloquea en el actor hasta que llega cada evento — sin polling ni sleep
+    try:
+        while True:
+            evt = ray.get(queue.get.remote(timeout=300.0))
             yield evt
             if evt.get("event") in ("flow_done", "flow_error"):
-                done = True
                 break
-        if not done:
-            time.sleep(0.05)
+    finally:
+        try:
+            ray.kill(queue)
+        except Exception:
+            pass
+
+
+async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) -> AsyncGenerator[dict, None]:
+    """Versión async de execute() — usa await en lugar de ray.get bloqueante.
+
+    Designed para usarse desde un async context (FastAPI async generator),
+    evitando el overhead de run_in_executor del generador síncrono.
+    """
+    if not is_flow_loaded(name):
+        load(name)
+
+    lf = get_loaded_flow(name)
+
+    from rayflow.state.queue import RunQueue
+    queue = RunQueue.options(
+        name=f"queue_{uuid.uuid4().hex[:8]}",
+        namespace="rayflow",
+        lifetime="detached",
+    ).remote()
+
+    lf.execute(flow_inputs or {}, queue)
 
     try:
-        ray.kill(queue)
-    except Exception:
-        pass
-
-    # Propagar excepción si el engine falló
-    if not done:
-        ray.get(ref)
+        while True:
+            evt = await queue.get.remote(timeout=300.0)
+            yield evt
+            if evt.get("event") in ("flow_done", "flow_error"):
+                break
+    finally:
+        try:
+            ray.kill(queue)
+        except Exception:
+            pass
 
 
 def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:

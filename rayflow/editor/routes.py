@@ -277,7 +277,7 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
     import json
     from functools import partial
     from fastapi.responses import StreamingResponse
-    from rayflow.api import execute as execute_flow, load as load_flow_api, is_flow_loaded
+    from rayflow.api import execute_async, load as load_flow_api, is_flow_loaded  # noqa: F401
 
     if inputs is None:
         inputs = {}
@@ -296,9 +296,9 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error cargando el flow: {e}")
 
-    def event_generator():
+    async def event_generator():
         try:
-            for evt in execute_flow(name, inputs):
+            async for evt in execute_async(name, inputs):
                 yield f"data: {json.dumps(evt)}\n\n"
         except Exception as e:
             import json as _json
