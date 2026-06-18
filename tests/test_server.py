@@ -47,8 +47,8 @@ def test_list_flows(client):
     flows = r.json()["flows"]
     assert len(flows) == 1
     assert flows[0]["name"] == "suma"
-    assert flows[0]["inputs"] == {"x": "int", "y": "int"}
-    assert flows[0]["outputs"] == {"resultado": "int"}
+    assert flows[0]["inputs"] == {"x": {"type": "int", "required": True}, "y": {"type": "int", "required": True}}
+    assert flows[0]["outputs"] == {"resultado": {"type": "int"}}
 
 
 def test_flow_detail(client):

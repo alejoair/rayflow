@@ -19,7 +19,7 @@ SUBFLOW_SUMA = {
     "inputs": {"a": "int", "b": "int"},
     "outputs": {"total": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "OnStart"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.a", "b": "entry.b"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -47,7 +47,7 @@ def test_callflow_aislado_inputs_outputs():
         "inputs": {"x": "int", "y": "int"},
         "outputs": {"respuesta": "dict"},
         "nodes": [
-            {"id": "entry", "type": "FlowInput"},
+            {"id": "entry", "type": "OnStart"},
             {"id": "sub", "type": "CallFlow",
              "exec_in": "entry",
              "inputs": {"flow": SUBFLOW_SUMA, "isolated": True,
@@ -71,7 +71,7 @@ def test_callflow_meta_flow_es_el_subflow_declarante():
         "inputs": {"x": "int"},
         "outputs": {"sub_meta": "dict", "root_meta": "dict"},
         "nodes": [
-            {"id": "entry", "type": "FlowInput"},
+            {"id": "entry", "type": "OnStart"},
             {"id": "sub", "type": "CallFlow", "exec_in": "entry",
              "inputs": {"flow": SUBFLOW_SUMA, "isolated": True,
                         "a": "entry.x", "b": "entry.x"}},
@@ -144,7 +144,7 @@ def test_callflow_dentro_de_rama_parallel():
         "inputs": {"a": "int", "b": "int"},
         "outputs": {"t": "int"},
         "nodes": [
-            {"id": "e", "type": "FlowInput"},
+            {"id": "e", "type": "OnStart"},
             {"id": "add", "type": "Add", "exec_in": "e",
              "inputs": {"a": "e.a", "b": "e.b"}},
             {"id": "x", "type": "FlowOutput", "exec_in": "add",
@@ -156,7 +156,7 @@ def test_callflow_dentro_de_rama_parallel():
         "inputs": {"n": "int"},
         "outputs": {"r": "dict"},
         "nodes": [
-            {"id": "e", "type": "FlowInput"},
+            {"id": "e", "type": "OnStart"},
             {"id": "par", "type": "Parallel", "exec_in": "e"},
             {"id": "cf", "type": "CallFlow", "exec_in": "par.branch_0",
              "inputs": {"flow": sub, "isolated": True, "a": "e.n", "b": "e.n"}},
@@ -237,7 +237,7 @@ def test_callflow_anidado():
         "inputs": {"n": "int"},
         "outputs": {"valor": "int"},
         "nodes": [
-            {"id": "entry", "type": "FlowInput"},
+            {"id": "entry", "type": "OnStart"},
             {"id": "add", "type": "Add", "exec_in": "entry",
              "inputs": {"a": "entry.n", "b": "entry.n"}},
             {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -250,7 +250,7 @@ def test_callflow_anidado():
         "inputs": {"x": "int"},
         "outputs": {"r1": "dict", "r2": "dict"},
         "nodes": [
-            {"id": "entry", "type": "FlowInput"},
+            {"id": "entry", "type": "OnStart"},
             {"id": "sub1", "type": "CallFlow",
              "exec_in": "entry",
              "inputs": {"flow": subflow_doble, "isolated": True, "n": "entry.x"}},

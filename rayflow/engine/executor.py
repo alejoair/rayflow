@@ -16,6 +16,17 @@ def _var_key(state_path: str | None, var_name: str) -> str:
     return f"{state_path}/{var_name}" if state_path else var_name
 
 
+def _resolve_refs(obj: Any) -> Any:
+    """Resuelve recursivamente ObjectRefs anidados en dicts y listas."""
+    if isinstance(obj, ray.ObjectRef):
+        return _resolve_refs(ray.get(obj))
+    if isinstance(obj, dict):
+        return {k: _resolve_refs(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_resolve_refs(v) for v in obj]
+    return obj
+
+
 @ray.remote
 class FlowEngine:
     """Motor de ejecución stateful de un flow ya construido (BuiltFlow).
@@ -74,7 +85,7 @@ class FlowEngine:
 
         try:
             await self._run_loop(self._built.entry_node_id)
-            result = dict(self._output_refs)
+            result = _resolve_refs(self._output_refs)
             await queue_ref.push.remote({"event": "flow_done", "result": result, "ts": time.time()})
             return result
         except Exception as e:

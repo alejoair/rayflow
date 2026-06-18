@@ -1,4 +1,5 @@
 """Tests de nodos custom por convención (custom_nodes/ + flows/ en el cwd)."""
+import sys
 import textwrap
 
 import pytest
@@ -42,7 +43,7 @@ TRIPLE_FLOW = {
     "inputs": {"x": "int"},
     "outputs": {"r": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "OnStart"},
         {"id": "t", "type": "Triple", "exec_in": "entry", "inputs": {"n": "entry.x"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "t", "inputs": {"r": "t.result"}},
     ],
@@ -65,7 +66,13 @@ def workspace_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
+    # Limpiar módulos custom_nodes cacheados de runs anteriores para que
+    # importlib.import_module() reimporte desde el nuevo cwd.
+    for key in list(sys.modules):
+        if key == "custom_nodes" or key.startswith("custom_nodes."):
+            sys.modules.pop(key)
     reset_catalog()
+    get_catalog()  # fuerza carga del catálogo desde el nuevo cwd
     yield tmp_path
 
 
@@ -110,7 +117,7 @@ def test_engine_node_custom_se_ejecuta(workspace_dir):
         "inputs": {"msg": "str"},
         "outputs": {"out": "str"},
         "nodes": [
-            {"id": "e", "type": "FlowInput"},
+            {"id": "e", "type": "OnStart"},
             {"id": "s", "type": "Shout", "exec_in": "e", "inputs": {"text": "e.msg"}},
             {"id": "x", "type": "FlowOutput", "exec_in": "s", "inputs": {"out": "s.loud"}},
         ],
