@@ -15,14 +15,16 @@ def cli():
 @click.option("--port", "-p", default=8000, show_default=True, help="Puerto del servidor")
 @click.option("--nodes-dir", "nodes_dirs", multiple=True, metavar="DIR",
               help="Directorio extra de nodos de usuario. Repetible.")
-def serve(files, host, port, nodes_dirs):
+@click.option("--debug", is_flag=True, default=False,
+              help="Redirige los logs de los actores Ray (prints incluidos) a la consola.")
+def serve(files, host, port, nodes_dirs, debug):
     """Lanza el servidor REST y el editor visual."""
     import ray
     from rayflow.workspace import ensure_workspace, runtime_env
     from rayflow.events.bus import get_event_broker
 
     ensure_workspace()
-    kwargs = {"ignore_reinit_error": True, "namespace": "rayflow"}
+    kwargs = {"ignore_reinit_error": True, "namespace": "rayflow", "log_to_driver": debug}
     env = runtime_env()
     if env is not None:
         kwargs["runtime_env"] = env

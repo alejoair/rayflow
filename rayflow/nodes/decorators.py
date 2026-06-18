@@ -95,9 +95,10 @@ class ExecContext:
         self._state_handle = None
         self._output_writer = _output_writer  # solo válido localmente
         self._fire_handler = _fire_handler    # solo válido localmente
+        self._pending_outputs: dict[str, Any] = {}  # buffer local para engine_nodes
 
     def __getstate__(self):
-        # Excluir handles y callbacks — se reacquieren bajo demanda.
+        # Excluir handles, callbacks y buffer local — se reacquieren bajo demanda.
         return {
             "_node_id": self._node_id,
             "_graph_id": self._graph_id,
@@ -106,6 +107,7 @@ class ExecContext:
             "_state_handle": None,
             "_output_writer": None,
             "_fire_handler": None,
+            "_pending_outputs": {},
         }
 
     def __setstate__(self, state):
@@ -138,9 +140,14 @@ class ExecContext:
             await self._engine().fire.remote(self._node_id, pin_name)
 
     def set_output(self, pin_name: str, value: Any) -> None:
-        """Escribe un data output del nodo actual en el GraphState."""
+        """Escribe un data output del nodo actual en el GraphState.
+
+        Para engine_nodes: acumula en buffer local (_pending_outputs) y el
+        engine flushea async antes de continuar. Para ray_nodes: escribe
+        directamente en el actor remoto (sin self-call).
+        """
         if self._output_writer is not None:
-            self._output_writer(self._node_id, pin_name, value)
+            self._pending_outputs[pin_name] = value
         else:
             ray.get(self._engine().set_output.remote(self._node_id, pin_name, value))
 

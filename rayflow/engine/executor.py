@@ -85,7 +85,7 @@ class FlowEngine:
         rnode = self._built.nodes[source_node_id]
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            await self._run_queue.push.remote({
+            self._run_queue.push.remote({
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
@@ -100,7 +100,7 @@ class FlowEngine:
     async def _local_fire(self, source_node_id: str, rnode: Any, pin_name: str) -> None:
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            await self._run_queue.push.remote({
+            self._run_queue.push.remote({
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
@@ -206,11 +206,20 @@ class FlowEngine:
             return []
 
         graph_id = self._get_graph_id()
-        ctx = ExecContext(
-            node_id, graph_id, rnode.state_path,
-            _output_writer=lambda nid, pin, val: self._write_node_outputs_sync(nid, {pin: val}),
-            _fire_handler=lambda pin: self._local_fire(node_id, rnode, pin),
-        )
+        ctx = ExecContext(node_id, graph_id, rnode.state_path)
+
+        async def _engine_fire(pin: str) -> None:
+            # Flushea los outputs acumulados al GraphState solo si hay nodos
+            # sucesores que puedan leerlos. Evita escrituras en cada iteración
+            # de un loop cuyo pin (p.ej. loop_body) no tiene targets directos.
+            targets = rnode.exec_targets.get(pin, [])
+            if ctx._pending_outputs and targets:
+                await self._write_node_outputs(node_id, ctx._pending_outputs.copy())
+                ctx._pending_outputs.clear()
+            await self._local_fire(node_id, rnode, pin)
+
+        ctx._output_writer = lambda nid, pin, val: None  # set_output acumula en _pending_outputs
+        ctx._fire_handler = _engine_fire
 
         started_at = time.time()
         await self._emit_node_start(node_id, rnode)
@@ -220,6 +229,10 @@ class FlowEngine:
         if run_fn is not None:
             instance = rnode.meta.py_class()
             await instance.run(ctx, **inputs)
+
+        if ctx._pending_outputs:
+            await self._write_node_outputs(node_id, ctx._pending_outputs)
+            ctx._pending_outputs.clear()
 
         duration_ms = (time.time() - started_at) * 1000
         await self._write_node_outputs(node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
@@ -255,7 +268,10 @@ class FlowEngine:
     async def _emit_node_start(self, node_id: str, rnode: ResolvedNode) -> None:
         if self._run_queue is None:
             return
-        await self._run_queue.push.remote({
+        # Fire-and-forget: el push es trivial y el driver drena la queue por
+        # polling. Esperar el ObjectRef (await) introduce latencia de Ray sin
+        # beneficio — el orden FIFO lo garantiza el event loop del RunQueue.
+        self._run_queue.push.remote({
             "event": "node_start",
             "node_id": node_id,
             "node_type": rnode.meta.name,
@@ -265,7 +281,7 @@ class FlowEngine:
     async def _emit_node_done(self, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
         if self._run_queue is None:
             return
-        await self._run_queue.push.remote({
+        self._run_queue.push.remote({
             "event": "node_done",
             "node_id": node_id,
             "node_type": rnode.meta.name,
@@ -335,11 +351,6 @@ class FlowEngine:
 
     async def _write_node_outputs(self, node_id: str, outputs: dict[str, Any]) -> None:
         await self._state.set_node_outputs.remote(node_id, outputs)
-
-    def _write_node_outputs_sync(self, node_id: str, outputs: dict[str, Any]) -> None:
-        # Variante síncrona para ctx.set_output() de engine_nodes, cuyo run()
-        # llama set_output de forma síncrona. Bloquea brevemente el event loop.
-        ray.get(self._state.set_node_outputs.remote(node_id, outputs))
 
 
 # ---------------------------------------------------------------------------

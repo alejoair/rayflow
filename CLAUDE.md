@@ -2,6 +2,18 @@
 
 Guía para Claude Code al trabajar en este repositorio.
 
+## Carpeta de pruebas
+
+Los flows y nodos custom de prueba viven en `C:\Users\alejandro.cuartas\Desktop\rayflow_sandbox\`:
+- `flows/` — flows JSON de prueba (no en el repo de Rayflow)
+- `custom_nodes/` — nodos custom de prueba del usuario
+
+Al lanzar el servidor desde el sandbox, Ray y el editor los detectan automáticamente:
+```bash
+cd C:\Users\alejandro.cuartas\Desktop\rayflow_sandbox
+rayflow serve --port 8000
+```
+
 ## Comandos de desarrollo
 
 ```bash
@@ -15,6 +27,9 @@ python -m rayflow serve --port 8000
 
 # Con flows precargados
 rayflow serve --file flows/suma.json --port 8000
+
+# Con logs de actores Ray (prints incluidos) redirigidos a consola
+rayflow serve --port 8000 --debug
 
 # Ejecutar tests
 pip install -e ".[dev]"
@@ -81,33 +96,88 @@ npx tsc --noEmit   # verificar tipos sin compilar
 
 ### Decoradores
 - `@ray_node` — corre en proceso Ray remoto (actor con exec pins, task sin exec pins)
-- `@engine_node` — corre localmente en el event loop del engine
+- `@engine_node` — corre directamente dentro del FlowEngine (sin RPC); usar para lógica de control ligera
 - `@parallel_node` — alias de `@engine_node`, para fork/join explícito
+
+La elección entre `@ray_node` y `@engine_node` afecta el despliegue y el estado — el contrato de `run()` es idéntico (`ctx.set_output()`, `await ctx.fire()`), pero:
+
+- **`@ray_node` con exec pins es stateful**: el actor Ray se instancia una vez en `load()` y persiste hasta `unload()`. La misma instancia atiende todas las ejecuciones — atributos en `self.__init__` o acumulados en `run()` persisten entre requests.
+- **`@engine_node` es stateless**: se instancia y descarta en cada ejecución del nodo. No puede acumular estado en `self`.
 
 ### Nodo con exec pins
 ```python
-@ray_node   # o @engine_node
+@ray_node   # o @engine_node — mismo contrato, distinto despliegue
 class MiNodo:
-    exec_in  = ExecInput()
-    valor    = Input("int", default=0)
+    exec_in   = ExecInput()
+    valor     = Input("int", default=0)
     resultado = Output("str")
-    exec_out = ExecOutput()
+    exec_out  = ExecOutput()
 
     async def run(self, ctx: ExecContext, valor: int) -> None:
-        ctx.set_output("resultado", str(valor))  # antes del fire
+        ctx.set_output("resultado", str(valor))
         await ctx.fire("exec_out")
 ```
 
 ### Nodo pure (sin exec pins)
 ```python
-@engine_node
+@engine_node   # o @ray_node
 class MiPure:
     x      = Input("int", default=0)
     result = Output("int")
 
-    def run(self, ctx: ExecContext, x: int) -> dict:
+    async def run(self, ctx: ExecContext, x: int) -> dict:
         return {"result": x * 2}
 ```
+
+### Estado en nodos
+
+| | Entre iteraciones del mismo `run()` | Entre ejecuciones del flow |
+|---|---|---|
+| `@engine_node` | Variables locales Python en el stack de `run()` — funciona porque `_local_fire` cede y retoma en el mismo frame | Solo via `ctx.get_variable()`/`ctx.set_variable()` → GraphState |
+| `@ray_node` con exec pins | Variables locales Python o atributos `self` (el actor persiste) | Atributos `self.__init__` o `ctx.get_variable()` → GraphState |
+
+Un engine_node se reinstancia en cada ejecución del flow — no puede acumular estado en `self` entre requests. Un ray_node con exec pins es un actor Ray persistente (vive de `load()` a `unload()`) — sí puede tener estado en `self`.
+
+### Cómo funciona `ctx.fire()` internamente
+- En un **engine_node**: llama `_local_fire` directamente dentro del FlowEngine — invoca `_run_loop` sin RPC, sin self-call. Esto permite que nodos de loop (`ForEach`, `While`) hagan `await ctx.fire("loop_body")` a mitad de `run()` sin deadlock.
+- En un **ray_node**: el `ExecContext` viaja serializado al actor remoto; `_fire_handler` se descarta y `ctx.fire()` hace RPC al engine (`engine.fire.remote()`), que es el camino legítimo desde un proceso externo.
+
+### Buffer `_pending_outputs` en engine_nodes
+
+`ctx.set_output()` en un engine_node **no escribe directamente al `GraphState`** (eso requeriría `await` dentro de un método sync, o `ray.get()` bloqueante dentro del actor FlowEngine — ambos problemáticos). En cambio, acumula en `ctx._pending_outputs` (dict local en memoria).
+
+El FlowEngine flushea ese buffer con `await` en dos momentos:
+1. **Antes de `_local_fire(pin)`** — solo si hay nodos destino que vayan a leer los outputs. Esto permite que un loop como `ForEach` haga `ctx.set_output("element", item)` + `await ctx.fire("loop_body")` en cada iteración: el flush ocurre antes de que el nodo del body corra.
+2. **Al finalizar `run()`** — para outputs que no tienen sucesor exec (p.ej. nodos pure o último nodo de una cadena).
+
+```python
+# En _fire_engine_node (executor.py):
+async def _engine_fire(pin: str) -> None:
+    targets = rnode.exec_targets.get(pin, [])
+    if ctx._pending_outputs and targets:
+        await self._write_node_outputs(node_id, ctx._pending_outputs.copy())
+        ctx._pending_outputs.clear()
+    await self._local_fire(node_id, rnode, pin)
+
+ctx._output_writer = lambda nid, pin, val: None  # set_output acumula localmente
+ctx._fire_handler = _engine_fire
+```
+
+`_pending_outputs` se vacía en serialización (`__getstate__`) — si el ctx viaja a un worker Ray, el buffer queda limpio y el nodo usa la ruta normal (`ray.get(engine.set_output.remote(...))`).
+
+### RunQueue y eventos de ejecución (SSE)
+
+Por cada `execute()` se crea un actor `RunQueue` (detached, temporal). El FlowEngine empuja eventos a él; FastAPI los drena con polling `drain.remote()` cada 50ms y los reenvía como SSE al cliente.
+
+**Regla crítica de rendimiento**: los eventos `node_start`, `node_done` y `edge_fire` se empujan **fire-and-forget** (sin `await`):
+
+```python
+self._run_queue.push.remote({...})  # NO await — fire-and-forget
+```
+
+Si se usara `await`, el FlowEngine (actor Ray con event loop secuencial) bloquearía esperando la confirmación del push mientras el driver está drenando la misma queue, causando 5-7 segundos de latencia por run. El orden FIFO está garantizado por el event loop secuencial del actor `RunQueue`, así que `await` es innecesario para correctitud.
+
+Solo `flow_done` y `flow_error` usan `await` — para garantizar que el evento llegue antes de que el driver deje de hacer polling.
 
 ### Descubrimiento de nodos
 El servidor carga nodos desde:
