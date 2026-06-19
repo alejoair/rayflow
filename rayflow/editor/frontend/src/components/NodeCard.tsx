@@ -2,6 +2,36 @@ import { Handle, Position } from '@xyflow/react'
 import { typeColor } from '@/lib/translator'
 import type { NodeSpec } from '@/lib/api'
 
+// Triángulo SVG que reemplaza visualmente el círculo del Handle de exec.
+// El Handle real queda invisible (opacity 0) pero sigue siendo el punto de conexión.
+function ExecHandle({ type, position, id, style }: {
+  type: 'source' | 'target'
+  position: Position
+  id: string
+  style: React.CSSProperties
+}) {
+  const isLeft = position === Position.Left
+  // Triángulo apuntando hacia afuera del nodo
+  const points = isLeft ? '10,2 10,10 2,6' : '2,2 2,10 10,6'
+  return (
+    <div style={{ position: 'absolute', ...style, width: 12, height: 12 }}>
+      <Handle
+        type={type}
+        position={position}
+        id={id}
+        style={{ opacity: 0, width: 12, height: 12, minWidth: 0, minHeight: 0, border: 'none', background: 'transparent' }}
+      />
+      <svg
+        width={12} height={12}
+        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+        viewBox="0 0 12 12"
+      >
+        <polygon points={points} fill="var(--exec-color)" />
+      </svg>
+    </div>
+  )
+}
+
 interface NodeCardProps {
   data: { nodeType: string; meta: NodeSpec | null; literals: Record<string, unknown>; runStatus?: 'idle' | 'running' | 'done' | 'error'; hasValidationError?: boolean }
   selected: boolean
@@ -47,20 +77,10 @@ export default function NodeCard({ data, selected }: NodeCardProps) {
     <div className={cls}>
       <div className="rf-node-header" style={{ paddingLeft: hasExecIn ? 24 : 10, paddingRight: execOutputs.length > 0 ? 24 : 10 }}>
         {hasExecIn && (
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="exec-in"
-            style={{ background: 'var(--exec-color)', borderColor: 'var(--exec-color)', width: 12, height: 12, left: 6 }}
-          />
+          <ExecHandle type="target" position={Position.Left} id="exec-in" style={{ top: '50%', transform: 'translateY(-50%)', left: 6 }} />
         )}
         {execOutputs.length > 0 && (
-          <Handle
-            type="source"
-            position={Position.Right}
-            id={`exec-out-${execOutputs[0]}`}
-            style={{ background: 'var(--exec-color)', borderColor: 'var(--exec-color)', width: 12, height: 12, right: 6 }}
-          />
+          <ExecHandle type="source" position={Position.Right} id={`exec-out-${execOutputs[0]}`} style={{ top: '50%', transform: 'translateY(-50%)', right: 6 }} />
         )}
         {hasExecIn && <span className="rf-node-header-dot" />}
         <span style={{ flex: 1 }}>{nodeType}</span>
@@ -75,12 +95,7 @@ export default function NodeCard({ data, selected }: NodeCardProps) {
       {execOutputs.slice(1).map(pin => (
         <div key={pin} className="rf-pin-row output" style={{ paddingRight: 28, position: 'relative' }}>
           <span className="rf-pin-label" style={{ color: 'var(--exec-color)', fontSize: 11 }}>{pin}</span>
-          <Handle
-            type="source"
-            position={Position.Right}
-            id={`exec-out-${pin}`}
-            style={{ background: 'var(--exec-color)', borderColor: 'var(--exec-color)', width: 12, height: 12, right: 6 }}
-          />
+          <ExecHandle type="source" position={Position.Right} id={`exec-out-${pin}`} style={{ top: '50%', transform: 'translateY(-50%)', right: 6 }} />
         </div>
       ))}
 

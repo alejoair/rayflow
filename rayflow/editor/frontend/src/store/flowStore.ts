@@ -7,6 +7,7 @@ export type RunStatus = 'idle' | 'running' | 'done' | 'error'
 
 export interface RunEvent {
   event: string
+  run_id?: string
   node_id?: string
   from?: string
   to?: string

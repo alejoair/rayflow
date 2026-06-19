@@ -47,28 +47,21 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
         load(name)
 
     lf = get_loaded_flow(name)
+    run_id = uuid.uuid4().hex[:8]
+    queue = lf._queue
 
-    from rayflow.state.queue import RunQueue
-    queue = RunQueue.options(
-        name=f"queue_{uuid.uuid4().hex[:8]}",
-        namespace="rayflow",
-        lifetime="detached",
-    ).remote()
-
-    lf.execute(flow_inputs or {}, queue)
+    ray.get(queue.create_run.remote(run_id))
+    lf.execute(flow_inputs or {}, run_id)
 
     # get() bloquea en el actor hasta que llega cada evento — sin polling ni sleep
     try:
         while True:
-            evt = ray.get(queue.get.remote(timeout=300.0))
+            evt = ray.get(queue.get.remote(run_id, timeout=300.0))
             yield evt
             if evt.get("event") in ("flow_done", "flow_error"):
                 break
     finally:
-        try:
-            ray.kill(queue)
-        except Exception:
-            pass
+        ray.get(queue.close_run.remote(run_id))
 
 
 async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) -> AsyncGenerator[dict, None]:
@@ -77,31 +70,62 @@ async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) ->
     Designed para usarse desde un async context (FastAPI async generator),
     evitando el overhead de run_in_executor del generador síncrono.
     """
+    import time as _time
+
+    def _ts(label: str, t0: float) -> None:
+        print(f"[timing] {label}: +{(_time.perf_counter() - t0)*1000:.1f}ms")
+
+    t0 = _time.perf_counter()
+    _ts("execute_async start", t0)
+
     if not is_flow_loaded(name):
         load(name)
+        _ts("load", t0)
 
     lf = get_loaded_flow(name)
+    run_id = uuid.uuid4().hex[:8]
+    queue = lf._queue
+    _ts("queue handle obtained", t0)
 
-    from rayflow.state.queue import RunQueue
-    queue = RunQueue.options(
-        name=f"queue_{uuid.uuid4().hex[:8]}",
-        namespace="rayflow",
-        lifetime="detached",
-    ).remote()
+    await queue.create_run.remote(run_id)
+    _ts("create_run", t0)
 
-    lf.execute(flow_inputs or {}, queue)
+    yield {"event": "run_start", "run_id": run_id, "ts": 0}
+
+    lf.execute(flow_inputs or {}, run_id)
+    _ts("execute dispatched", t0)
 
     try:
         while True:
-            evt = await queue.get.remote(timeout=300.0)
+            evt = await queue.get.remote(run_id, timeout=300.0)
+            _ts(f"got event: {evt.get('event')} node={evt.get('node_id','')}", t0)
             yield evt
             if evt.get("event") in ("flow_done", "flow_error"):
                 break
     finally:
-        try:
-            ray.kill(queue)
-        except Exception:
-            pass
+        await queue.close_run.remote(run_id)
+
+
+async def reconnect_async(name: str, run_id: str) -> AsyncGenerator[dict, None]:
+    """Reconecta a un run activo ya iniciado por execute_async().
+
+    No crea ni cierra la sub-queue — solo consume eventos desde donde se quedó.
+    Termina cuando llega flow_done/flow_error o timeout.
+    """
+    lf = get_loaded_flow(name)
+    if lf is None:
+        yield {"event": "flow_error", "error": f"Flow '{name}' no está cargado", "ts": 0}
+        return
+
+    queue = lf._queue
+    try:
+        while True:
+            evt = await queue.get.remote(run_id, timeout=300.0)
+            yield evt
+            if evt.get("event") in ("flow_done", "flow_error"):
+                break
+    except Exception as e:
+        yield {"event": "flow_error", "error": str(e), "ts": 0}
 
 
 def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
@@ -160,25 +184,19 @@ def stop(graph_id: str, event_names: list[str]) -> None:
 def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
     """Task de Ray que ejecuta un flow residente al recibir un evento."""
     import uuid as _uuid
-    from rayflow.state.queue import RunQueue
 
     lf = get_loaded_flow(flow_name)
     if lf is None:
         return
 
-    queue = RunQueue.options(
-        name=f"queue_{_uuid.uuid4().hex[:8]}",
-        namespace="rayflow",
-        lifetime="detached",
-    ).remote()
+    run_id = _uuid.uuid4().hex[:8]
+    queue = ray.get_actor(f"queue_{flow_name}", namespace="rayflow")
 
+    ray.get(queue.create_run.remote(run_id))
     try:
-        ray.get(lf.execute({"payload": payload}, queue))
+        ray.get(lf.execute({"payload": payload}, run_id))
     finally:
-        try:
-            ray.kill(queue)
-        except Exception:
-            pass
+        ray.get(queue.close_run.remote(run_id))
 
 
 def _ensure_ray() -> None:

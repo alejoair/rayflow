@@ -244,6 +244,7 @@ export default function PropertiesPanel({
             <div>
               <span style={fieldLabel}>ID</span>
               <Input
+                key={node.id}
                 defaultValue={node.id}
                 onBlur={e => updateId(e.target.value.trim())}
                 onKeyDown={e => { if (e.key === 'Enter') updateId((e.target as HTMLInputElement).value.trim()) }}

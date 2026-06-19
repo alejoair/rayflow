@@ -311,6 +311,35 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
     )
 
 
+@router.get("/flows/{name}/run/{run_id}/stream")
+async def reconnect_flow_run(name: str, run_id: str):
+    """Reconecta a un run SSE activo sin relanzar la ejecución.
+
+    Útil cuando el cliente pierde la conexión mientras el flow todavía corre.
+    Devuelve los eventos pendientes desde el momento de reconexión.
+    """
+    import json
+    from fastapi.responses import StreamingResponse
+    from rayflow.api import reconnect_async, is_flow_loaded
+
+    if not is_flow_loaded(name):
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' no está cargado")
+
+    async def event_generator():
+        try:
+            async for evt in reconnect_async(name, run_id):
+                yield f"data: {json.dumps(evt)}\n\n"
+        except Exception as e:
+            import json as _json
+            yield f"data: {_json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Eventos — suscripción y desuscripción
 # ---------------------------------------------------------------------------

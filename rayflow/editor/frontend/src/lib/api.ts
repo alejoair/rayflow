@@ -58,7 +58,8 @@ export interface ValidationResult {
 }
 
 export interface RunEvent {
-  event: 'node_start' | 'node_done' | 'edge_fire' | 'flow_done' | 'flow_error'
+  event: 'run_start' | 'node_start' | 'node_done' | 'edge_fire' | 'flow_done' | 'flow_error'
+  run_id?: string
   node_id?: string
   from?: string
   to?: string
@@ -82,6 +83,7 @@ export const flowLoadedStatus = (name: string) => apiFetch<{ flow: string; loade
 
 // runFlow devuelve un ReadableStream SSE — se consume en useRunStream
 export const runFlowUrl = (name: string) => `/editor/flows/${encodeURIComponent(name)}/run`
+export const reconnectRunUrl = (name: string, runId: string) => `/editor/flows/${encodeURIComponent(name)}/run/${encodeURIComponent(runId)}/stream`
 
 // Custom nodes
 export interface CustomNodeFile {

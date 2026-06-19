@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useFlowStore, type Run, type RunEvent } from '@/store/flowStore'
-import { unloadFlow, runFlowUrl } from '@/lib/api'
+import { unloadFlow, runFlowUrl, reconnectRunUrl } from '@/lib/api'
 
 export function useRunStream(tabName: string) {
   const { addRun, updateRun } = useFlowStore()
@@ -60,7 +60,6 @@ export function useRunStream(tabName: string) {
 
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
-    let buffer = ''
 
     const patchRun = (patch: (run: Run) => Partial<Run>) => {
       useFlowStore.setState(s => ({
@@ -193,22 +192,59 @@ export function useRunStream(tabName: string) {
     }
 
     // ─── Lectura del stream SSE ───────────────────────────────────────────────
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
+    // backendRunId: recibido en el evento run_start, necesario para reconexión
+    let backendRunId: string | null = null
+    // terminalReceived: true si flow_done/flow_error llegó en el stream — no reconectar
+    let terminalReceived = false
 
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        let evt: RunEvent
-        try {
-          evt = JSON.parse(line.slice(6))
-        } catch {
-          continue
+    const drainStream = async (r: ReadableStreamDefaultReader<Uint8Array>) => {
+      let buf = ''
+      while (true) {
+        const { done, value } = await r.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          let evt: RunEvent
+          try { evt = JSON.parse(line.slice(6)) } catch { continue }
+          if (evt.event === 'run_start') { backendRunId = evt.run_id ?? null; continue }
+          if (evt.event === 'flow_done' || evt.event === 'flow_error') terminalReceived = true
+          enqueue(evt)
         }
-        enqueue(evt)
+      }
+    }
+
+    try {
+      await drainStream(reader)
+    } catch {
+      // stream roto — intentar reconexión si el run sigue activo y tenemos run_id
+    }
+
+    // Reconexión: solo si el stream se rompió antes de recibir el evento terminal
+    const MAX_RECONNECT_ATTEMPTS = 5
+    let attempt = 0
+    while (
+      !terminalReceived &&
+      backendRunId !== null &&
+      !controller.signal.aborted &&
+      attempt < MAX_RECONNECT_ATTEMPTS
+    ) {
+      attempt++
+      // Backoff lineal: 500ms, 1000ms, 1500ms...
+      await new Promise(res => setTimeout(res, attempt * 500))
+      if (controller.signal.aborted) break
+
+      try {
+        const reconnectResponse = await fetch(reconnectRunUrl(tabName, backendRunId), {
+          signal: controller.signal,
+        })
+        if (!reconnectResponse.ok) break
+        await drainStream(reconnectResponse.body!.getReader())
+        if (terminalReceived) break
+      } catch {
+        // Reintento en el siguiente ciclo del while
       }
     }
 

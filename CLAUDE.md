@@ -90,7 +90,7 @@ npx tsc --noEmit   # verificar tipos sin compilar
 - `src/lib/api.ts` — cliente HTTP tipado (todas las llamadas al backend)
 - `src/lib/translator.ts` — conversión flowDef JSON ↔ React Flow nodes/edges
 - `src/store/flowStore.ts` — Zustand store (tabs, runs, catálogo, animMinMs). Exporta `selectActiveTab` como selector puro — usar siempre en lugar de acceder al tab via destructuring directo
-- `src/hooks/useRunStream.ts` — SSE streaming + sistema de animación con agrupación paralela. Expone `abort()` para cancelar el stream SSE activo
+- `src/hooks/useRunStream.ts` — SSE streaming + sistema de animación con agrupación paralela. Captura `run_id` del evento `run_start` y reconecta automáticamente (hasta 5 reintentos, backoff 500 ms) si el stream cae con el run todavía activo. Expone `abort()` para cancelar el stream SSE activo
 
 ## Sistema de nodos
 
@@ -167,19 +167,38 @@ ctx._fire_handler = _engine_fire
 
 ### RunQueue y eventos de ejecución (SSE)
 
-Por cada `execute()` se crea un actor `RunQueue` (detached, temporal). El FlowEngine empuja eventos a él; FastAPI los consume via `get()` bloqueante y los reenvía como SSE al cliente.
+Cada flow cargado tiene un actor `RunQueue` persistente (`queue_{flow_name}`, lifetime="detached"), que se crea en `load()` y se destruye en `unload()`. Internamente mantiene un `dict[run_id → asyncio.Queue]`: cada ejecución reserva una entrada con `create_run(run_id)` y la libera con `close_run(run_id)` al terminar.
 
-`RunQueue` internamente usa `asyncio.Queue` — `push()` hace `put()` y `get()` bloquea hasta que llega el siguiente evento. El driver llama `await queue.get.remote()` desde un async generator, evitando el overhead de `run_in_executor` que FastAPI aplica a generadores síncronos.
+El FlowEngine empuja eventos a la sub-queue del run activo; FastAPI los consume via `get(run_id)` bloqueante y los reenvía como SSE al cliente. El driver llama `await queue.get.remote(run_id)` desde un async generator, evitando el overhead de `run_in_executor`.
 
-**Regla crítica de rendimiento**: los eventos `node_start`, `node_done` y `edge_fire` se empujan **fire-and-forget** (sin `await`):
+**Eventos SSE emitidos** (en orden de aparición):
+
+| Evento | Campos extra | Quién lo emite |
+|--------|-------------|----------------|
+| `run_start` | `run_id` | `execute_async()` — primer evento, antes de lanzar el engine |
+| `node_start` | `node_id`, `node_type`, `ts` | `FlowEngine` |
+| `edge_fire` | `from`, `to`, `pin`, `ts` | `FlowEngine` |
+| `node_done` | `node_id`, `node_type`, `duration_ms`, `ts` | `FlowEngine` |
+| `flow_done` | `result`, `ts` | `FlowEngine` |
+| `flow_error` | `error`, `ts` | `FlowEngine` |
+
+**Regla crítica de rendimiento**: `node_start`, `node_done` y `edge_fire` se empujan **fire-and-forget** (sin `await`):
 
 ```python
-self._run_queue.push.remote({...})  # NO await — fire-and-forget
+self._run_queue.push.remote(self._run_id, {...})  # NO await — fire-and-forget
 ```
 
 Si se usara `await`, el FlowEngine (actor Ray con event loop secuencial) bloquearía esperando la confirmación del push. El orden FIFO está garantizado por el event loop secuencial del actor `RunQueue`, así que `await` es innecesario para correctitud.
 
-`flow_done` y `flow_error` sí usan `await` en el engine (`await queue_ref.push.remote(...)`) — para garantizar que el evento llegue antes de que el actor sea destruido.
+`flow_done` y `flow_error` sí usan `await` — para garantizar que el evento llegue antes de que el driver cierre la sub-queue.
+
+**Reconexión SSE**: si el cliente pierde la conexión mientras el flow corre, puede reconectarse usando el `run_id` recibido en `run_start`:
+
+```
+GET /editor/flows/{name}/run/{run_id}/stream
+```
+
+Este endpoint consume la sub-queue existente sin relanzar la ejecución ni cerrarla. El frontend (`useRunStream.ts`) lo hace automáticamente: hasta 5 reintentos con backoff lineal de 500 ms, solo si no se había recibido un evento terminal (`flow_done`/`flow_error`) antes de que el stream cayera.
 
 ### Descubrimiento de nodos
 El servidor carga nodos desde:
@@ -207,7 +226,8 @@ El servidor carga nodos desde:
 | `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
 | `GET` | `/editor/flows/loaded` | Lista todos los flows cargados en Ray con su interfaz (inputs/outputs) |
 | `GET` | `/editor/flows/{name}/loaded` | Estado de carga de un flow concreto |
-| `POST` | `/editor/flows/{name}/run` | Ejecutar flow (SSE stream) |
+| `POST` | `/editor/flows/{name}/run` | Ejecutar flow (SSE stream); primer evento es `run_start` con `run_id` |
+| `GET` | `/editor/flows/{name}/run/{run_id}/stream` | Reconectar a un run activo (SSE stream sin relanzar ejecución) |
 | `POST` | `/editor/flows/{name}/serve-events` | Suscribir al event bus |
 | `DELETE` | `/editor/flows/{name}/serve-events/{graph_id}` | Desuscribir |
 
@@ -328,16 +348,19 @@ load(flow_json)
   └─ LoadedFlow.load()
        ├─ spawn @ray_node actors  (uno por nodo exec con decorator ray_node)
        ├─ spawn FlowEngine actor  (engine_{flow_name}, lifetime="detached")
-       └─ spawn GraphState actor  (gs_{flow_name}, lifetime="detached")
+       ├─ spawn GraphState actor  (gs_{flow_name}, lifetime="detached")
+       └─ spawn RunQueue actor    (queue_{flow_name}, lifetime="detached")
 
 execute(flow_name, inputs)
-  └─ crea RunQueue temporal (actor detached, asyncio.Queue interna)
-  └─ engine.execute.remote(inputs, queue)  ← no bloquea
-  └─ driver consume queue via await queue.get.remote() → SSE al cliente
-  └─ al llegar flow_done/flow_error → kill RunQueue
+  └─ genera run_id (uuid hex 8 chars)
+  └─ queue.create_run(run_id)           # reserva sub-queue en el actor persistente
+  └─ yield {"event": "run_start", "run_id": run_id}  ← primer evento SSE
+  └─ engine.execute.remote(inputs, queue, run_id)  ← no bloquea
+  └─ driver consume queue.get(run_id) → SSE al cliente
+  └─ al llegar flow_done/flow_error → queue.close_run(run_id)
 
 unload(flow_name)
-  └─ kill actors @ray_node + FlowEngine + GraphState
+  └─ kill actors @ray_node + FlowEngine + GraphState + RunQueue
 ```
 
 **GraphState** persiste entre ejecuciones del mismo flow cargado: las variables mantienen su valor entre requests. Se resetean los outputs de nodos en cada `execute()`, pero no las variables.
@@ -353,7 +376,7 @@ serve_events(flow_json)          # igual que load() + suscripción al broker
 EmitEvent node → ctx.emit_event(name, payload)
   └─ EventBroker.publish(name, payload)   # fire-and-forget
        └─ _run_event_flow.remote(flow_name, name, payload)  # Ray task
-            └─ lf.execute({"payload": payload}, queue)
+            └─ lf.execute({"payload": payload}, run_id)  # queue obtenida por ray.get_actor("queue_{flow_name}")
 
 stop(graph_id, event_names)
   └─ EventBroker.unsubscribe() + unload()

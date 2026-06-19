@@ -61,6 +61,7 @@ class FlowEngine:
         self._output_refs: dict[str, Any] = {}
         self._exec_arrivals: dict[str, set[str]] = {}
         self._run_queue: Any | None = None  # handle a RunQueue activo
+        self._run_id: str | None = None     # run_id de la ejecución activa
 
     def _get_graph_id(self) -> str:
         # El graph_id se deriva del nombre del actor engine — se asigna en LoadedFlow
@@ -71,9 +72,10 @@ class FlowEngine:
     # API pública
     # ------------------------------------------------------------------
 
-    async def execute(self, flow_inputs: dict[str, Any], queue_ref: Any) -> dict[str, Any]:
+    async def execute(self, flow_inputs: dict[str, Any], queue_ref: Any, run_id: str) -> dict[str, Any]:
         """Ejecuta el flow con los inputs dados, emitiendo eventos a queue_ref."""
         self._run_queue = queue_ref
+        self._run_id = run_id
         self._output_refs = {}
         self._exec_arrivals = {}
 
@@ -86,17 +88,17 @@ class FlowEngine:
         try:
             await self._run_loop(self._built.entry_node_id)
             result = _resolve_refs(self._output_refs)
-            await queue_ref.push.remote({"event": "flow_done", "result": result, "ts": time.time()})
+            await queue_ref.push.remote(run_id, {"event": "flow_done", "result": result, "ts": time.time()})
             return result
         except Exception as e:
-            await queue_ref.push.remote({"event": "flow_error", "error": str(e), "ts": time.time()})
+            await queue_ref.push.remote(run_id, {"event": "flow_error", "error": str(e), "ts": time.time()})
             raise
 
     async def fire(self, source_node_id: str, pin_name: str) -> None:
         rnode = self._built.nodes[source_node_id]
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            self._run_queue.push.remote({
+            self._run_queue.push.remote(self._run_id, {
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
@@ -111,7 +113,7 @@ class FlowEngine:
     async def _local_fire(self, source_node_id: str, rnode: Any, pin_name: str) -> None:
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            self._run_queue.push.remote({
+            self._run_queue.push.remote(self._run_id, {
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
@@ -282,7 +284,7 @@ class FlowEngine:
         # Fire-and-forget: el push es trivial y el driver drena la queue por
         # polling. Esperar el ObjectRef (await) introduce latencia de Ray sin
         # beneficio — el orden FIFO lo garantiza el event loop del RunQueue.
-        self._run_queue.push.remote({
+        self._run_queue.push.remote(self._run_id, {
             "event": "node_start",
             "node_id": node_id,
             "node_type": rnode.meta.name,
@@ -292,7 +294,7 @@ class FlowEngine:
     async def _emit_node_done(self, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
         if self._run_queue is None:
             return
-        self._run_queue.push.remote({
+        self._run_queue.push.remote(self._run_id, {
             "event": "node_done",
             "node_id": node_id,
             "node_type": rnode.meta.name,
@@ -375,27 +377,23 @@ class LoadedFlow:
     Entre requests, el GraphState mantiene el estado de variables.
     """
 
-    def __init__(self, graph_id: str, engine: Any, actors: dict[str, Any], flow_def=None):
+    def __init__(self, graph_id: str, engine: Any, actors: dict[str, Any], queue: Any, flow_def=None):
         self.graph_id = graph_id
         self._engine = engine
         self._actors = actors
+        self._queue = queue
         self.flow_def = flow_def  # FlowDef original para inspección de interfaz
 
     @classmethod
     def load(cls, built: BuiltFlow) -> "LoadedFlow":
         graph_id = built.flow_def.name
 
-        # Destruir engine previo si existía (recarga)
-        try:
-            old = ray.get_actor(f"engine_{graph_id}", namespace="rayflow")
-            ray.kill(old)
-        except Exception:
-            pass
-        try:
-            old_gs = ray.get_actor(f"gs_{graph_id}", namespace="rayflow")
-            ray.kill(old_gs)
-        except Exception:
-            pass
+        # Destruir actores previos si existían (recarga)
+        for actor_name in (f"engine_{graph_id}", f"gs_{graph_id}", f"queue_{graph_id}"):
+            try:
+                ray.kill(ray.get_actor(actor_name, namespace="rayflow"))
+            except Exception:
+                pass
 
         # Spawn actores @ray_node
         actors: dict[str, Any] = {}
@@ -416,17 +414,24 @@ class LoadedFlow:
                 ).remote()
                 actors[node_id] = actor
 
+        from rayflow.state.queue import RunQueue
+        queue = RunQueue.options(
+            name=f"queue_{graph_id}",
+            namespace="rayflow",
+            lifetime="detached",
+        ).remote()
+
         engine = FlowEngine.options(
             name=f"engine_{graph_id}",
             namespace="rayflow",
             lifetime="detached",
         ).remote(built, actors)
 
-        return cls(graph_id, engine, actors, flow_def=built.flow_def)
+        return cls(graph_id, engine, actors, queue, flow_def=built.flow_def)
 
-    def execute(self, flow_inputs: dict[str, Any], queue: Any) -> Any:
+    def execute(self, flow_inputs: dict[str, Any], run_id: str) -> Any:
         """Lanza execute() en el engine y devuelve el ObjectRef (no bloquea)."""
-        return self._engine.execute.remote(flow_inputs, queue)
+        return self._engine.execute.remote(flow_inputs, self._queue, run_id)
 
     def unload(self) -> None:
         """Destruye todos los actores del flow."""
@@ -435,13 +440,13 @@ class LoadedFlow:
                 ray.kill(actor)
             except Exception:
                 pass
+        for actor in (self._engine, self._queue):
+            try:
+                ray.kill(actor)
+            except Exception:
+                pass
         try:
-            ray.kill(self._engine)
-        except Exception:
-            pass
-        try:
-            gs = ray.get_actor(f"gs_{self.graph_id}", namespace="rayflow")
-            ray.kill(gs)
+            ray.kill(ray.get_actor(f"gs_{self.graph_id}", namespace="rayflow"))
         except Exception:
             pass
 
