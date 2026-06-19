@@ -53,6 +53,7 @@ class OnStart:
     Sus data outputs se generan en build a partir de los `inputs` declarados
     en el flow. El engine inyecta los valores antes de llamar run().
     """
+    category = "Control"
     exec_out = ExecOutput()
 
 @engine_node
@@ -61,6 +62,7 @@ class FlowOutput:
 
     Sus data inputs se generan en build a partir de los `outputs` del flow.
     """
+    category = "Control"
     exec_in = ExecInput()
 
     async def run(self, ctx: ExecContext) -> None:
@@ -70,6 +72,7 @@ class FlowOutput:
 @ray_node
 class Branch:
     """Desvío condicional. Dispara `true` o `false` según `condition`."""
+    category = "Control"
     exec_in = ExecInput()
     condition = Input("bool", default=False)
     true = ExecOutput()
@@ -82,6 +85,7 @@ class Branch:
 @ray_node
 class Sequence:
     """Dispara sus exec outputs en orden secuencial."""
+    category = "Control"
     exec_in = ExecInput()
     then_0 = ExecOutput()
     then_1 = ExecOutput()
@@ -102,6 +106,7 @@ class Parallel:
     ctx.exec_outputs_except("joined") y se lanzan con asyncio.gather.
     El pin 'joined' se dispara cuando todas las ramas han terminado.
     """
+    category = "Bucles"
     exec_in = ExecInput()
     joined = ExecOutput()
 
@@ -114,6 +119,7 @@ class Parallel:
 @engine_node
 class ForEach:
     """Itera sobre un array disparando loop_body por cada elemento."""
+    category = "Bucles"
     exec_in = ExecInput()
     array = Input("list", default=None)
     loop_body = ExecOutput()

@@ -238,8 +238,14 @@ export default function App() {
       })
       const result = await validateFlow(flowDef)
       setValidationErrors(result.errors || [])
-      if (result.valid) addToast('Flow válido ✓', 'success')
-      else addToast(`${result.errors.length} error(es)`, 'error')
+      if (result.valid) {
+        addToast('Flow válido ✓', 'success')
+      } else {
+        // Mostrar mensaje con más detalles
+        const errorDetails = result.errors.slice(0, 3).join('\n')
+        const moreErrors = result.errors.length > 3 ? `\n... y ${result.errors.length - 3} más` : ''
+        addToast(`${result.errors.length} error(es):\n${errorDetails}${moreErrors}`, 'error')
+      }
     } catch (e) { addToast(`Error validando: ${(e as Error).message}`, 'error') }
   }
 

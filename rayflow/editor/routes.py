@@ -46,6 +46,10 @@ def _node_spec(node_type: str, meta) -> dict[str, Any]:
         "inputs": [_pin_spec(p) for p in meta.inputs],
         "outputs": [{"name": p.name, "kind": p.kind, "type": p.type or "Any"} for p in meta.outputs],
         "exec_outputs": meta.exec_outputs,
+        # Nuevos campos:
+        "is_builtin": meta.is_builtin,           # True si builtin, False si custom
+        "category": meta.category,                # "Control", "Matemáticas", etc.
+        "description": meta.description,          # Docstring o None
     }
 
 

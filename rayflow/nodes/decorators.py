@@ -210,6 +210,10 @@ class NodeMeta:
     is_exec_node: bool = False
     is_engine_node: bool = False
     is_parallel: bool = False
+    # Nuevos campos:
+    is_builtin: bool = False           # True si viene de rayflow/nodes/builtin/, False si custom
+    category: str = "General"          # Categoría de usuario: "Control", "Matemáticas", etc.
+    description: str | None = None     # Docstring de la clase
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -336,6 +340,14 @@ def _extract_meta(cls: type) -> NodeMeta:
 
     is_exec_node = has_exec_in or has_exec_out
 
+    # Extraer docstring como descripción
+    description = None
+    if cls.__doc__:
+        description = cls.__doc__.strip()
+
+    # Extraer categoría del atributo de clase (si existe)
+    category = getattr(cls, 'category', 'General')  # Default a "General"
+
     return NodeMeta(
         name=cls.__name__,
         py_class=cls,
@@ -345,6 +357,8 @@ def _extract_meta(cls: type) -> NodeMeta:
         has_exec_in=has_exec_in,
         has_exec_out=has_exec_out,
         is_exec_node=is_exec_node,
+        description=description,  # ← Docstring extraído
+        category=category,        # ← Categoría de la clase
     )
 
 

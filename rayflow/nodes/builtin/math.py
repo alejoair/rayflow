@@ -4,6 +4,7 @@ from rayflow.nodes.decorators import engine_node, Input, Output, ExecInput, Exec
 @engine_node
 class Add:
     """Suma dos enteros."""
+    category = "Matemáticas"
     exec_in = ExecInput()
     a = Input("int", default=0)
     b = Input("int", default=0)

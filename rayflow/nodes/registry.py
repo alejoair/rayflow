@@ -1,6 +1,7 @@
 """Catálogo global de nodos. Se construye una vez por proceso."""
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 from rayflow.nodes.loader import NodeCatalog
@@ -26,9 +27,16 @@ def get_catalog(extra_dirs: list[str | Path] | None = None) -> NodeCatalog:
         _catalog = NodeCatalog()
         for module in _BUILTIN_MODULES:
             _register_module(_catalog, module)
+
+        # Marcar nodos builtin como is_builtin=True después del registro
+        for name in _catalog.all_names():
+            cls, meta = _catalog.get(name)
+            # Actualizamos la meta del nodo builtin
+            _catalog._registry[name] = (cls, dataclasses.replace(meta, is_builtin=True))
+
         # FlowInput es alias histórico de OnStart — mantener por compatibilidad con tests y flows guardados
         _catalog.register_alias("FlowInput", "OnStart")
-        _catalog.load_custom_nodes_package()
+        _catalog.load_custom_nodes_package()  # Los custom se marcan como is_builtin=False automáticamente
 
     if extra_dirs:
         for d in extra_dirs:

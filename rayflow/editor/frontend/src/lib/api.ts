@@ -29,6 +29,10 @@ export interface NodeSpec {
   exec_outputs: string[]
   inputs: PinSpec[]
   outputs: PinSpec[]
+  // Nuevos campos:
+  is_builtin: boolean                  // True si builtin, False si custom
+  category: string                      // "Control", "Matemáticas", etc.
+  description?: string                   // Docstring o None
 }
 
 export interface FlowMeta {

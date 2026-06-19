@@ -240,13 +240,31 @@ export default function PropertiesPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>{data.nodeType}</span>
                 {meta && (
-                  <span style={{
-                    fontSize: 10, padding: '1px 6px', borderRadius: 4,
-                    border: '1px solid var(--border)', color: 'var(--muted-foreground)',
-                  }}>{meta.is_exec_node ? 'exec' : 'pure'}</span>
+                  <>
+                    <span style={{
+                      fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                      border: '1px solid var(--border)', color: 'var(--muted-foreground)',
+                    }}>{meta.is_exec_node ? 'exec' : 'pure'}</span>
+                    <span style={{
+                      fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                      background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6',
+                    }}>{meta.category}</span>
+                  </>
                 )}
               </div>
             </div>
+            {meta?.description && (
+              <div>
+                <span style={fieldLabel}>Descripción</span>
+                <div style={{
+                  fontSize: 11, color: 'var(--muted-foreground)',
+                  lineHeight: 1.5, background: 'var(--secondary)',
+                  padding: '8px 10px', borderRadius: 6, fontStyle: 'italic'
+                }}>
+                  {meta.description}
+                </div>
+              </div>
+            )}
             <div>
               <span style={fieldLabel}>ID</span>
               <Input

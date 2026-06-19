@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Visual workflow orchestration on Ray"
 requires-python = ">=3.10"
 dependencies = [
-    "ray>=2.9",
+    "ray>=2.40",
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
