@@ -63,7 +63,7 @@ export function useRunStream(tabName: string) {
 
     const patchRun = (patch: (run: Run) => Partial<Run>) => {
       useFlowStore.setState(s => ({
-        tabs: s.tabs.map(t => t.name !== tabName ? t : {
+        tabs: s.tabs.map(t => t.name !== tabName || t.kind !== 'flow' ? t : {
           ...t,
           runs: t.runs.map(r => r.runId !== runId ? r : { ...r, ...patch(r) }),
         }),
@@ -125,7 +125,8 @@ export function useRunStream(tabName: string) {
     }
 
     const applyGroup = (group: RunEvent[]) => {
-      const tabEdges = useFlowStore.getState().tabs.find(t => t.name === tabName)?.edges ?? []
+      const activeTab = useFlowStore.getState().tabs.find(t => t.name === tabName)
+      const tabEdges = activeTab?.kind === 'flow' ? activeTab.edges : []
 
       const edgeKeysToRemove: string[] = []
 

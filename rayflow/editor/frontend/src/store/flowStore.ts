@@ -30,6 +30,7 @@ export interface Run {
 }
 
 export interface FlowTab {
+  kind: 'flow'
   name: string
   flowDef: FlowDef | null
   nodes: Node[]
@@ -43,6 +44,15 @@ export interface FlowTab {
   activeRunId: string | null
 }
 
+export interface CodeTab {
+  kind: 'code'
+  name: string          // nombre del archivo sin .py
+  source: string
+  savedSource: string
+}
+
+export type Tab = FlowTab | CodeTab
+
 interface FlowStore {
   catalog: Record<string, NodeSpec>
   setCatalog: (catalog: Record<string, NodeSpec>) => void
@@ -53,12 +63,15 @@ interface FlowStore {
   animMinMs: number
   setAnimMinMs: (ms: number) => void
 
-  tabs: FlowTab[]
+  tabs: Tab[]
   activeTabName: string | null
 
   openTab: (flowDef: FlowDef, nodes: Node[], edges: Edge[]) => void
   closeTab: (name: string) => void
   setActiveTab: (name: string) => void
+  openCodeTab: (name: string, source: string) => void
+  updateCodeSource: (name: string, source: string) => void
+  markCodeSaved: (name: string) => void
 
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
@@ -110,15 +123,16 @@ const setAwareStorage = {
     return parsed
   },
   setItem: (name: string, value: unknown) => {
-    const v = value as { state: { tabs: FlowTab[] } }
+    const v = value as { state: { tabs: Tab[] } }
     const serialized = {
       ...v,
       state: {
         ...v.state,
-        tabs: v.state.tabs.map(tab => ({
-          ...tab,
-          runs: tab.runs.map(serializeRun),
-        })),
+        tabs: v.state.tabs.map(tab =>
+          tab.kind === 'flow'
+            ? { ...tab, runs: tab.runs.map(serializeRun) }
+            : tab
+        ),
       },
     }
     localStorage.setItem(name, JSON.stringify(serialized))
@@ -145,6 +159,7 @@ export const useFlowStore = create<FlowStore>()(
         const existing = get().tabs.find(t => t.name === flowDef.name)
         if (existing) { set({ activeTabName: flowDef.name }); return }
         const tab: FlowTab = {
+          kind: 'flow',
           name: flowDef.name, flowDef, nodes, edges,
           dirty: false, loaded: false, loadingIntoRay: false, stale: false,
           validationErrors: [], runs: [], activeRunId: null,
@@ -164,14 +179,32 @@ export const useFlowStore = create<FlowStore>()(
 
       setActiveTab: (name) => set({ activeTabName: name }),
 
+      openCodeTab: (name, source) => {
+        const existing = get().tabs.find(t => t.name === name && t.kind === 'code')
+        if (existing) { set({ activeTabName: name }); return }
+        const tab: CodeTab = { kind: 'code', name, source, savedSource: source }
+        set(s => ({ tabs: [...s.tabs, tab], activeTabName: name }))
+      },
+
+      updateCodeSource: (name, source) => {
+        set(s => ({
+          tabs: s.tabs.map(t => t.name === name && t.kind === 'code' ? { ...t, source } : t),
+        }))
+      },
+
+      markCodeSaved: (name) => {
+        set(s => ({
+          tabs: s.tabs.map(t => t.name === name && t.kind === 'code' ? { ...t, savedSource: t.source } : t),
+        }))
+      },
+
       onNodesChange: (changes) => {
         const name = get().activeTabName
         if (!name) return
-        // Cambios solo de posición no son estructurales — no marcan stale
         const isStructural = changes.some(c => c.type !== 'position' && c.type !== 'select' && c.type !== 'dimensions')
         set(s => ({
           tabs: s.tabs.map(t => {
-            if (t.name !== name) return t
+            if (t.name !== name || t.kind !== 'flow') return t
             const stale = isStructural && t.loaded ? true : t.stale
             return { ...t, nodes: applyNodeChanges(changes, t.nodes), dirty: isStructural ? true : t.dirty, stale }
           }),
@@ -184,7 +217,7 @@ export const useFlowStore = create<FlowStore>()(
         const isStructural = changes.some(c => c.type !== 'select')
         set(s => ({
           tabs: s.tabs.map(t => {
-            if (t.name !== name) return t
+            if (t.name !== name || t.kind !== 'flow') return t
             const stale = isStructural && t.loaded ? true : t.stale
             return { ...t, edges: applyEdgeChanges(changes, t.edges), dirty: true, stale }
           }),
@@ -194,13 +227,13 @@ export const useFlowStore = create<FlowStore>()(
       setNodes: (nodes) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, nodes }) }))
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : { ...t, nodes }) }))
       },
 
       setEdges: (edges) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, edges }) }))
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : { ...t, edges }) }))
       },
 
       setDirty: (dirty) => {
@@ -208,8 +241,7 @@ export const useFlowStore = create<FlowStore>()(
         if (!name) return
         set(s => ({
           tabs: s.tabs.map(t => {
-            if (t.name !== name) return t
-            // Si el flow estaba cargado y ahora se marca dirty → stale
+            if (t.name !== name || t.kind !== 'flow') return t
             const stale = dirty && t.loaded ? true : dirty ? t.stale : false
             return { ...t, dirty, stale }
           }),
@@ -219,26 +251,26 @@ export const useFlowStore = create<FlowStore>()(
       setLoaded: (loaded) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, loaded }) }))
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : { ...t, loaded }) }))
       },
 
       setLoadingIntoRay: (loadingIntoRay) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, loadingIntoRay }) }))
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : { ...t, loadingIntoRay }) }))
       },
 
       setStale: (stale) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, stale }) }))
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : { ...t, stale }) }))
       },
 
       updateVariables: (vars) => {
         const name = get().activeTabName
         if (!name) return
         set(s => ({
-          tabs: s.tabs.map(t => t.name !== name ? t : {
+          tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : {
             ...t,
             flowDef: t.flowDef ? { ...t.flowDef, variables: vars } : t.flowDef,
             dirty: true,
@@ -249,12 +281,12 @@ export const useFlowStore = create<FlowStore>()(
       setValidationErrors: (errors) => {
         const name = get().activeTabName
         if (!name) return
-        set(s => ({ tabs: s.tabs.map(t => t.name !== name ? t : { ...t, validationErrors: errors }) }))
+        set(s => ({ tabs: s.tabs.map(t => t.name !== name || t.kind !== 'flow' ? t : { ...t, validationErrors: errors }) }))
       },
 
       addRun: (tabName, run) => {
         set(s => ({
-          tabs: s.tabs.map(t => t.name !== tabName ? t : {
+          tabs: s.tabs.map(t => t.name !== tabName || t.kind !== 'flow' ? t : {
             ...t, runs: [...t.runs, run], activeRunId: run.runId,
           }),
         }))
@@ -262,7 +294,7 @@ export const useFlowStore = create<FlowStore>()(
 
       updateRun: (tabName, runId, patch) => {
         set(s => ({
-          tabs: s.tabs.map(t => t.name !== tabName ? t : {
+          tabs: s.tabs.map(t => t.name !== tabName || t.kind !== 'flow' ? t : {
             ...t, runs: t.runs.map(r => r.runId !== runId ? r : { ...r, ...patch }),
           }),
         }))
@@ -270,7 +302,7 @@ export const useFlowStore = create<FlowStore>()(
 
       setActiveRun: (tabName, runId) => {
         set(s => ({
-          tabs: s.tabs.map(t => t.name !== tabName ? t : { ...t, activeRunId: runId }),
+          tabs: s.tabs.map(t => t.name !== tabName || t.kind !== 'flow' ? t : { ...t, activeRunId: runId }),
         }))
       },
     }),
@@ -279,31 +311,42 @@ export const useFlowStore = create<FlowStore>()(
       storage: setAwareStorage,
       // Solo persistimos tabs y qué tab está activa; catalog y flowList se recargan del servidor
       partialize: (state) => ({
-        tabs: state.tabs,
-        activeTabName: state.activeTabName,
+        // Los code tabs no se persisten — el source siempre se carga fresco del backend
+        tabs: state.tabs.filter(t => t.kind === 'flow'),
+        activeTabName: state.tabs.find(t => t.name === state.activeTabName)?.kind === 'flow'
+          ? state.activeTabName
+          : null,
         animMinMs: state.animMinMs,
       }),
       // Al rehidratar, los Sets dentro de los runs vienen como arrays — los convertimos de vuelta
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        state.tabs = state.tabs.map(tab => ({
-          ...tab,
-          // Al recargar la página, Ray ya no tiene el flow cargado
-          loaded: false,
-          loadingIntoRay: false,
-          stale: false,
-          // Descarta runs en vuelo al recargar (status running no tiene sentido tras recarga)
-          runs: tab.runs
-            .filter(r => r.status !== 'running')
-            .map(r => deserializeRun(r as unknown as Record<string, unknown>)),
-        }))
+        state.tabs = state.tabs.map(tab => {
+          if (tab.kind === 'code') return tab
+          return {
+            ...tab,
+            kind: 'flow' as const,
+            loaded: false,
+            loadingIntoRay: false,
+            stale: false,
+            runs: tab.runs
+              .filter(r => r.status !== 'running')
+              .map(r => deserializeRun(r as unknown as Record<string, unknown>)),
+          }
+        })
       },
     }
   )
 )
 
-/** Selector puro — cada componente se suscribe directamente a los datos del tab activo. */
-export const selectActiveTab = (s: FlowStore): FlowTab | null =>
+/** Selector puro — devuelve el tab activo solo si es de tipo flow. */
+export const selectActiveTab = (s: FlowStore): FlowTab | null => {
+  const t = s.tabs.find(t => t.name === s.activeTabName)
+  return t?.kind === 'flow' ? t : null
+}
+
+/** Devuelve el tab activo independientemente del tipo. */
+export const selectActiveTabAny = (s: FlowStore): Tab | null =>
   s.tabs.find(t => t.name === s.activeTabName) ?? null
 
 /**

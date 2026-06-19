@@ -1,31 +1,26 @@
 import { useState, useEffect, useCallback } from 'react'
-import CodeMirror from '@uiw/react-codemirror'
-import { python } from '@codemirror/lang-python'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { Button } from '@/components/ui/button'
 import {
   listCustomNodes, getCustomNodeSource, createCustomNode,
-  updateCustomNodeSource, deleteCustomNode,
+  deleteCustomNode,
   type CustomNodeFile,
 } from '@/lib/api'
+import { useFlowStore } from '@/store/flowStore'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 interface Props {
-  onReload: () => void  // recarga el catálogo en App tras guardar
+  onReload: () => void
 }
 
 export default function CustomNodesPanel({ onReload }: Props) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState<CustomNodeFile[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
-  const [source, setSource] = useState('')
-  const [savedSource, setSavedSource] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [creatingName, setCreatingName] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [creatingName, setCreatingName] = useState('')
+  const [createError, setCreateError] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
 
-  const isDirty = source !== savedSource
+  const { openCodeTab, activeTabName, tabs } = useFlowStore()
 
   const refreshList = useCallback(async () => {
     try {
@@ -38,68 +33,48 @@ export default function CustomNodesPanel({ onReload }: Props) {
     if (open) refreshList()
   }, [open, refreshList])
 
-  async function selectFile(name: string) {
-    setLoading(true)
-    setError(null)
+  async function handleOpen(name: string) {
+    // Si ya hay una pestaña abierta para este archivo, simplemente activarla
+    const existing = tabs.find(t => t.kind === 'code' && t.name === name)
+    if (existing) {
+      useFlowStore.setState({ activeTabName: name })
+      return
+    }
     try {
       const res = await getCustomNodeSource(name)
-      setSelected(name)
-      setSource(res.source)
-      setSavedSource(res.source)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSave() {
-    if (!selected) return
-    setSaving(true)
-    setError(null)
-    try {
-      await updateCustomNodeSource(selected, source)
-      setSavedSource(source)
-      onReload()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setSaving(false)
-    }
+      openCodeTab(name, res.source)
+    } catch { /* silencioso */ }
   }
 
   async function handleCreate() {
     const name = creatingName.trim()
     if (!name) return
-    setError(null)
+    setCreateError('')
     try {
       const res = await createCustomNode(name)
       setShowCreate(false)
       setCreatingName('')
       await refreshList()
-      await selectFile(res.name)
+      const src = await getCustomNodeSource(res.name)
+      openCodeTab(res.name, src.source)
       onReload()
     } catch (e) {
-      setError((e as Error).message)
+      setCreateError((e as Error).message)
     }
   }
 
   async function handleDelete(name: string) {
-    if (!confirm(`¿Eliminar el nodo "${name}"?`)) return
-    setError(null)
     try {
       await deleteCustomNode(name)
-      if (selected === name) {
-        setSelected(null)
-        setSource('')
-        setSavedSource('')
-      }
+      // Cerrar la pestaña de código si estaba abierta
+      useFlowStore.getState().closeTab(name)
       await refreshList()
       onReload()
-    } catch (e) {
-      setError((e as Error).message)
-    }
+    } catch { /* silencioso */ }
+    setShowDeleteConfirm(null)
   }
+
+  const openFileNames = new Set(tabs.filter(t => t.kind === 'code').map(t => t.name))
 
   return (
     <div style={{ borderTop: '1px solid var(--border)', flexShrink: 0 }}>
@@ -143,102 +118,96 @@ export default function CustomNodesPanel({ onReload }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {/* Formulario nuevo nodo */}
           {showCreate && (
-            <div style={{ padding: '8px 12px', display: 'flex', gap: 6, borderBottom: '1px solid var(--border)' }}>
-              <input
-                autoFocus
-                placeholder="NombreNodo"
-                value={creatingName}
-                onChange={e => setCreatingName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { setShowCreate(false); setCreatingName('') } }}
-                style={{
-                  flex: 1, height: 28, fontSize: 12, padding: '0 8px',
-                  background: 'var(--secondary)', border: '1px solid var(--border)',
-                  borderRadius: 5, color: 'var(--foreground)', outline: 'none',
-                }}
-              />
-              <Button size="sm" onClick={handleCreate} style={{ height: 28, fontSize: 11, padding: '0 10px' }}>Crear</Button>
-              <Button size="sm" variant="ghost" onClick={() => { setShowCreate(false); setCreatingName('') }} style={{ height: 28, fontSize: 11, padding: '0 8px' }}>✕</Button>
+            <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  autoFocus
+                  placeholder="NombreNodo"
+                  value={creatingName}
+                  onChange={e => setCreatingName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleCreate()
+                    if (e.key === 'Escape') { setShowCreate(false); setCreatingName(''); setCreateError('') }
+                  }}
+                  style={{
+                    flex: 1, height: 28, fontSize: 12, padding: '0 8px',
+                    background: 'var(--secondary)', border: '1px solid var(--border)',
+                    borderRadius: 5, color: 'var(--foreground)', outline: 'none',
+                  }}
+                />
+                <Button size="sm" onClick={handleCreate} style={{ height: 28, fontSize: 11, padding: '0 10px' }}>Crear</Button>
+                <Button size="sm" variant="ghost" onClick={() => { setShowCreate(false); setCreatingName(''); setCreateError('') }} style={{ height: 28, fontSize: 11, padding: '0 8px' }}>✕</Button>
+              </div>
+              {createError && (
+                <div style={{ fontSize: 11, color: 'var(--destructive)', fontFamily: 'monospace' }}>{createError}</div>
+              )}
             </div>
           )}
 
           {/* Lista de archivos */}
-          <div style={{ maxHeight: 120, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 160, overflowY: 'auto' }}>
             {files.length === 0 && (
               <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--muted-foreground)', fontStyle: 'italic' }}>
                 Sin nodos custom
               </div>
             )}
-            {files.map(f => (
-              <div
-                key={f.name}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '5px 12px',
-                  background: selected === f.name ? 'var(--secondary)' : 'transparent',
-                  borderLeft: selected === f.name ? '2px solid var(--primary)' : '2px solid transparent',
-                  cursor: 'pointer',
-                }}
-                onClick={() => selectFile(f.name)}
-              >
-                <span style={{ flex: 1, fontSize: 12, color: selected === f.name ? 'var(--foreground)' : 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {f.name}.py
-                </span>
-                <button
-                  onClick={e => { e.stopPropagation(); handleDelete(f.name) }}
-                  title="Eliminar"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted-foreground)', padding: '0 2px', lineHeight: 1 }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--destructive)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted-foreground)')}
-                >✕</button>
-              </div>
-            ))}
-          </div>
-
-          {/* Editor CodeMirror */}
-          {selected && (
-            <div style={{ borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-              {/* Toolbar del editor */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '5px 12px',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
-                  {selected}.py{isDirty ? ' ●' : ''}
-                </span>
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving || !isDirty}
-                  style={{ height: 24, fontSize: 11, padding: '0 10px' }}
+            {files.map(f => {
+              const isOpen = openFileNames.has(f.name)
+              const isActive = activeTabName === f.name
+              return (
+                <div
+                  key={f.name}
+                  onClick={() => handleOpen(f.name)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 12px',
+                    background: isActive ? 'rgba(245,158,11,0.10)' : 'transparent',
+                    borderLeft: isActive ? '2px solid var(--exec-color)' : '2px solid transparent',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--secondary)' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                 >
-                  {saving ? 'Guardando…' : 'Guardar'}
-                </Button>
-              </div>
-
-              {loading ? (
-                <div style={{ padding: 16, fontSize: 12, color: 'var(--muted-foreground)' }}>Cargando…</div>
-              ) : (
-                <CodeMirror
-                  value={source}
-                  onChange={setSource}
-                  extensions={[python()]}
-                  theme={oneDark}
-                  style={{ fontSize: 12, maxHeight: 340, overflowY: 'auto' }}
-                  basicSetup={{ lineNumbers: true, foldGutter: false, autocompletion: true }}
-                />
-              )}
-            </div>
-          )}
-
-          {error && (
-            <div style={{
-              margin: '6px 12px', padding: '6px 8px', fontSize: 11,
-              color: 'var(--destructive)', background: 'rgba(239,68,68,0.08)',
-              borderRadius: 5, fontFamily: 'monospace',
-            }}>{error}</div>
-          )}
+                  <span style={{ fontSize: 10, color: 'var(--exec-color)', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>py</span>
+                  <span style={{
+                    flex: 1, fontSize: 12,
+                    color: isActive ? 'var(--foreground)' : isOpen ? 'var(--exec-color)' : 'var(--muted-foreground)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    fontWeight: isOpen ? 500 : 400,
+                  }}>
+                    {f.name}.py
+                  </span>
+                  <button
+                    onClick={e => { e.stopPropagation(); setShowDeleteConfirm(f.name) }}
+                    title="Eliminar"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted-foreground)', padding: '0 2px', lineHeight: 1 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--destructive)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted-foreground)')}
+                  >✕</button>
+                </div>
+              )
+            })}
+          </div>
         </div>
+      )}
+
+      {/* Confirmación de eliminación */}
+      {showDeleteConfirm && (
+        <Dialog open onOpenChange={() => setShowDeleteConfirm(null)}>
+          <DialogContent style={{ maxWidth: 380, padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}
+            className="bg-[var(--card)] border-[var(--border)] text-[var(--foreground)]">
+            <DialogHeader>
+              <DialogTitle style={{ fontSize: 15, fontWeight: 600 }}>Eliminar nodo custom</DialogTitle>
+            </DialogHeader>
+            <p style={{ fontSize: 13, color: 'var(--muted-foreground)', margin: 0 }}>
+              ¿Eliminar <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>"{showDeleteConfirm}.py"</span>? Esta acción no se puede deshacer.
+            </p>
+            <DialogFooter style={{ marginTop: 4 }}>
+              <Button variant="ghost" onClick={() => setShowDeleteConfirm(null)} style={{ fontSize: 13 }}>Cancelar</Button>
+              <Button variant="destructive" onClick={() => handleDelete(showDeleteConfirm)} style={{ fontSize: 13 }}>Eliminar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )
