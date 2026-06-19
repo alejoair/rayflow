@@ -169,6 +169,9 @@ interface Props {
   flowList: FlowMeta[]
   validationErrors: string[]
   onUpdateNode: (nodeId: string, update: Record<string, unknown>) => void
+  width?: number
+  resizeHandleStyle?: React.CSSProperties
+  onResizeMouseDown?: (e: React.MouseEvent) => void
 }
 
 const headerStyle = {
@@ -183,12 +186,14 @@ const headerStyle = {
 
 export default function PropertiesPanel({
   selectedNodeId, nodes, edges, catalog, flowList, validationErrors, onUpdateNode,
+  width = 240, resizeHandleStyle, onResizeMouseDown,
 }: Props) {
   const node = nodes.find(n => n.id === selectedNodeId)
 
   if (!node) {
     return (
-      <div style={{ width: 240, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0 }}>
+      <div style={{ width, position: 'relative', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0 }}>
+        {resizeHandleStyle && <div style={resizeHandleStyle} onMouseDown={onResizeMouseDown} />}
         <div style={headerStyle}>Propiedades</div>
         <div style={{ padding: 16, fontSize: 13, color: 'var(--muted-foreground)', textAlign: 'center' }}>
           Selecciona un nodo
@@ -220,7 +225,8 @@ export default function PropertiesPanel({
   }
 
   return (
-    <div style={{ width: 240, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, overflow: 'hidden' }}>
+    <div style={{ width, position: 'relative', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, overflow: 'hidden' }}>
+      {resizeHandleStyle && <div style={resizeHandleStyle} onMouseDown={onResizeMouseDown} />}
       <div style={headerStyle}>Propiedades</div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>

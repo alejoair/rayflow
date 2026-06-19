@@ -51,3 +51,4 @@ custom_nodes/   # User custom nodes (workspace convention)
 *.json          # Flow JSON files (user-generated)
 node_modules/   # Frontend dependencies
 /nodes/         # User custom nodes (not built-in nodes in rayflow/nodes/)
+rayflow/editor/frontend/@/  # shadcn alias artifact (components viven en src/components/ui/)

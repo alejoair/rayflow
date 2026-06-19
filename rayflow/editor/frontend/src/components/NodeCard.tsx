@@ -41,8 +41,10 @@ export default function NodeCard({ data, selected }: NodeCardProps) {
   const runStatus = data.runStatus
   const { nodeType, meta } = data
 
+  const isPure = meta ? !meta.is_exec_node : false
   const cls = [
     'rf-node',
+    isPure ? 'pure' : '',
     selected ? 'selected' : '',
     (!meta || data.hasValidationError) ? 'has-error' : '',
     runStatus === 'running' ? 'node-running' : '',
