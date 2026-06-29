@@ -461,30 +461,33 @@ def test_custom_engine_node_se_ejecuta(client_with_custom_node):
 # Concurrencia — varios flows al mismo tiempo no se interfieren
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(reason=(
-    "TestClient de Starlette no es thread-safe para StreamingResponse: "
-    "dos threads compiten por el mismo cliente síncrono y uno puede perder "
-    "el stream SSE. La concurrencia real funciona con uvicorn (el FlowEngine "
-    "actor Ray serializa las ejecuciones correctamente via su event loop)."
-), strict=False)
-def test_ejecuciones_concurrentes_aisladas(client):
-    """Dos ejecuciones simultáneas del mismo flow devuelven resultados correctos."""
-    import threading
+async def test_ejecuciones_concurrentes_aisladas():
+    """Ejecuciones simultáneas del mismo flow no se interfieren entre sí.
 
-    client.post("/editor/flows", json=SUMA)
-    results = {}
+    Se ejercita a nivel de engine (execute_async + asyncio.gather), no con
+    threads sobre el TestClient síncrono (que no es seguro para SSE concurrente).
+    El estado por-run vive en self dentro del FlowEngine; sin la serialización
+    de execute() las ejecuciones se pisan y todas devuelven el mismo resultado.
+    """
+    import asyncio
+    from rayflow import api
 
-    def run(key, x, y):
-        r = client.post("/editor/flows/suma/run", json={"x": x, "y": y})
-        results[key] = _parse_sse_result(r)
+    api.load(SUMA)  # cargar una vez desde el dict: evita la carrera de carga
 
-    t1 = threading.Thread(target=run, args=("a", 3, 7))
-    t2 = threading.Thread(target=run, args=("b", 10, 20))
-    t1.start(); t2.start()
-    t1.join(); t2.join()
+    async def collect(x: int, y: int):
+        result = None
+        async for evt in api.execute_async("suma", {"x": x, "y": y}):
+            if evt.get("event") == "flow_done":
+                result = evt.get("result")
+            elif evt.get("event") == "flow_error":
+                result = {"error": evt.get("error")}
+        return result
 
-    assert results["a"]["resultado"] == 10
-    assert results["b"]["resultado"] == 30
+    pares = [(3, 7), (10, 20), (1, 1), (100, 200), (5, 5)]
+    resultados = await asyncio.gather(*[collect(x, y) for x, y in pares])
+
+    for (x, y), r in zip(pares, resultados):
+        assert r["resultado"] == x + y, f"({x},{y}) dio {r} — interferencia entre runs"
 
 
 # ---------------------------------------------------------------------------
