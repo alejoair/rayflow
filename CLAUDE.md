@@ -141,30 +141,30 @@ Un engine_node se reinstancia en cada ejecución del flow — no puede acumular 
 
 ### Cómo funciona `ctx.fire()` internamente
 - En un **engine_node**: llama `_local_fire` directamente dentro del FlowEngine — invoca `_run_loop` sin RPC, sin self-call. Esto permite que nodos de loop (`ForEach`, `While`) hagan `await ctx.fire("loop_body")` a mitad de `run()` sin deadlock.
-- En un **ray_node**: el `ExecContext` viaja serializado al actor remoto; `_fire_handler` se descarta y `ctx.fire()` hace RPC al engine (`engine.fire.remote()`), que es el camino legítimo desde un proceso externo.
+- En un **ray_node**: el `ExecContext` viaja serializado al actor remoto; `_fire_handler` se descarta y `ctx.fire()` hace RPC al engine (`engine.fire.remote(run_id, node_id, pin)` — scopeado al run via `ctx._run_id`), que es el camino legítimo desde un proceso externo.
 
 ### Buffer `_pending_outputs` en engine_nodes
 
-`ctx.set_output()` en un engine_node **no escribe directamente al `GraphState`** (eso requeriría `await` dentro de un método sync, o `ray.get()` bloqueante dentro del actor FlowEngine — ambos problemáticos). En cambio, acumula en `ctx._pending_outputs` (dict local en memoria).
+`ctx.set_output()` en un engine_node **no escribe directamente al `RunContext`** (eso requeriría `await` dentro de un método sync, o `ray.get()` bloqueante dentro del actor FlowEngine — ambos problemáticos). En cambio, acumula en `ctx._pending_outputs` (dict local en memoria).
 
 El FlowEngine flushea ese buffer con `await` en dos momentos:
 1. **Antes de `_local_fire(pin)`** — solo si hay nodos destino que vayan a leer los outputs. Esto permite que un loop como `ForEach` haga `ctx.set_output("element", item)` + `await ctx.fire("loop_body")` en cada iteración: el flush ocurre antes de que el nodo del body corra.
 2. **Al finalizar `run()`** — para outputs que no tienen sucesor exec (p.ej. nodos pure o último nodo de una cadena).
 
 ```python
-# En _fire_engine_node (executor.py):
+# En _fire_engine_node (executor.py): run es el RunContext de la ejecución
 async def _engine_fire(pin: str) -> None:
     targets = rnode.exec_targets.get(pin, [])
     if ctx._pending_outputs and targets:
-        await self._write_node_outputs(node_id, ctx._pending_outputs.copy())
+        await self._write_node_outputs(run, node_id, ctx._pending_outputs.copy())
         ctx._pending_outputs.clear()
-    await self._local_fire(node_id, rnode, pin)
+    await self._local_fire(run, node_id, rnode, pin)
 
 ctx._output_writer = lambda nid, pin, val: None  # set_output acumula localmente
 ctx._fire_handler = _engine_fire
 ```
 
-`_pending_outputs` se vacía en serialización (`__getstate__`) — si el ctx viaja a un worker Ray, el buffer queda limpio y el nodo usa la ruta normal (`ray.get(engine.set_output.remote(...))`).
+`_write_node_outputs` escribe en `run.node_outputs` (dict local por-run, síncrono — ya no toca el `GraphState`). `_pending_outputs` se vacía en serialización (`__getstate__`) — si el ctx viaja a un worker Ray, el buffer queda limpio y el nodo usa la ruta normal (`ray.get(engine.set_output.remote(run_id, node_id, pin, val))`).
 
 ### RunQueue y eventos de ejecución (SSE)
 
@@ -364,9 +364,11 @@ unload(flow_name)
   └─ kill actors @ray_node + FlowEngine + GraphState + RunQueue
 ```
 
-**GraphState** persiste entre ejecuciones del mismo flow cargado: las variables mantienen su valor entre requests. Se resetean los outputs de nodos en cada `execute()`, pero no las variables.
+**GraphState** persiste entre ejecuciones del mismo flow cargado: solo guarda **variables** (memoria persistente) y su vigilancia (`watch_variable`). Los **outputs de nodos NO viven en el GraphState** — son scratch por-run y los posee el `RunContext` del engine, así que arrancan vacíos en cada `execute()` (un nodo no disparado en este run no deja output visible al siguiente).
 
-**Serialización de `execute()`**: el `FlowEngine` es un actor Ray **async**, así que Ray **intercala** las llamadas a `execute()` en su event loop — NO las serializa solo. Como el estado por-run vive en `self` (`_run_id`, `_run_queue`, `_output_refs`, `_exec_arrivals`) y los outputs del nodo de entrada van al `GraphState` compartido, dos ejecuciones simultáneas se pisarían (todas devolverían el resultado de la última). Un `asyncio.Lock` por engine (`self._exec_lock`) serializa `execute()` explícitamente: si llega un segundo request mientras el primero corre, espera a que termine.
+**El run reificado (`RunContext`)**: todo el scratch transitorio de una ejecución vive en un `RunContext` (`run_id`, `queue`, `node_outputs`, `exec_arrivals`, `output_refs`), no en campos sueltos de `self`. El engine mantiene `self._runs: dict[run_id → RunContext]` y threadea el `RunContext` como primer parámetro por todos sus métodos internos. El `ExecContext` lleva un `_run_id` (sobrevive a `__getstate__`) para que las RPC de vuelta de un `@ray_node` (`fire`/`set_output`) vayan scopeadas al run correcto. Lo persistente y compartido entre runs es lo que debe serlo: variables del `GraphState` y el `self` de los `@ray_node`.
+
+**Concurrencia de `execute()`**: el `FlowEngine` es un actor Ray **async** que **intercala** las llamadas a `execute()` en su event loop. Como el scratch por-run está aislado en su `RunContext`, dos ejecuciones simultáneas no se pisan y **no hay lock** (`_exec_lock` se eliminó al reificar el run). Cuidado: un `@ray_node` *stateful* servido por dos runs concurrentes intercala sus mutaciones de `self` — es el contrato existente de "estado compartido entre invocaciones del actor", no una regresión; el aislamiento es solo del scratch por-run, no de la memoria del actor.
 
 ## Sistema de eventos
 
@@ -384,7 +386,7 @@ stop(graph_id, event_names)
   └─ EventBroker.unsubscribe() + unload()
 ```
 
-- `_run_event_flow` corre como task `@ray.remote` en un **worker distinto del proceso driver**, donde el registro `_loaded_flows` está vacío. Por eso resuelve el flow receptor por sus **actores detached con nombre** (`engine_{flow}`/`queue_{flow}`), no con `get_loaded_flow()`. Y como dispara `engine.execute` directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes serializadas por el `_exec_lock` del engine.
+- `_run_event_flow` corre como task `@ray.remote` en un **worker distinto del proceso driver**, donde el registro `_loaded_flows` está vacío. Por eso resuelve el flow receptor por sus **actores detached con nombre** (`engine_{flow}`/`queue_{flow}`), no con `get_loaded_flow()`. Y como dispara `engine.execute` directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes — aisladas por el `RunContext` de cada una (sin lock).
 - El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
@@ -420,7 +422,7 @@ Set escribe variable vigilada → GraphState.set_variable
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `@parallel_node`, `ExecContext` |
 | `rayflow/nodes/loader.py` | `NodeCatalog`: registro, aliases, carga desde disco |
 | `rayflow/nodes/registry.py` | Singleton del catálogo, `reset_catalog()` para hot reload |
-| `rayflow/state/actor.py` | `GraphState` — variables (persistentes) y outputs de nodos |
+| `rayflow/state/actor.py` | `GraphState` — variables persistentes y su vigilancia (`watch_variable`). Los outputs de nodos viven en el `RunContext` del engine, no aquí |
 | `rayflow/events/bus.py` | `EventBroker` — pub/sub fire-and-forget entre flows |
 | `rayflow/api.py` | API pública: `run()`, `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
