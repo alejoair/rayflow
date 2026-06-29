@@ -166,7 +166,13 @@ class FlowEngine:
         arrivals = self._exec_arrivals[node_id]
         if arrived_from is not None:
             arrivals.add(arrived_from)
-        return len(arrivals) >= len(self._built.nodes[node_id].exec_sources)
+        if len(arrivals) >= len(self._built.nodes[node_id].exec_sources):
+            # Reset para la siguiente ola: un join AND recorrido más de una vez
+            # (dentro de un loop / reentrancia) debe volver a esperar a TODAS sus
+            # fuentes, no quedar permanentemente "listo".
+            arrivals.clear()
+            return True
+        return False
 
     async def _fire_node(self, node_id: str) -> list[str]:
         rnode = self._built.nodes[node_id]
@@ -221,7 +227,7 @@ class FlowEngine:
                 self._output_refs.update(inputs)
             return []
 
-        if name in ("OnStart", "OnEvent"):
+        if name in ("OnStart", "OnEvent", "OnVariableChange"):
             await self._write_node_outputs(node_id, inputs)
             targets = rnode.exec_targets.get("exec_out", [])
             if len(targets) > 1:
@@ -438,6 +444,12 @@ class LoadedFlow:
             namespace="rayflow",
             lifetime="detached",
         ).remote(built, actors)
+
+        # Esperar a que el engine termine __init__ (que crea el GraphState) antes
+        # de devolver: así engine_{graph_id} y gs_{graph_id} son localizables por
+        # nombre apenas load() retorna (lo necesita, p.ej., el registro de
+        # vigilancia de variables de un flow que se sirva después).
+        ray.get(engine.get_graph_id.remote())
 
         return cls(graph_id, engine, actors, queue, flow_def=built.flow_def)
 

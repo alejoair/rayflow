@@ -46,7 +46,8 @@ El servidor sirve:
 ```
 Editor visual (browser) ←→ FastAPI (rayflow/server.py) ←→ Ray actors/tasks
          ↓                           ↓
-  editor/static/*.js          rayflow/engine/executor.py
+  editor/frontend/ (React+Vite)   rayflow/engine/executor.py
+   → build a editor/static/dist/  (lo que sirve el server)
 ```
 
 ### Principios de diseño
@@ -388,6 +389,23 @@ stop(graph_id, event_names)
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
 - `OnEvent` puede coexistir con `OnStart` en el mismo flow (distintos puntos de entrada).
+
+### Triggers por cambio de variable (`OnVariableChange`)
+
+Un flow puede dispararse cuando una variable del estado cambia, reusando el mismo bus:
+
+```
+Set escribe variable vigilada → GraphState.set_variable
+  └─ si cambió el valor: broker.publish("var:{source}/{var}", {value, old, variable})  # fire-and-forget
+       └─ _run_event_flow.remote(flow_vigía, "var:...", payload)
+            └─ engine.execute(payload_como_flow_inputs, queue, run_id)  # OnVariableChange expone value/old
+```
+
+- **`OnVariableChange`** (nodo de entrada, `events.py`) declara `variable` y `source` (flow dueño; vacío = el propio). Sus outputs `value`/`old` los inyecta el engine. Es un punto de entrada como `OnEvent` (lo reconoce `_find_entry`).
+- El registro lo hace `serve_events`: suscribe el flow vigía al evento sintético `var:{source}/{var}` **y** marca la variable como vigilada en el `GraphState` del flow fuente (`gs.watch_variable`). Solo las variables vigiladas publican (sin amplificación sobre el resto).
+- `GraphState.set_variable` **solo publica si el valor cambió** (compara viejo vs nuevo, resolviendo `ObjectRef`). Escribir el mismo valor no dispara.
+- **Orden de carga**: el flow fuente debe estar cargado antes que el vigía (su `gs_{source}` debe existir al registrar). Por eso `LoadedFlow.load` ahora **espera** a que el engine termine `__init__` (`ray.get(engine.get_graph_id.remote())`) antes de devolver: garantiza que `gs_{flow}` sea localizable por nombre apenas `load()` retorna.
+- **Riesgo conocido**: un flow que vigila su propia variable y la reescribe en el run disparado puede entrar en bucle; la defensa actual es "solo dispara si cambió". Un guard de profundidad queda pendiente.
 
 ## Archivos clave del backend
 
