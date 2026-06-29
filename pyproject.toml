@@ -28,7 +28,7 @@ where = ["."]
 include = ["rayflow*"]
 
 [tool.setuptools.package-data]
-"rayflow.editor.static" = ["dist/**/*", "*.html", "*.js", "*.css"]
+"rayflow.editor.static" = ["dist/**/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
