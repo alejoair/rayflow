@@ -461,12 +461,15 @@ conviene tener nombradas.
    imponer pureza, o bien memoizar por ejecución, o bien documentar que la
    re-evaluación es parte del contrato. Hoy es implícito.
 
-4. **El modelo de consistencia del estado es parcial.** El `_exec_lock` serializa
-   las **ejecuciones completas** (incluidos los eventos concurrentes sobre el
-   mismo flow), pero las **ramas paralelas dentro de una ejecución** comparten
-   `GraphState` sin protección: dos ramas que hagan `Get`+`Set` sobre la misma
-   variable pueden intercalarse. La garantía cubre el nivel de ejecución, no el
-   de rama — y ese límite conviene dejarlo escrito.
+4. **El alcance de la consistencia es un contrato, no una omisión.** El
+   `_exec_lock` serializa las **ejecuciones completas** (incluidos los eventos
+   concurrentes sobre el mismo flow). Dentro de una ejecución, las **ramas
+   paralelas** comparten `GraphState` sin locks **por diseño**: el paralelismo es
+   de datos e implícito, y coordinar el estado compartido entre ramas es
+   responsabilidad del autor del flow, no del engine (en `showcase.json` cada
+   rama usa su propia variable, justamente por eso). Serializar las ramas
+   anularía el sentido del `Parallel`. Lo que conviene es **dejar el contrato
+   escrito**: la atomicidad es a nivel de ejecución, no de rama.
 
 5. **La costura de tipos entre flow y subflow es `Any`.** El tipado estricto se
    relaja justo donde dos flows se conectan (§5). Es pragmático, pero es el punto
