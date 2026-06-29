@@ -182,19 +182,26 @@ def stop(graph_id: str, event_names: list[str]) -> None:
 
 @ray.remote
 def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
-    """Task de Ray que ejecuta un flow residente al recibir un evento."""
+    """Task de Ray que ejecuta un flow residente al recibir un evento.
+
+    Resuelve el flow por sus actores con nombre (engine_/queue_), no por el
+    registro _loaded_flows: esta task corre en un worker de Ray distinto del
+    proceso driver, donde _loaded_flows está vacío. Los actores detached del
+    flow cargado sí son alcanzables por nombre desde cualquier proceso.
+    """
     import uuid as _uuid
 
-    lf = get_loaded_flow(flow_name)
-    if lf is None:
-        return
+    try:
+        engine = ray.get_actor(f"engine_{flow_name}", namespace="rayflow")
+        queue = ray.get_actor(f"queue_{flow_name}", namespace="rayflow")
+    except ValueError:
+        return  # el flow no está cargado (sus actores no existen)
 
     run_id = _uuid.uuid4().hex[:8]
-    queue = ray.get_actor(f"queue_{flow_name}", namespace="rayflow")
 
     ray.get(queue.create_run.remote(run_id))
     try:
-        ray.get(lf.execute({"payload": payload}, run_id))
+        ray.get(engine.execute.remote({"payload": payload}, queue, run_id))
     finally:
         ray.get(queue.close_run.remote(run_id))
 
