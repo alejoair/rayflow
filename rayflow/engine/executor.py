@@ -221,7 +221,7 @@ class FlowEngine:
                 self._output_refs.update(inputs)
             return []
 
-        if name in ("OnStart", "OnEvent"):
+        if name in ("OnStart", "OnEvent", "OnVariableChange"):
             await self._write_node_outputs(node_id, inputs)
             targets = rnode.exec_targets.get("exec_out", [])
             if len(targets) > 1:
@@ -438,6 +438,12 @@ class LoadedFlow:
             namespace="rayflow",
             lifetime="detached",
         ).remote(built, actors)
+
+        # Esperar a que el engine termine __init__ (que crea el GraphState) antes
+        # de devolver: así engine_{graph_id} y gs_{graph_id} son localizables por
+        # nombre apenas load() retorna (lo necesita, p.ej., el registro de
+        # vigilancia de variables de un flow que se sirva después).
+        ray.get(engine.get_graph_id.remote())
 
         return cls(graph_id, engine, actors, queue, flow_def=built.flow_def)
 

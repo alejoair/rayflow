@@ -168,6 +168,25 @@ def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = 
     for event_name in flow_def.events:
         ray.get(broker.subscribe.remote(event_name, flow_def.name, graph_id))
 
+    # Registrar vigilancia de variables (nodos OnVariableChange): suscribe este
+    # flow al evento sintético var:{source}/{variable} y marca la variable como
+    # vigilada en el GraphState del flow fuente (que debe estar ya cargado).
+    for rnode in built.nodes.values():
+        if rnode.meta.name != "OnVariableChange" or rnode.node_def.subflow_of is not None:
+            continue
+        cfg = rnode.node_def.inputs
+        var = cfg.get("variable", "")
+        if not var:
+            continue
+        src = cfg.get("source") or flow_def.name
+        event_name = f"var:{src}/{var}"
+        ray.get(broker.subscribe.remote(event_name, flow_def.name, graph_id))
+        try:
+            src_gs = ray.get_actor(f"gs_{src}", namespace="rayflow")
+            ray.get(src_gs.watch_variable.remote(var, event_name))
+        except ValueError:
+            pass  # el flow fuente aún no está cargado; cárgalo antes que el vigía
+
     return graph_id
 
 
@@ -199,9 +218,18 @@ def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
 
     run_id = _uuid.uuid4().hex[:8]
 
+    # Los eventos de cambio de variable (var:{flow}/{var}) llevan un payload dict
+    # que es directamente el conjunto de flow_inputs (value/old/variable) que
+    # consume el nodo OnVariableChange. El resto de eventos se envuelven en
+    # {"payload": ...} para el nodo OnEvent.
+    if isinstance(payload, dict) and event_name.startswith("var:"):
+        flow_inputs = payload
+    else:
+        flow_inputs = {"payload": payload}
+
     ray.get(queue.create_run.remote(run_id))
     try:
-        ray.get(engine.execute.remote({"payload": payload}, queue, run_id))
+        ray.get(engine.execute.remote(flow_inputs, queue, run_id))
     finally:
         ray.get(queue.close_run.remote(run_id))
 

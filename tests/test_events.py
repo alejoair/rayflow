@@ -64,6 +64,52 @@ def test_emit_dispara_onevent_de_otro_flow():
     assert _wait_count(done_event, 1) == 1
 
 
+def test_onvariablechange_dispara_al_cambiar_variable():
+    """Cambiar una variable vigilada dispara el flow que la observa.
+
+    src_var escribe la variable `counter`; watcher_var la vigila con
+    OnVariableChange y re-emite un evento 'done' al dispararse. Además se
+    verifica que escribir el mismo valor NO vuelve a disparar.
+    """
+    done_event = f"varchg/done/{time.time_ns()}"
+
+    src = {
+        "name": "src_var",
+        "inputs": {"n": "int"},
+        "variables": [{"name": "counter", "type": "int", "default": 0}],
+        "nodes": [
+            {"id": "s", "type": "OnStart"},
+            {"id": "set", "type": "Set", "exec_in": "s",
+             "inputs": {"variable_name": "counter", "value": "s.n"}},
+        ],
+    }
+    watcher = {
+        "name": "watcher_var",
+        "nodes": [
+            {"id": "on", "type": "OnVariableChange",
+             "inputs": {"source": "src_var", "variable": "counter"}},
+            {"id": "emit", "type": "EmitEvent", "exec_in": "on",
+             "inputs": {"event_name": done_event, "payload": "on.value"}},
+        ],
+    }
+
+    rayflow.load(src)       # crea gs_src_var antes de registrar la vigilancia
+    serve_events(watcher)   # registra el watch sobre gs_src_var
+    try:
+        for _ in rayflow.execute("src_var", {"n": 42}):
+            pass
+        assert _wait_count(done_event, 1) == 1
+
+        # Escribir el mismo valor no debe disparar de nuevo.
+        for _ in rayflow.execute("src_var", {"n": 42}):
+            pass
+        time.sleep(2)
+        assert ray.get(get_event_broker().publish_count.remote(done_event)) == 1
+    finally:
+        rayflow.unload("watcher_var")
+        rayflow.unload("src_var")
+
+
 def test_namespaces_aislados_no_se_cruzan():
     """Emitir a 'ns_a/ev' no dispara un suscriptor de 'ns_b/ev' (matching exacto)."""
     done_event = f"ns_b/done/{time.time_ns()}"

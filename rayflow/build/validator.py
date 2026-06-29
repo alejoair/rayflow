@@ -579,14 +579,22 @@ def _find_entry(nodes: dict[str, ResolvedNode]) -> str:
         nid for nid, rn in nodes.items()
         if rn.meta.name == "OnEvent" and rn.node_def.subflow_of is None
     ]
-    all_entries = on_starts + on_events
+    on_varchange = [
+        nid for nid, rn in nodes.items()
+        if rn.meta.name == "OnVariableChange" and rn.node_def.subflow_of is None
+    ]
+    all_entries = on_starts + on_events + on_varchange
     if not all_entries:
-        raise BuildError("El flow no tiene nodo de entrada (OnStart u OnEvent)")
+        raise BuildError("El flow no tiene nodo de entrada (OnStart, OnEvent u OnVariableChange)")
     if len(on_starts) > 1:
         raise BuildError(f"El flow tiene más de un nodo OnStart: {on_starts}")
-    # Preferir OnStart como punto de entrada para ejecución directa;
-    # si no hay OnStart, usar el primer OnEvent.
-    return on_starts[0] if on_starts else on_events[0]
+    # Preferir OnStart para ejecución directa; si no, un punto de entrada
+    # disparado externamente (OnEvent u OnVariableChange).
+    if on_starts:
+        return on_starts[0]
+    if on_events:
+        return on_events[0]
+    return on_varchange[0]
 
 
 def _find_outputs(nodes: dict[str, ResolvedNode]) -> list[str]:

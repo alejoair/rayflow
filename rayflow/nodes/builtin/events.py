@@ -25,6 +25,31 @@ class OnEvent:
     payload = Output("Any")
 
 @engine_node
+class OnVariableChange:
+    """Punto de entrada disparado cuando una variable del estado cambia.
+
+    Configuración estática:
+    - `variable`: nombre de la variable a vigilar.
+    - `source`: nombre del flow dueño de la variable; vacío = este mismo flow.
+
+    Cuando un nodo `Set` escribe esa variable con un valor distinto, el GraphState
+    del flow fuente publica el evento `var:{source}/{variable}` y este flow se
+    ejecuta. El engine inyecta el valor nuevo (`value`) y el anterior (`old`) como
+    outputs de este nodo.
+
+    El flow fuente debe estar cargado (servido) antes que el flow que lo vigila,
+    para que su GraphState exista al registrar la vigilancia. La entrega es
+    fire-and-forget y sin garantía de orden (igual que el resto del bus).
+    """
+    category = "Eventos"
+    variable = Input("str", default="")
+    source   = Input("str", default="")
+    value    = Output("Any")
+    old      = Output("Any")
+    exec_out = ExecOutput()
+
+
+@engine_node
 class EmitEvent:
     """Emite un evento al bus global. Fire-and-forget.
 
