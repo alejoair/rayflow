@@ -46,7 +46,8 @@ El servidor sirve:
 ```
 Editor visual (browser) ←→ FastAPI (rayflow/server.py) ←→ Ray actors/tasks
          ↓                           ↓
-  editor/static/*.js          rayflow/engine/executor.py
+  editor/frontend/ (React+Vite)   rayflow/engine/executor.py
+   → build a editor/static/dist/  (lo que sirve el server)
 ```
 
 ### Principios de diseño

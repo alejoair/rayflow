@@ -396,7 +396,14 @@ está suscrito cuando se publica, el evento se pierde (`publish`, `bus.py:44`).
 Un flow residente con un `OnEvent` se convierte así en un reactor: cada evento
 lanza una ejecución independiente (`_run_event_flow`). El `OnEvent` puede
 coexistir con `OnStart` como segundo punto de entrada (`_find_entry`,
-`validator.py:571`).
+`validator.py`).
+
+Sobre el mismo bus se monta **`OnVariableChange`**: un cambio de estado se
+convierte en evento. Cuando un `Set` modifica una variable vigilada,
+`GraphState.set_variable` publica `var:{source}/{variable}` (solo si el valor
+cambió) y el flow que la observa se ejecuta como con cualquier otro evento. Es
+coherente con la naturaleza de "sistema vivo": no solo se reacciona a señales
+externas, sino a la propia mutación del estado residente.
 
 **Observabilidad como primera clase.** Cada ejecución produce un *stream* de
 eventos (`run_start`, `node_start`, `edge_fire`, `node_done`, `flow_done`/

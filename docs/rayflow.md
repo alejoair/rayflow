@@ -1,5 +1,12 @@
 # rayflow
 
+> **Documento histórico — diseño v1.** Describe el diseño original y **ya no
+> coincide con la implementación actual** en puntos centrales (contrato de
+> `run`, motor por cola vs. recursión, fan-out exec, ciclo de vida de actores,
+> `CallFlow`, nombres del bus de eventos). Para la arquitectura vigente ver
+> `CLAUDE.md`; para el modelo conceptual y la tabla de divergencias (§12) ver
+> `docs/analisis-conceptual.md`. Se conserva como registro de intención.
+
 ## ¿Qué es rayflow?
 
 rayflow es un sistema de orquestación de workflows basado en grafos visuales estilo Blueprint de Unreal Engine, construido sobre Ray core, donde los nodos son tareas o actores de Ray conectados por execution pins y data pins. Soporta múltiples grafos concurrentes comunicados por eventos.
