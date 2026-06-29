@@ -79,15 +79,12 @@ class FlowEngine:
         ).remote(var_defaults)
 
         # Runs vivos, indexados por run_id. Cada uno posee su propio scratch
-        # (RunContext) — el estado por-run ya no vive en self, así que dos
-        # execute() concurrentes no se pisan (ver paso 2 del refactor: el lock
-        # de serialización se elimina cuando node_outputs pasa al RunContext).
+        # (RunContext: run_id, queue, node_outputs, exec_arrivals, output_refs)
+        # — nada por-run vive en self, así que dos execute() concurrentes están
+        # aislados y el actor async puede intercalarlos sin lock. Lo único
+        # compartido entre runs es lo que debe serlo: variables del GraphState
+        # y el `self` de los @ray_node.
         self._runs: dict[str, RunContext] = {}
-
-        # Mientras node_outputs siga compartido en el GraphState (paso 1), dos
-        # ejecuciones simultáneas se pisarían los outputs de nodos. Este lock
-        # serializa execute() hasta que el aislamiento per-run sea total.
-        self._exec_lock = asyncio.Lock()
 
     def _get_graph_id(self) -> str:
         # El graph_id se deriva del nombre del actor engine — se asigna en LoadedFlow
@@ -102,27 +99,26 @@ class FlowEngine:
         """Ejecuta el flow con los inputs dados, emitiendo eventos a queue_ref.
 
         Todo el scratch del run vive en un RunContext local (no en self), que se
-        threadea por los métodos internos. El _exec_lock sigue serializando
-        execute() mientras node_outputs siga compartido en el GraphState.
+        threadea por los métodos internos. Sin lock: dos execute() concurrentes
+        están aislados por su RunContext y el actor async puede intercalarlos.
         """
-        async with self._exec_lock:
-            run = RunContext(run_id=run_id, queue=queue_ref)
-            for node_id, rnode in self._built.nodes.items():
-                if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
-                    run.exec_arrivals[node_id] = set()
-            self._runs[run_id] = run
+        run = RunContext(run_id=run_id, queue=queue_ref)
+        for node_id, rnode in self._built.nodes.items():
+            if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
+                run.exec_arrivals[node_id] = set()
+        self._runs[run_id] = run
 
-            try:
-                await self._write_node_outputs(run, self._built.entry_node_id, dict(flow_inputs))
-                await self._run_loop(run, self._built.entry_node_id)
-                result = _resolve_refs(run.output_refs)
-                await queue_ref.push.remote(run_id, {"event": "flow_done", "result": result, "ts": time.time()})
-                return result
-            except Exception as e:
-                await queue_ref.push.remote(run_id, {"event": "flow_error", "error": str(e), "ts": time.time()})
-                raise
-            finally:
-                self._runs.pop(run_id, None)
+        try:
+            await self._write_node_outputs(run, self._built.entry_node_id, dict(flow_inputs))
+            await self._run_loop(run, self._built.entry_node_id)
+            result = _resolve_refs(run.output_refs)
+            await queue_ref.push.remote(run_id, {"event": "flow_done", "result": result, "ts": time.time()})
+            return result
+        except Exception as e:
+            await queue_ref.push.remote(run_id, {"event": "flow_error", "error": str(e), "ts": time.time()})
+            raise
+        finally:
+            self._runs.pop(run_id, None)
 
     async def fire(self, run_id: str, source_node_id: str, pin_name: str) -> None:
         run = self._runs[run_id]
@@ -349,7 +345,12 @@ class FlowEngine:
         src_pin = res_pin.source_pin
         src_rnode = self._built.nodes.get(src_id)
 
-        ref = await self._state.get_node_output.remote(src_id, src_pin)
+        # Lee del scratch por-run: si el productor no se disparó EN ESTE run, no
+        # hay entrada y caemos al default (o a evaluar el pure node). La
+        # staleness entre runs desaparece por construcción (run.node_outputs
+        # arranca vacío en cada execute()).
+        node_outs = run.node_outputs.get(src_id)
+        ref = node_outs.get(src_pin) if node_outs is not None else None
         if ref is not None:
             if isinstance(ref, ray.ObjectRef):
                 ref = await ref
@@ -390,7 +391,12 @@ class FlowEngine:
         }
 
     async def _write_node_outputs(self, run: RunContext, node_id: str, outputs: dict[str, Any]) -> None:
-        await self._state.set_node_outputs.remote(node_id, outputs)
+        # Scratch por-run: dict local en memoria, sin round-trip al GraphState.
+        existing = run.node_outputs.get(node_id)
+        if existing is None:
+            run.node_outputs[node_id] = dict(outputs)
+        else:
+            existing.update(outputs)
 
 
 # ---------------------------------------------------------------------------

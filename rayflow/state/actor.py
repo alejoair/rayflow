@@ -7,11 +7,11 @@ import ray
 
 @ray.remote
 class GraphState:
-    """Actor Ray que mantiene el estado mutable de una ejecución de grafo.
+    """Actor Ray que mantiene la memoria persistente de un flow cargado.
 
-    Dos responsabilidades:
-    - Variables nombradas: binding mutable nombre → ObjectRef
-    - Outputs vigentes de nodos de ejecución: node_id → {pin_name: ObjectRef}
+    Una responsabilidad: variables nombradas (binding mutable nombre → ObjectRef)
+    que persisten entre runs del flow. Los outputs de nodos NO viven aquí — son
+    scratch por-run y los posee el RunContext del FlowEngine.
 
     La secuencialidad del engine garantiza que nunca llegan dos escrituras
     concurrentes, por lo que no se necesita ningún mecanismo de locking adicional.
@@ -20,8 +20,6 @@ class GraphState:
     def __init__(self, variables_defaults: dict[str, Any] | None = None):
         # nombre_variable → ObjectRef (o valor directo)
         self._variables: dict[str, Any] = {}
-        # node_id → {pin_name → ObjectRef}
-        self._node_outputs: dict[str, dict[str, Any]] = {}
         # variables vigiladas: clave_variable → nombre del evento a publicar al cambiar
         self._watched: dict[str, str] = {}
         self._broker = None  # handle al EventBroker (lazy)
@@ -78,20 +76,3 @@ class GraphState:
 
     def get_all_variables(self) -> dict[str, Any]:
         return dict(self._variables)
-
-    # ------------------------------------------------------------------
-    # Outputs vigentes de nodos de ejecución
-    # ------------------------------------------------------------------
-
-    def set_node_outputs(self, node_id: str, outputs: dict[str, Any]) -> None:
-        existing = self._node_outputs.get(node_id, {})
-        self._node_outputs[node_id] = {**existing, **outputs}
-
-    def get_node_output(self, node_id: str, pin_name: str) -> Any | None:
-        node_outs = self._node_outputs.get(node_id)
-        if node_outs is None:
-            return None
-        return node_outs.get(pin_name)
-
-    def node_has_fired(self, node_id: str) -> bool:
-        return node_id in self._node_outputs
