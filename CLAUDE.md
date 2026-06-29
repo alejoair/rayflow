@@ -365,7 +365,7 @@ unload(flow_name)
 
 **GraphState** persiste entre ejecuciones del mismo flow cargado: las variables mantienen su valor entre requests. Se resetean los outputs de nodos en cada `execute()`, pero no las variables.
 
-**Serialización de `execute()`**: el `FlowEngine` es un actor Ray — si llega un segundo request mientras el primero corre, Ray lo encola (event loop del actor es secuencial).
+**Serialización de `execute()`**: el `FlowEngine` es un actor Ray **async**, así que Ray **intercala** las llamadas a `execute()` en su event loop — NO las serializa solo. Como el estado por-run vive en `self` (`_run_id`, `_run_queue`, `_output_refs`, `_exec_arrivals`) y los outputs del nodo de entrada van al `GraphState` compartido, dos ejecuciones simultáneas se pisarían (todas devolverían el resultado de la última). Un `asyncio.Lock` por engine (`self._exec_lock`) serializa `execute()` explícitamente: si llega un segundo request mientras el primero corre, espera a que termine.
 
 ## Sistema de eventos
 
@@ -375,13 +375,15 @@ serve_events(flow_json)          # igual que load() + suscripción al broker
 
 EmitEvent node → ctx.emit_event(name, payload)
   └─ EventBroker.publish(name, payload)   # fire-and-forget
-       └─ _run_event_flow.remote(flow_name, name, payload)  # Ray task
-            └─ lf.execute({"payload": payload}, run_id)  # queue obtenida por ray.get_actor("queue_{flow_name}")
+       └─ _run_event_flow.remote(flow_name, name, payload)  # Ray task (corre en un worker)
+            └─ ray.get_actor("engine_{flow_name}") + ray.get_actor("queue_{flow_name}")  # por nombre
+            └─ engine.execute.remote({"payload": payload}, queue, run_id)
 
 stop(graph_id, event_names)
   └─ EventBroker.unsubscribe() + unload()
 ```
 
+- `_run_event_flow` corre como task `@ray.remote` en un **worker distinto del proceso driver**, donde el registro `_loaded_flows` está vacío. Por eso resuelve el flow receptor por sus **actores detached con nombre** (`engine_{flow}`/`queue_{flow}`), no con `get_loaded_flow()`. Y como dispara `engine.execute` directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes serializadas por el `_exec_lock` del engine.
 - El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.

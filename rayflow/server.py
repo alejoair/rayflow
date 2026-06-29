@@ -90,11 +90,9 @@ def create_app(served: dict[str, ServedFlow]):
     app.include_router(editor_router)
     app.include_router(custom_nodes_router)
 
-    _static_dir = _Path(__file__).parent / "editor" / "static"
-    _dist_dir = _static_dir / "dist"
-    _serve_dir = _dist_dir if _dist_dir.exists() else _static_dir
-    if _serve_dir.exists():
-        app.mount("/editor", StaticFiles(directory=_serve_dir, html=True), name="editor-static")
+    _dist_dir = _Path(__file__).parent / "editor" / "static" / "dist"
+    if _dist_dir.exists():
+        app.mount("/editor", StaticFiles(directory=_dist_dir, html=True), name="editor-static")
 
     @app.get("/health")
     async def health() -> dict[str, str]:

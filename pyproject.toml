@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "rayflow"
 version = "0.1.0"
 description = "Visual workflow orchestration on Ray"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ray>=2.40",
@@ -28,7 +29,7 @@ where = ["."]
 include = ["rayflow*"]
 
 [tool.setuptools.package-data]
-"rayflow.editor.static" = ["dist/**/*", "*.html", "*.js", "*.css"]
+"rayflow.editor.static" = ["dist/**/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

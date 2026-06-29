@@ -63,6 +63,13 @@ class FlowEngine:
         self._run_queue: Any | None = None  # handle a RunQueue activo
         self._run_id: str | None = None     # run_id de la ejecución activa
 
+        # FlowEngine es un actor async: Ray intercala las llamadas a execute()
+        # en su event loop (NO las serializa). Como el estado por-run vive en
+        # self (_run_id, _run_queue, _output_refs, _exec_arrivals), dos
+        # ejecuciones simultáneas se pisarían. Este lock serializa execute():
+        # la segunda espera a que termine la primera.
+        self._exec_lock = asyncio.Lock()
+
     def _get_graph_id(self) -> str:
         # El graph_id se deriva del nombre del actor engine — se asigna en LoadedFlow
         # Usamos el nombre del flow como base estable
@@ -73,26 +80,31 @@ class FlowEngine:
     # ------------------------------------------------------------------
 
     async def execute(self, flow_inputs: dict[str, Any], queue_ref: Any, run_id: str) -> dict[str, Any]:
-        """Ejecuta el flow con los inputs dados, emitiendo eventos a queue_ref."""
-        self._run_queue = queue_ref
-        self._run_id = run_id
-        self._output_refs = {}
-        self._exec_arrivals = {}
+        """Ejecuta el flow con los inputs dados, emitiendo eventos a queue_ref.
 
-        for node_id, rnode in self._built.nodes.items():
-            if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
-                self._exec_arrivals[node_id] = set()
+        Serializado con _exec_lock: el estado por-run vive en self, así que dos
+        execute() simultáneos sobre el mismo engine no pueden solaparse.
+        """
+        async with self._exec_lock:
+            self._run_queue = queue_ref
+            self._run_id = run_id
+            self._output_refs = {}
+            self._exec_arrivals = {}
 
-        await self._write_node_outputs(self._built.entry_node_id, dict(flow_inputs))
+            for node_id, rnode in self._built.nodes.items():
+                if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
+                    self._exec_arrivals[node_id] = set()
 
-        try:
-            await self._run_loop(self._built.entry_node_id)
-            result = _resolve_refs(self._output_refs)
-            await queue_ref.push.remote(run_id, {"event": "flow_done", "result": result, "ts": time.time()})
-            return result
-        except Exception as e:
-            await queue_ref.push.remote(run_id, {"event": "flow_error", "error": str(e), "ts": time.time()})
-            raise
+            await self._write_node_outputs(self._built.entry_node_id, dict(flow_inputs))
+
+            try:
+                await self._run_loop(self._built.entry_node_id)
+                result = _resolve_refs(self._output_refs)
+                await queue_ref.push.remote(run_id, {"event": "flow_done", "result": result, "ts": time.time()})
+                return result
+            except Exception as e:
+                await queue_ref.push.remote(run_id, {"event": "flow_error", "error": str(e), "ts": time.time()})
+                raise
 
     async def fire(self, source_node_id: str, pin_name: str) -> None:
         rnode = self._built.nodes[source_node_id]
