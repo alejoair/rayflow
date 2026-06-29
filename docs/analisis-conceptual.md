@@ -203,9 +203,12 @@ semánticas (`validator.py:404-416`):
 - **`or`** (`{"or": [...]}`): el nodo no se registra en `_exec_arrivals`, así que
   `_is_ready` devuelve siempre `True` — se dispara **con cada** llegada.
 
-Conviene notar que `_is_ready` usa un *set* de llegadas y no marca al nodo como
-"ya disparado". En un DAG donde cada fuente dispara una vez esto es correcto; es
-un invariante que descansa en la topología, no en un guardia explícito.
+El *set* de llegadas se **resetea al quedar listo** (`_is_ready`): un join AND
+recorrido más de una vez por ejecución —dentro de un loop, vía reentrancia—
+debe volver a esperar a todas sus fuentes en cada ola. Sin ese reset, el join
+quedaba permanentemente "listo" tras la primera vez y se disparaba con cada
+llegada (bug real encontrado y corregido). La reentrancia (§2.1) obliga a que la
+*readiness* sea por-ola, no un estado monótono.
 
 ---
 
@@ -434,8 +437,9 @@ corrección de Rayflow, porque son implícitos en el código:
 3. **El engine atiende RPC reentrantes mientras espera un `@ray_node`.** Sin esta
    propiedad de los actores async de Ray, un `@ray_node` no podría disparar exec
    pins (§6).
-4. **Cada fuente exec dispara una vez (topología DAG).** Sostiene la lógica de
-   *readiness* basada en sets sin guardia de "ya disparado" (§2.5).
+4. **La *readiness* de un join es por-ola, no monótona.** El set de llegadas se
+   resetea al quedar listo, para que un join AND dentro de un loop vuelva a
+   esperar a todas sus fuentes en cada iteración (§2.5).
 5. **Las ejecuciones completas no se solapan** — serializadas por el
    `_exec_lock` del engine (no por Ray: el actor async intercalaría sin él),
    aunque las ramas dentro de una ejecución sí se entrelazan. Es lo que hace

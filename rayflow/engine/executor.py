@@ -166,7 +166,13 @@ class FlowEngine:
         arrivals = self._exec_arrivals[node_id]
         if arrived_from is not None:
             arrivals.add(arrived_from)
-        return len(arrivals) >= len(self._built.nodes[node_id].exec_sources)
+        if len(arrivals) >= len(self._built.nodes[node_id].exec_sources):
+            # Reset para la siguiente ola: un join AND recorrido más de una vez
+            # (dentro de un loop / reentrancia) debe volver a esperar a TODAS sus
+            # fuentes, no quedar permanentemente "listo".
+            arrivals.clear()
+            return True
+        return False
 
     async def _fire_node(self, node_id: str) -> list[str]:
         rnode = self._built.nodes[node_id]

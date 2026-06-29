@@ -234,6 +234,40 @@ def test_and_join_espera_rama_lenta():
     assert result["r1"] == 15
 
 
+def test_and_join_dentro_de_loop_se_resetea():
+    """Un join AND recorrido en cada iteración debe esperar a ambas ramas SIEMPRE.
+
+    Regresión: _exec_arrivals no se reseteaba al quedar listo, así que tras la
+    primera iteración el join quedaba permanentemente "listo" y se disparaba con
+    cada llegada (2x por iteración en vez de 1x). Con 3 iteraciones, el contador
+    daba 5 en vez de 3.
+    """
+    result = rayflow.run({
+        "name": "and_join_in_loop",
+        "inputs": {"items": "list"},
+        "outputs": {"count": "int"},
+        "variables": [{"name": "jc", "type": "int", "default": 0}],
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "loop", "type": "ForEach", "exec_in": "entry",
+             "inputs": {"array": "entry.items"}},
+            # fan-out del cuerpo del loop a dos ramas
+            {"id": "na", "type": "Add", "exec_in": "loop.loop_body", "inputs": {"a": 0, "b": 0}},
+            {"id": "nb", "type": "Add", "exec_in": "loop.loop_body", "inputs": {"a": 0, "b": 0}},
+            # join AND: incrementa jc una vez por iteración (si espera a ambas)
+            {"id": "getjc", "type": "Get", "inputs": {"variable_name": "jc"}},
+            {"id": "inc", "type": "Add", "exec_in": ["na", "nb"],
+             "inputs": {"a": "getjc.value", "b": 1}},
+            {"id": "setjc", "type": "Set", "exec_in": "inc",
+             "inputs": {"variable_name": "jc", "value": "inc.result"}},
+            {"id": "getfinal", "type": "Get", "inputs": {"variable_name": "jc"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "loop.completed",
+             "inputs": {"count": "getfinal.value"}},
+        ],
+    }, items=[1, 2, 3])
+    assert result["count"] == 3  # una vez por iteración, no 5
+
+
 def test_or_join_post_branch():
     """OR explícito: convergencia post-Branch; solo una rama ejecuta."""
     result = rayflow.run({
