@@ -240,11 +240,14 @@ recibe actividad concurrente:
   (cada rama usa su propia variable), pero nada en el modelo lo impide.
 - **Eventos**: cada evento lanza `_run_event_flow` como task Ray independiente
   (`api.py:183`) sobre el **mismo flow cargado** y, por tanto, el mismo
-  `GraphState`. `FlowEngine.execute` está serializado por el event loop del
-  actor (dos `execute` no corren a la vez), lo que protege contra solapamiento
-  entre ejecuciones completas — pero el modelo de consistencia que esto ofrece
-  ("las ejecuciones se serializan, las ramas dentro de una ejecución no") no
-  está declarado en ningún sitio y conviene hacerlo explícito.
+  `GraphState`. `FlowEngine` es un actor **async**: Ray intercala las llamadas a
+  `execute()` y por defecto **no** las serializa. Un `asyncio.Lock` por engine
+  (`self._exec_lock`, `executor.py`) las serializa explícitamente: dos `execute`
+  no corren a la vez, lo que protege contra solapamiento entre ejecuciones
+  completas. El modelo de consistencia que esto ofrece —"las ejecuciones se
+  serializan; las ramas dentro de una ejecución, no"— ahora descansa en ese lock
+  (antes era una suposición incorrecta: sin él, ejecuciones concurrentes del
+  mismo flow se pisaban y todas devolvían el resultado de la última).
 
 El estado tiene además **scoping** vía `state_path` (§4): un subflow aislado abre
 su propio segmento de claves dentro del mismo `GraphState`.
@@ -426,9 +429,10 @@ corrección de Rayflow, porque son implícitos en el código:
    pins (§6).
 4. **Cada fuente exec dispara una vez (topología DAG).** Sostiene la lógica de
    *readiness* basada en sets sin guardia de "ya disparado" (§2.5).
-5. **Las ejecuciones completas no se solapan** (serializadas por el actor engine),
+5. **Las ejecuciones completas no se solapan** — serializadas por el
+   `_exec_lock` del engine (no por Ray: el actor async intercalaría sin él),
    aunque las ramas dentro de una ejecución sí se entrelazan. Es lo que hace
-   seguro el `GraphState` sin locks — a nivel de ejecución, no de rama (§3).
+   seguro el `GraphState` a nivel de ejecución, no de rama (§3).
 
 Hacer estos invariantes explícitos (en docs y, donde se pueda, en asserts o
 validaciones) es probablemente la inversión de mayor retorno conceptual: son
@@ -457,10 +461,12 @@ conviene tener nombradas.
    imponer pureza, o bien memoizar por ejecución, o bien documentar que la
    re-evaluación es parte del contrato. Hoy es implícito.
 
-4. **El modelo de consistencia del estado no está declarado.** Ramas paralelas y
-   eventos concurrentes comparten `GraphState`. Hay una garantía real
-   (ejecuciones serializadas) pero su alcance exacto (qué se protege y qué no) no
-   está escrito.
+4. **El modelo de consistencia del estado es parcial.** El `_exec_lock` serializa
+   las **ejecuciones completas** (incluidos los eventos concurrentes sobre el
+   mismo flow), pero las **ramas paralelas dentro de una ejecución** comparten
+   `GraphState` sin protección: dos ramas que hagan `Get`+`Set` sobre la misma
+   variable pueden intercalarse. La garantía cubre el nivel de ejecución, no el
+   de rama — y ese límite conviene dejarlo escrito.
 
 5. **La costura de tipos entre flow y subflow es `Any`.** El tipado estricto se
    relaja justo donde dos flows se conectan (§5). Es pragmático, pero es el punto
