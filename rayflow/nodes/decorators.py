@@ -91,6 +91,7 @@ class ExecContext:
         self._node_id = node_id
         self._graph_id = graph_id
         self._state_path = state_path
+        self._run_id: str | None = None  # run al que pertenece esta ejecución
         self._engine_handle = None
         self._state_handle = None
         self._output_writer = _output_writer  # solo válido localmente
@@ -99,10 +100,13 @@ class ExecContext:
 
     def __getstate__(self):
         # Excluir handles, callbacks y buffer local — se reacquieren bajo demanda.
+        # _run_id SÍ viaja: un @ray_node lo necesita para scopear sus RPC de
+        # vuelta al engine (fire/set_output) al run correcto.
         return {
             "_node_id": self._node_id,
             "_graph_id": self._graph_id,
             "_state_path": self._state_path,
+            "_run_id": self._run_id,
             "_engine_handle": None,
             "_state_handle": None,
             "_output_writer": None,
@@ -137,7 +141,7 @@ class ExecContext:
         if self._fire_handler is not None:
             await self._fire_handler(pin_name)
         else:
-            await self._engine().fire.remote(self._node_id, pin_name)
+            await self._engine().fire.remote(self._run_id, self._node_id, pin_name)
 
     def set_output(self, pin_name: str, value: Any) -> None:
         """Escribe un data output del nodo actual en el GraphState.
@@ -149,7 +153,7 @@ class ExecContext:
         if self._output_writer is not None:
             self._pending_outputs[pin_name] = value
         else:
-            ray.get(self._engine().set_output.remote(self._node_id, pin_name, value))
+            ray.get(self._engine().set_output.remote(self._run_id, self._node_id, pin_name, value))
 
     def get_variable(self, name: str) -> Any:
         """Lee una variable del GraphState (con prefijo state_path si aplica)."""

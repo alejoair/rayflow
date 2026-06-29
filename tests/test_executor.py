@@ -453,3 +453,67 @@ def test_map_con_engine_node_puro():
         ],
     }, items=["magic", "magic", "magic"])
     assert result["values"] == [42, 42, 42]
+
+
+# ---------------------------------------------------------------------------
+# Aislamiento de outputs entre runs (RunContext)
+# ---------------------------------------------------------------------------
+
+def _execute_collect(name: str, inputs: dict) -> dict | None:
+    """Ejecuta un flow ya cargado y devuelve el result del flow_done."""
+    result = None
+    for evt in rayflow.execute(name, inputs):
+        if evt.get("event") == "flow_done":
+            result = evt.get("result")
+        elif evt.get("event") == "flow_error":
+            raise AssertionError(f"flow_error: {evt.get('error')}")
+    return result
+
+
+def test_outputs_no_stale_entre_runs():
+    """Un nodo no disparado en este run no deja su output visible al siguiente.
+
+    Regresión del bug latente que motivó el RunContext: con node_outputs
+    compartido en el GraphState, el output de `producer` (run 1, rama true)
+    quedaba almacenado y `reader` lo leía en el run 2 (rama false) aunque
+    producer NO se hubiera disparado — recibía 100 stale en vez de su default.
+
+    Con node_outputs por-run, reader cae a su default (0) en el run 2.
+    Se carga el flow UNA vez y se ejecuta dos veces: la staleness solo aparece
+    si el scratch persiste entre runs del mismo flow cargado.
+    """
+    flow = {
+        "name": "stale_check",
+        "inputs": {"cond": "bool"},
+        "outputs": {"via_producer": "int", "via_reader": "int"},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "br", "type": "Branch", "exec_in": "entry",
+             "inputs": {"condition": "entry.cond"}},
+            # rama true: produce 100
+            {"id": "producer", "type": "Add", "exec_in": "br.true",
+             "inputs": {"a": 100, "b": 0}},
+            # rama false: lee producer.result (no disparado en este run)
+            {"id": "reader", "type": "Add", "exec_in": "br.false",
+             "inputs": {"a": "producer.result", "b": 0}},
+            {"id": "exit", "type": "FlowOutput",
+             "exec_in": {"or": ["producer", "reader"]},
+             "inputs": {"via_producer": "producer.result",
+                        "via_reader": "reader.result"}},
+        ],
+    }
+
+    rayflow.load(flow)
+    try:
+        # Run 1: cond=True → producer dispara, deja result=100 en el estado
+        r1 = _execute_collect("stale_check", {"cond": True})
+        assert r1["via_producer"] == 100  # producer corrió de verdad
+
+        # Run 2: cond=False → reader corre y lee producer.result.
+        # Sin aislamiento per-run leería 100 (stale); con RunContext cae al default 0.
+        r2 = _execute_collect("stale_check", {"cond": False})
+        assert r2["via_reader"] == 0, (
+            f"reader leyó {r2['via_reader']} — output stale del run anterior"
+        )
+    finally:
+        rayflow.unload("stale_check")
