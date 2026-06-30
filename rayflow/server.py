@@ -99,7 +99,7 @@ def create_app(served: dict[str, ServedFlow]):
 
     app = FastAPI(
         title="Rayflow",
-        version="0.1.0",
+        version=__version__,
         lifespan=mcp_app.lifespan if mcp_app is not None else None,
     )
     app.include_router(editor_router)
