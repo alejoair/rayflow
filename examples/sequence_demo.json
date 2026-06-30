@@ -14,7 +14,7 @@
   ],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "OnStart" },
     {
       "id": "seq",
       "type": "Sequence",

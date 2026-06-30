@@ -10,7 +10,7 @@
   },
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "OnStart" },
     {
       "id": "branch",
       "type": "Branch",

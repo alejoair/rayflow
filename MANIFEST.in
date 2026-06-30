@@ -1,0 +1,5 @@
+# Files to keep OUT of the published package (sdist/wheel).
+# CLAUDE.md is internal tooling guidance for the Claude Code agent, not user docs.
+exclude CLAUDE.md
+prune docs
+prune examples

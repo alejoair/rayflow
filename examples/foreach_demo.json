@@ -12,7 +12,7 @@
   ],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "OnStart" },
     {
       "id": "loop",
       "type": "ForEach",
