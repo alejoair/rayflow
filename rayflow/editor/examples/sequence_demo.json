@@ -1,0 +1,60 @@
+{
+  "name": "sequence_demo",
+  "version": "1",
+  "inputs": {
+    "a": "int",
+    "b": "int",
+    "c": "int"
+  },
+  "outputs": {
+    "total": "int"
+  },
+  "variables": [
+    { "name": "acc", "type": "int", "default": 0 }
+  ],
+  "events": [],
+  "nodes": [
+    { "id": "entry", "type": "FlowInput" },
+    {
+      "id": "seq",
+      "type": "Sequence",
+      "exec_in": "entry"
+    },
+    {
+      "id": "log_a",
+      "type": "Add",
+      "exec_in": "seq.then_0",
+      "inputs": { "a": "entry.a", "b": 0 }
+    },
+    {
+      "id": "log_b",
+      "type": "Add",
+      "exec_in": "seq.then_1",
+      "inputs": { "a": "entry.b", "b": 0 }
+    },
+    {
+      "id": "log_c",
+      "type": "Add",
+      "exec_in": "seq.then_2",
+      "inputs": { "a": "entry.c", "b": 0 }
+    },
+    {
+      "id": "sum_ab",
+      "type": "Add",
+      "exec_in": "log_b",
+      "inputs": { "a": "log_a.result", "b": "log_b.result" }
+    },
+    {
+      "id": "sum_abc",
+      "type": "Add",
+      "exec_in": "log_c",
+      "inputs": { "a": "sum_ab.result", "b": "log_c.result" }
+    },
+    {
+      "id": "exit",
+      "type": "FlowOutput",
+      "exec_in": "sum_abc",
+      "inputs": { "total": "sum_abc.result" }
+    }
+  ]
+}

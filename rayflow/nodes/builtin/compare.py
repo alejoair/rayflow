@@ -10,6 +10,7 @@ from rayflow.nodes.decorators import ExecContext, Input, Output, engine_node, ra
 
 @engine_node
 class GreaterThan:
+    """Devuelve True si a > b. Pure node: evaluable como input de Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -20,6 +21,7 @@ class GreaterThan:
 
 @engine_node
 class LessThan:
+    """Devuelve True si a < b. Pure node: evaluable como input de Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -30,6 +32,7 @@ class LessThan:
 
 @engine_node
 class GreaterThanOrEqual:
+    """Devuelve True si a >= b. Pure node: evaluable como input de Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -40,6 +43,7 @@ class GreaterThanOrEqual:
 
 @engine_node
 class LessThanOrEqual:
+    """Devuelve True si a <= b. Pure node: evaluable como input de Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -50,6 +54,7 @@ class LessThanOrEqual:
 
 @ray_node
 class Equal:
+    """Devuelve True si a == b. Pure node: evaluable como input de Branch/While."""
     a = Input("Any", default=None)
     b = Input("Any", default=None)
     result = Output("bool")
@@ -60,6 +65,7 @@ class Equal:
 
 @engine_node
 class NotEqual:
+    """Devuelve True si a != b. Pure node: evaluable como input de Branch/While."""
     a = Input("Any", default=None)
     b = Input("Any", default=None)
     result = Output("bool")
@@ -70,6 +76,7 @@ class NotEqual:
 
 @engine_node
 class Not:
+    """Negación lógica: devuelve True si value es False y viceversa."""
     value = Input("bool", default=False)
     result = Output("bool")
 
@@ -79,6 +86,7 @@ class Not:
 
 @engine_node
 class And:
+    """Conjunción lógica: devuelve True solo si a y b son ambos True."""
     a = Input("bool", default=False)
     b = Input("bool", default=False)
     result = Output("bool")
@@ -89,6 +97,7 @@ class And:
 
 @engine_node
 class Or:
+    """Disyunción lógica: devuelve True si a o b (o ambos) son True."""
     a = Input("bool", default=False)
     b = Input("bool", default=False)
     result = Output("bool")
