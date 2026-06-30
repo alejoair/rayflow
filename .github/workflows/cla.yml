@@ -16,8 +16,24 @@ jobs:
   CLAAssistant:
     runs-on: ubuntu-latest
     steps:
+      # The action evaluates CLA sign-off per COMMIT AUTHOR, not just whoever
+      # opened the PR. That breaks for PRs whose commits are authored by an
+      # automated identity with no GitHub account (e.g. AI-assisted commits
+      # authored as "Claude <noreply@anthropic.com>") even when the PR itself
+      # was opened by the maintainer (already in `allowlist` below) — there is
+      # no GitHub login to match against. Since only the maintainer's own
+      # tooling produces such commits, skip the check entirely when the PR was
+      # opened by the maintainer, regardless of how its commits are authored.
+      # Real external contributions are unaffected: this only short-circuits
+      # PRs whose `pull_request.user.login` (or, on the comment path, the
+      # PR/issue author) is the maintainer.
       - name: "CLA Assistant"
-        if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
+        if: >
+          (
+            (github.event_name == 'issue_comment' && (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') && github.event.issue.user.login != 'alejoair')
+            ||
+            (github.event_name == 'pull_request_target' && github.event.pull_request.user.login != 'alejoair')
+          )
         uses: contributor-assistant/github-action@v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
