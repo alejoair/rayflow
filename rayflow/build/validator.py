@@ -17,6 +17,27 @@ class BuildError(Exception):
     pass
 
 
+class _Errors:
+    """Recolector de errores de build con dos modos.
+
+    - collect=False (default): cada `add()` lanza BuildError inmediatamente.
+      Es el comportamiento histórico de build() — falla en el primer error.
+    - collect=True: cada `add()` acumula el mensaje y la validación continúa,
+      de modo que un LLM (vía validate_all/`POST /editor/validate`) reciba TODOS
+      los problemas en una sola pasada en vez de uno por round-trip.
+    """
+
+    def __init__(self, collect: bool = False):
+        self.collect = collect
+        self.items: list[str] = []
+
+    def add(self, msg: str) -> None:
+        if self.collect:
+            self.items.append(msg)
+        else:
+            raise BuildError(msg)
+
+
 # ---------------------------------------------------------------------------
 # Estructura ejecutable producida por el build
 # ---------------------------------------------------------------------------
@@ -65,16 +86,41 @@ class BuiltFlow:
 # ---------------------------------------------------------------------------
 
 def build(flow: FlowDef, catalog: NodeCatalog) -> BuiltFlow:
-    """Valida el flow y produce un BuiltFlow ejecutable."""
+    """Valida el flow y produce un BuiltFlow ejecutable (falla en el primer error)."""
+    err = _Errors(collect=False)
     flow = flatten(flow, catalog)
-    nodes = _index_nodes(flow, catalog)
-    _validate_declared_types(flow, nodes)
-    _validate_exec_inputs(flow, nodes)
-    _validate_data_inputs(flow, nodes, catalog)
-    _validate_acyclicity(nodes)
-    entry = _find_entry(nodes)
+    nodes = _index_nodes(flow, catalog, err)
+    _validate_declared_types(flow, nodes, err)
+    _validate_exec_inputs(flow, nodes, err)
+    _validate_data_inputs(flow, nodes, catalog, err)
+    _validate_acyclicity(nodes, err)
+    entry = _find_entry(nodes, err)
     outputs = _find_outputs(nodes)
     return BuiltFlow(flow_def=flow, nodes=nodes, entry_node_id=entry, output_node_ids=outputs)
+
+
+def validate_all(flow: FlowDef, catalog: NodeCatalog) -> list[str]:
+    """Valida un flow recolectando TODOS los errores en vez de fallar en el primero.
+
+    Pensado para clientes que iteran (editor visual, agentes LLM): una sola
+    llamada devuelve la lista completa de problemas. Devuelve [] si es válido.
+
+    `flatten` puede fallar de forma irrecuperable (un CallFlow mal referenciado
+    impide construir el grafo); en ese caso se devuelve ese único error porque
+    las etapas siguientes no tendrían un grafo sobre el que operar.
+    """
+    err = _Errors(collect=True)
+    try:
+        flow = flatten(flow, catalog)
+    except BuildError as e:
+        return [str(e)]
+    nodes = _index_nodes(flow, catalog, err)
+    _validate_declared_types(flow, nodes, err)
+    _validate_exec_inputs(flow, nodes, err)
+    _validate_data_inputs(flow, nodes, catalog, err)
+    _validate_acyclicity(nodes, err)
+    _find_entry(nodes, err)
+    return err.items
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +313,7 @@ def _splice_subflow(sub_flat: FlowDef, cf_id: str, cf_def: NodeDef,
     return nodes, entry_id, exit_id
 
 
-def _validate_declared_types(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> None:
+def _validate_declared_types(flow: FlowDef, nodes: dict[str, ResolvedNode], err: _Errors) -> None:
     """Rechaza cualquier tipo fuera del registro cerrado (incl. interfaz pública)."""
     def check(type_spec, where: str):
         if type_spec is None:
@@ -275,7 +321,7 @@ def _validate_declared_types(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> N
         try:
             parse_type(type_spec)
         except TypeError_ as e:
-            raise BuildError(f"{where}: {e}")
+            err.add(f"{where}: {e}")
 
     for name, t in flow.inputs.items():
         check(t, f"flow input '{name}'")
@@ -292,12 +338,18 @@ def _validate_declared_types(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> N
 # Helpers internos
 # ---------------------------------------------------------------------------
 
-def _index_nodes(flow: FlowDef, catalog: NodeCatalog) -> dict[str, ResolvedNode]:
+def _index_nodes(flow: FlowDef, catalog: NodeCatalog, err: _Errors) -> dict[str, ResolvedNode]:
     nodes: dict[str, ResolvedNode] = {}
     for node_def in flow.nodes:
+        if node_def.id in nodes:
+            err.add(
+                f"Nodo id '{node_def.id}' duplicado: cada nodo debe tener un id único"
+            )
+            continue
         entry = catalog.get(node_def.type)
         if entry is None:
-            raise BuildError(f"Nodo '{node_def.type}' (id={node_def.id}) no está en el catálogo")
+            err.add(f"Nodo '{node_def.type}' (id={node_def.id}) no está en el catálogo")
+            continue
         cls, meta = entry
         # Copia local de la metadata para inyectar pins dinámicos sin mutar
         # la metadata global del catálogo.
@@ -383,7 +435,7 @@ def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta
     return meta
 
 
-def _validate_exec_inputs(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> None:
+def _validate_exec_inputs(flow: FlowDef, nodes: dict[str, ResolvedNode], err: _Errors) -> None:
     """Valida: todo exec input tiene exactamente una arista entrante.
 
     Una arista exec se declara desde el consumidor con `exec_in`:
@@ -396,16 +448,17 @@ def _validate_exec_inputs(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> None
         exec_in = rnode.node_def.exec_in
         if exec_in is None:
             if rnode.meta.has_exec_in:
-                raise BuildError(
+                err.add(
                     f"Nodo '{rnode.meta.name}' (id={nid}) requiere exec input pero no tiene arista"
                 )
             continue
 
         if isinstance(exec_in, dict):
             if "or" not in exec_in:
-                raise BuildError(
+                err.add(
                     f"Nodo '{nid}': exec_in como dict debe tener la forma {{\"or\": [...]}}"
                 )
+                continue
             rnode.exec_join = "or"
             sources = exec_in["or"]
         elif isinstance(exec_in, list):
@@ -415,18 +468,26 @@ def _validate_exec_inputs(flow: FlowDef, nodes: dict[str, ResolvedNode]) -> None
             rnode.exec_join = "and"
             sources = [exec_in]
         for src in sources:
-            src_id, src_pin = _parse_exec_ref(src, nodes)
+            ref = _parse_exec_ref(src, nodes, err)
+            if ref is None:
+                continue
+            src_id, src_pin = ref
             if src_id not in nodes:
-                raise BuildError(
+                err.add(
                     f"Nodo '{nid}': exec_in apunta a '{src_id}' que no existe en el grafo"
                 )
+                continue
             incoming_exec[nid].append(src_id)
             rnode.exec_sources.append(src_id)
             nodes[src_id].exec_targets.setdefault(src_pin, []).append(nid)
 
 
-def _parse_exec_ref(ref: str, nodes: dict[str, ResolvedNode]) -> tuple[str, str]:
-    """Resuelve "node_id" o "node_id.pin" -> (node_id, exec_out_pin)."""
+def _parse_exec_ref(ref: str, nodes: dict[str, ResolvedNode], err: _Errors) -> tuple[str, str] | None:
+    """Resuelve "node_id" o "node_id.pin" -> (node_id, exec_out_pin).
+
+    Devuelve None si la referencia es ambigua (varios exec outputs sin pin
+    explícito) y `err` está en modo recolección — para que el caller la omita.
+    """
     if "." in ref:
         src_id, src_pin = ref.split(".", 1)
         return src_id, src_pin
@@ -440,15 +501,16 @@ def _parse_exec_ref(ref: str, nodes: dict[str, ResolvedNode]) -> tuple[str, str]
     if len(exec_outs) == 1:
         return src_id, exec_outs[0]
     if len(exec_outs) > 1:
-        raise BuildError(
+        err.add(
             f"La fuente exec '{src_id}' ({src_rnode.meta.name}) tiene varios exec outputs "
             f"{exec_outs}; especifica cuál con 'node_id.pin_name'"
         )
+        return None
     return src_id, "exec_out"
 
 
 def _validate_data_inputs(
-    flow: FlowDef, nodes: dict[str, ResolvedNode], catalog: NodeCatalog
+    flow: FlowDef, nodes: dict[str, ResolvedNode], catalog: NodeCatalog, err: _Errors
 ) -> None:
     """Valida tipos en aristas de datos y que inputs requeridos estén cubiertos."""
     for nid, rnode in nodes.items():
@@ -460,7 +522,7 @@ def _validate_data_inputs(
 
             if raw is _MISSING:
                 if pin_spec.required:
-                    raise BuildError(
+                    err.add(
                         f"Nodo '{nid}' (type={rnode.meta.name}): "
                         f"pin '{pin_spec.name}' es requerido pero no tiene valor ni arista"
                     )
@@ -475,9 +537,10 @@ def _validate_data_inputs(
                 parts = raw.split(".", 1)
                 src_id, src_pin = parts[0], parts[1]
                 if src_id not in nodes:
-                    raise BuildError(
+                    err.add(
                         f"Nodo '{nid}': pin '{pin_spec.name}' referencia '{src_id}' que no existe"
                     )
+                    continue
                 src_meta = nodes[src_id].meta
                 # Buscar el output pin en la fuente
                 src_out = next(
@@ -497,30 +560,86 @@ def _validate_data_inputs(
                     try:
                         ok = type_compatible(pin_spec.type, producer_type)
                     except TypeError_ as e:
-                        raise BuildError(
+                        err.add(
                             f"Nodo '{nid}', pin '{pin_spec.name}': tipo inválido ({e})"
                         )
+                        continue
                     if not ok:
-                        raise BuildError(
+                        err.add(
                             f"Nodo '{nid}': pin '{pin_spec.name}' "
                             f"({parse_type(pin_spec.type)}) incompatible con "
                             f"'{src_id}.{src_pin}' ({parse_type(producer_type)}). "
                             f"Usa un nodo de casteo explícito (ToInt, ToFloat, ToStr, ToBool)."
                         )
+                        continue
                 rnode.resolved_inputs[pin_spec.name] = ResolvedPin(
                     is_ref=True, source_node=src_id, source_pin=src_pin
                 )
             else:
-                # Valor literal
+                # Valor literal — validar su tipo contra el del pin.
+                _check_literal_type(nid, pin_spec, raw, err)
                 rnode.resolved_inputs[pin_spec.name] = ResolvedPin(is_ref=False, literal=raw)
 
 
+def _literal_type_name(value: Any) -> str | None:
+    """Tipo canónico de rayflow de un literal Python, o None si no es modelable.
+
+    bool antes que int: en Python bool es subclase de int, pero en el sistema de
+    tipos son incompatibles, así que un True literal es "bool", no "int".
+    """
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, list):
+        return "list"
+    if isinstance(value, dict):
+        return "dict"
+    return None
 
 
-def _validate_acyclicity(nodes: dict[str, ResolvedNode]) -> None:
-    """Detecta ciclos en el subgrafo de datos y en el plano de ejecución."""
-    _check_data_cycles(nodes)
-    _check_exec_cycles(nodes)
+def _check_literal_type(nid: str, pin_spec, value: Any, err: _Errors) -> None:
+    """Verifica que un literal estático sea compatible con el tipo declarado del pin.
+
+    Solo aplica a tipos concretos: si el pin es Any, o el literal es None (usado
+    como 'sin valor' en pins dinámicos), o no es un tipo Python modelable, se
+    omite. La comparación reusa las mismas reglas estrictas que las aristas.
+    """
+    if pin_spec.type is None or value is None:
+        return
+    lit_type = _literal_type_name(value)
+    if lit_type is None:
+        return
+    try:
+        if type_compatible(pin_spec.type, lit_type):
+            return
+    except TypeError_:
+        return
+    err.add(
+        f"Nodo '{nid}': pin '{pin_spec.name}' ({parse_type(pin_spec.type)}) "
+        f"recibe un literal {value!r} de tipo '{lit_type}', incompatible. "
+        f"Usa un valor del tipo correcto o un nodo de casteo (ToInt, ToFloat, ToStr, ToBool)."
+    )
+
+
+
+
+def _validate_acyclicity(nodes: dict[str, ResolvedNode], err: _Errors) -> None:
+    """Detecta ciclos en el subgrafo de datos y en el plano de ejecución.
+
+    Los chequeos internos lanzan en el primer ciclo encontrado; en modo
+    recolección los envolvemos para reportar el ciclo sin abortar el resto
+    de la validación.
+    """
+    for check in (_check_data_cycles, _check_exec_cycles):
+        try:
+            check(nodes)
+        except BuildError as e:
+            err.add(str(e))
 
 
 def _check_data_cycles(nodes: dict[str, ResolvedNode]) -> None:
@@ -568,7 +687,7 @@ def _check_exec_cycles(nodes: dict[str, ResolvedNode]) -> None:
             dfs(nid)
 
 
-def _find_entry(nodes: dict[str, ResolvedNode]) -> str:
+def _find_entry(nodes: dict[str, ResolvedNode], err: _Errors) -> str:
     # Los entry/output de subgrafos spliced llevan subflow_of: no cuentan como
     # entrada/salida del flow raíz.
     on_starts = [
@@ -585,9 +704,10 @@ def _find_entry(nodes: dict[str, ResolvedNode]) -> str:
     ]
     all_entries = on_starts + on_events + on_varchange
     if not all_entries:
-        raise BuildError("El flow no tiene nodo de entrada (OnStart, OnEvent u OnVariableChange)")
+        err.add("El flow no tiene nodo de entrada (OnStart, OnEvent u OnVariableChange)")
+        return ""
     if len(on_starts) > 1:
-        raise BuildError(f"El flow tiene más de un nodo OnStart: {on_starts}")
+        err.add(f"El flow tiene más de un nodo OnStart: {on_starts}")
     # Preferir OnStart para ejecución directa; si no, un punto de entrada
     # disparado externamente (OnEvent u OnVariableChange).
     if on_starts:
