@@ -215,15 +215,20 @@ El servidor carga nodos desde:
 |--------|------|-------------|
 | `GET` | `/editor/info` | Workspace activo: `{cwd}` |
 | `GET` | `/editor/nodes` | Catálogo de nodos disponibles |
-| `GET` | `/editor/nodes/{node_type}` | Spec de un tipo de nodo concreto |
+| `GET` | `/editor/nodes/{node_type}` | Spec de un tipo de nodo concreto. Incluye `dynamic` para nodos con pins dinámicos (OnStart, FlowOutput, Parallel, CallFlow) |
 | `GET` | `/editor/types` | Tipos canónicos y reglas de compatibilidad |
 | `POST` | `/editor/type-check` | Verificar compatibilidad entre dos tipos |
+| `GET` | `/editor/guide` | Guía curada del modelo de Rayflow (markdown) para construir flows |
+| `GET` | `/editor/examples` | Lista los flows de ejemplo incluidos en el paquete |
+| `GET` | `/editor/examples/{name}` | JSON completo de un flow de ejemplo (plantilla few-shot) |
 | `GET` | `/editor/flows` | Lista flows en `flows/` |
 | `GET` | `/editor/flows/{name}` | Flow JSON |
+| `GET` | `/editor/flows/{name}/catalog` | Catálogo resuelto del flow: cada nodo con sus pins dinámicos ya expandidos |
 | `POST` | `/editor/flows` | Crear flow |
 | `PUT` | `/editor/flows/{name}` | Actualizar flow |
 | `DELETE` | `/editor/flows/{name}` | Borrar flow |
-| `POST` | `/editor/validate` | Validar flow (body = flow JSON completo) |
+| `POST` | `/editor/validate` | Validar flow (body = flow JSON). Devuelve **todos** los errores + `warnings` de claves desconocidas |
+| `POST` | `/editor/flows/{name}/test` | Ejecutar y comparar outputs vs `expected_outputs` (auto-verificación) |
 | `POST` | `/editor/flows/{name}/load` | Cargar flow en Ray (precaché) |
 | `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
 | `GET` | `/editor/flows/loaded` | Lista todos los flows cargados en Ray con su interfaz (inputs/outputs) |
@@ -245,6 +250,16 @@ El servidor carga nodos desde:
 | `POST` | `/editor/custom-nodes/reload` | Recargar catálogo desde disco (hot reload) |
 
 El endpoint de guardar/crear valida sintaxis Python con `ast.parse()` antes de escribir el archivo, y llama `reset_catalog()` + `get_catalog()` para hacer hot reload sin reiniciar el servidor. Los módulos `custom_nodes.*` cacheados en `sys.modules` se eliminan antes del reload para forzar reimportación.
+
+## Capa MCP (para agentes LLM)
+
+`rayflow/mcp/server.py` expone un set **curado** de tools MCP construido con FastMCP, montado en `/mcp` (streamable-http) por `create_app`. Reusa la misma lógica que la API REST del editor — no la reimplementa. Su lifespan se pasa a FastAPI al construir la app para que el gestor de sesiones arranque.
+
+Tools: `get_guide`, `list_nodes`, `get_node`, `list_types`, `type_check`, `validate_flow`, `list_flows`, `get_flow`, `create_flow`, `update_flow`, `delete_flow`, `flow_catalog`, `run_flow`, `test_flow`, `list_examples`, `get_example`.
+
+Loop típico de un agente: `get_guide` → `list_nodes` → (`get_example`) → `validate_flow` (itera hasta `valid:true`) → `create_flow`/`update_flow` → `test_flow`/`run_flow`. `validate_flow` devuelve **todos** los errores de una pasada (ver `validate_all` en `build/validator.py`), cerrando el loop de feedback con pocos round-trips.
+
+`fastmcp` es dependencia core. Los flows de ejemplo se empaquetan en `rayflow/editor/examples/*.json` (package-data) para que estén disponibles aunque se instale por pip.
 
 ## Schema de un flow (JSON)
 

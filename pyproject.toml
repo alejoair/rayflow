@@ -21,6 +21,7 @@ dependencies = [
     "ray>=2.40",
     "fastapi>=0.110",
     "uvicorn>=0.29",
+    "fastmcp>=2.3",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,7 @@ include = ["rayflow*"]
 
 [tool.setuptools.package-data]
 "rayflow.editor.static" = ["dist/**/*"]
+"rayflow.editor.examples" = ["*.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

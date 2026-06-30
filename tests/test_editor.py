@@ -525,3 +525,148 @@ def test_stop_events_desuscribe(client):
     r2 = client.delete(f"/editor/flows/receptor_evento/serve-events/{graph_id}")
     assert r2.status_code == 204
 
+
+
+# ---------------------------------------------------------------------------
+# Validación mejorada: recolecta TODOS los errores + warnings
+# ---------------------------------------------------------------------------
+
+def test_validate_recolecta_multiples_errores(client):
+    """validate_all devuelve todos los errores de una pasada, no solo el primero."""
+    flow = {
+        "name": "broken",
+        "inputs": {}, "outputs": {"result": "int"},
+        "nodes": [
+            {"id": "a", "type": "Add", "inputs": {"a": "hola", "b": 1}},
+            {"id": "a", "type": "Add", "inputs": {"a": 1, "b": 2}},
+            {"id": "x", "type": "Add", "exec_in": "nope", "inputs": {}},
+        ],
+    }
+    r = client.post("/editor/validate", json=flow)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["valid"] is False
+    assert len(data["errors"]) >= 4  # dup id, literal mal tipado, exec roto, sin entrada
+
+
+def test_validate_literal_mal_tipado(client):
+    flow = {
+        "name": "lit",
+        "inputs": {}, "outputs": {},
+        "nodes": [
+            {"id": "s", "type": "OnStart"},
+            {"id": "a", "type": "Add", "exec_in": "s", "inputs": {"a": "texto", "b": 2}},
+        ],
+    }
+    r = client.post("/editor/validate", json=flow)
+    errs = r.json()["errors"]
+    assert any("literal" in e and "'a'" in e for e in errs)
+
+
+def test_validate_id_duplicado(client):
+    flow = {
+        "name": "dup",
+        "nodes": [
+            {"id": "s", "type": "OnStart"},
+            {"id": "s", "type": "OnStart"},
+        ],
+    }
+    r = client.post("/editor/validate", json=flow)
+    assert r.json()["valid"] is False
+    assert any("duplicado" in e for e in r.json()["errors"])
+
+
+def test_validate_warnings_clave_desconocida(client):
+    flow = {**MINIMAL, "inputz": {}}  # errata: 'inputz'
+    r = client.post("/editor/validate", json=flow)
+    data = r.json()
+    assert data["valid"] is True  # el parser ignora la clave -> flow válido
+    assert any("inputz" in w for w in data["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Catálogo: pins dinámicos y catálogo contextual
+# ---------------------------------------------------------------------------
+
+def test_node_spec_incluye_dynamic(client):
+    r = client.get("/editor/nodes/OnStart")
+    assert "dynamic" in r.json()
+    assert r.json()["dynamic"]["outputs_from"] == "flow.inputs"
+
+
+def test_flow_catalog_resuelve_pins_dinamicos(client):
+    client.post("/editor/flows", json=SUMA)
+    r = client.get("/editor/flows/suma/catalog")
+    assert r.status_code == 200
+    nodes = {n["id"]: n for n in r.json()["nodes"]}
+    entry_outputs = {p["name"] for p in nodes["entry"]["outputs"]}
+    assert {"x", "y"}.issubset(entry_outputs)  # outputs dinámicos del FlowInput
+    exit_inputs = {p["name"] for p in nodes["exit"]["inputs"]}
+    assert "resultado" in exit_inputs  # input dinámico del FlowOutput
+
+
+def test_descripciones_completas_en_catalogo(client):
+    r = client.get("/editor/nodes")
+    by_type = {n["type"]: n for n in r.json()}
+    for t in ("ToInt", "ToFloat", "ToStr", "ToBool", "And", "Or", "Not", "Equal"):
+        assert by_type[t]["description"], f"{t} sin descripción"
+
+
+# ---------------------------------------------------------------------------
+# Guía y ejemplos
+# ---------------------------------------------------------------------------
+
+def test_guide_endpoint(client):
+    r = client.get("/editor/guide")
+    assert r.status_code == 200
+    assert "flow" in r.json()["guide"].lower()
+
+
+def test_list_examples(client):
+    r = client.get("/editor/examples")
+    assert r.status_code == 200
+    names = {e["name"] for e in r.json()["examples"]}
+    assert "branch_demo" in names
+
+
+def test_get_example_completo(client):
+    r = client.get("/editor/examples/suma")
+    assert r.status_code == 200
+    assert r.json()["name"] == "suma"
+    # un ejemplo incluido debe validar contra el catálogo actual
+    v = client.post("/editor/validate", json=r.json())
+    assert v.json()["valid"] is True
+
+
+def test_get_example_inexistente(client):
+    r = client.get("/editor/examples/noexiste")
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Auto-verificación: POST /editor/flows/{name}/test
+# ---------------------------------------------------------------------------
+
+def test_flow_test_passed(client):
+    client.post("/editor/flows", json=SUMA)
+    r = client.post("/editor/flows/suma/test",
+                    json={"inputs": {"x": 2, "y": 3}, "expected_outputs": {"resultado": 5}})
+    assert r.status_code == 200
+    assert r.json()["passed"] is True
+
+
+def test_flow_test_mismatch(client):
+    client.post("/editor/flows", json=SUMA)
+    r = client.post("/editor/flows/suma/test",
+                    json={"inputs": {"x": 2, "y": 3}, "expected_outputs": {"resultado": 99}})
+    data = r.json()
+    assert data["passed"] is False
+    assert "resultado" in data["mismatches"]
+
+
+def test_flow_test_sin_expected_devuelve_actual(client):
+    client.post("/editor/flows", json=SUMA)
+    r = client.post("/editor/flows/suma/test", json={"inputs": {"x": 4, "y": 1}})
+    data = r.json()
+    assert data["passed"] is None
+    assert data["actual"]["resultado"] == 5

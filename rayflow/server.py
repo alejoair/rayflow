@@ -87,9 +87,27 @@ def create_app(served: dict[str, ServedFlow]):
     from rayflow.editor.routes import router as editor_router
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
 
-    app = FastAPI(title="Rayflow", version=__version__)
+    # Construir el servidor MCP antes que la app: su lifespan (gestor de sesiones
+    # streamable-http) debe pasarse a FastAPI para que arranque al montarlo.
+    mcp_app = None
+    try:
+        from rayflow.mcp.server import create_mcp
+        mcp_app = create_mcp(served).http_app(path="/")
+    except Exception as e:  # pragma: no cover - degradación si fastmcp falla
+        import logging
+        logging.getLogger("rayflow").warning("Capa MCP no disponible: %s", e)
+
+    app = FastAPI(
+        title="Rayflow",
+        version="0.1.0",
+        lifespan=mcp_app.lifespan if mcp_app is not None else None,
+    )
     app.include_router(editor_router)
     app.include_router(custom_nodes_router)
+
+    # Tools MCP curadas en /mcp (streamable-http) para agentes LLM.
+    if mcp_app is not None:
+        app.mount("/mcp", mcp_app)
 
     _dist_dir = _Path(__file__).parent / "editor" / "static" / "dist"
     if _dist_dir.exists():
@@ -143,7 +161,9 @@ def serve(sources: list[str | Path], host: str = "127.0.0.1", port: int = 8000,
     app = create_app(served)
     names = ", ".join(served) or "(ninguno)"
     print(f"Rayflow sirviendo {len(served)} flow(s): {names}")
-    print(f"  -> http://{host}:{port}/flows")
+    print(f"  -> REST:   http://{host}:{port}/flows")
+    print(f"  -> Editor: http://{host}:{port}/editor")
+    print(f"  -> MCP:    http://{host}:{port}/mcp/  (tools para agentes LLM)")
 
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port))
 
