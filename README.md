@@ -3,73 +3,86 @@
 [![PyPI version](https://img.shields.io/pypi/v/rayflow.svg)](https://pypi.org/project/rayflow/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Tests](https://github.com/alejoair/rayflow/actions/workflows/test.yml/badge.svg)](https://github.com/alejoair/rayflow/actions/workflows/test.yml)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-**Construye sistemas distribuidos dibujándolos: conecta nodos, enciéndelos, y quedan corriendo.**
+**Build distributed systems by drawing them: connect nodes, switch them on, and they stay running.**
 
-Rayflow es un editor visual para construir backends sobre [Ray](https://www.ray.io/). Conectas nodos —cada uno una pieza de lógica en Python— con dos tipos de cable: uno marca el **orden de ejecución** y otro lleva los **datos**. Cuando cargas el grafo, sus nodos se levantan como procesos vivos y **quedan disponibles**: puedes invocarlos como una API, dispararlos con eventos, o dejarlos guardando estado entre llamadas.
+Rayflow is a visual editor for building backends on top of [Ray](https://www.ray.io/). You connect nodes — each one a piece of Python logic — with two kinds of wire: one sets the **order of execution**, the other carries **data**. When you load the graph, its nodes come up as live processes and **stay available**: you can call them like an API, trigger them with events, or let them keep state between calls.
 
-No es un orquestador de tareas que corre y termina. Un flow **queda en pie**, con memoria, esperando a que lo invoquen — un servicio que diseñaste dibujándolo.
+It is not a task orchestrator that runs and exits. A flow **stays up**, with memory, waiting to be invoked — a service you designed by drawing it.
 
-> Estado: temprano (alpha). El modelo de ejecución y el editor son funcionales; la API puede cambiar.
+> Status: early (alpha). The execution model and the editor are functional; the API may change.
 
-<!-- Captura del editor: subir a docs/ y enlazar con URL absoluta para que renderice en PyPI, p.ej.
-![Editor visual de Rayflow](https://raw.githubusercontent.com/alejoair/rayflow/master/docs/editor.png)
--->
-
-## Instalación
+## Installation
 
 ```bash
 pip install rayflow
 ```
 
-Requiere Python 3.10+. Ray, FastAPI y Uvicorn se instalan como dependencias.
+Requires Python 3.10+. Ray, FastAPI, and Uvicorn are installed as dependencies.
 
 ## Quickstart
 
-Lanza el servidor (editor visual + API REST):
+Launch the server (visual editor + REST API):
 
 ```bash
 rayflow serve --port 8000
 ```
 
-- Editor visual: http://localhost:8000/editor
-- API REST: http://localhost:8000/flows
+- Visual editor: http://localhost:8000/editor
+- REST API: http://localhost:8000/flows
 - Health check: http://localhost:8000/health
 
-O ejecuta un flow desde Python:
+Or run a flow from Python:
 
 ```python
 import rayflow
 
-# Carga, ejecuta y descarga un flow de una sola vez
-result = rayflow.run("examples/suma.json", a=3, b=4)
+# A flow is plain data — here defined inline. Load, run, and unload in one call.
+suma = {
+    "name": "suma",
+    "inputs":  {"a": "int", "b": "int"},
+    "outputs": {"result": "int"},
+    "nodes": [
+        {"id": "entry", "type": "OnStart"},
+        {"id": "add", "type": "Add", "exec_in": "entry",
+         "inputs": {"a": "entry.a", "b": "entry.b"}},
+        {"id": "exit", "type": "FlowOutput", "exec_in": "add",
+         "inputs": {"result": "add.result"}},
+    ],
+}
+
+result = rayflow.run(suma, a=3, b=4)
 print(result)  # {"result": 7}
 ```
 
-## Cómo se dispara un flow
+The same flow as a JSON file lives in [`examples/suma.json`](examples/suma.json),
+along with other examples in [`examples/`](examples/).
 
-El mismo grafo puede ponerse en marcha de varias formas:
+## How a flow is triggered
 
-- **De una sola vez** — `rayflow.run(flow, **inputs)`: carga, ejecuta y descarga. Para un cálculo puntual.
-- **Servido como API** — `load()` una vez e `execute()` muchas; expuesto por HTTP con streaming de eventos. El sistema queda residente y se invoca repetidamente.
-- **Por evento** — `serve_events()` + un nodo `OnEvent`: el flow queda residente y lo dispara un evento, sin invocación directa.
-- **Como componente de otro flow** — el nodo `CallFlow` ejecuta un flow dentro de otro.
+The same graph can be started in several ways:
 
-Y de forma transversal a todos: un flow puede ser **stateless o stateful** — con o sin memoria entre invocaciones (variables del grafo y estado en los nodos residentes). Con `EmitEvent`, además, un flow puede disparar a otros y encadenar reacciones.
+- **One-shot** — `rayflow.run(flow, **inputs)`: load, run, and unload. For a single computation.
+- **Served as an API** — `load()` once and `execute()` many times; exposed over HTTP with event streaming. The system stays resident and is invoked repeatedly.
+- **By event** — `serve_events()` plus an `OnEvent` node: the flow stays resident and is triggered by an event, with no direct call.
+- **As a component of another flow** — the `CallFlow` node runs one flow inside another.
 
-## Conceptos
+Across all of these, a flow can be **stateless or stateful** — with or without memory between invocations (graph variables and state in resident nodes). With `EmitEvent`, a flow can also trigger others and chain reactions.
 
-Un flow es un grafo de **nodos** conectados por dos tipos de pin:
+## Concepts
 
-- **Exec pins** — definen el orden de ejecución (control).
-- **Data pins** — llevan los valores entre nodos.
+A flow is a graph of **nodes** connected by two kinds of pin:
 
-Cada nodo es una clase Python decorada. El decorador decide dónde corre, no qué hace:
+- **Exec pins** — define the order of execution (control).
+- **Data pins** — carry values between nodes.
+
+Each node is a decorated Python class. The decorator decides *where* it runs, not *what* it does:
 
 ```python
-from rayflow.nodes.decorators import ray_node, ExecInput, ExecOutput, Input, Output, ExecContext
+from rayflow.nodes.decorators import engine_node, ExecInput, ExecOutput, Input, Output, ExecContext
 
-@ray_node              # corre distribuido (actor/task de Ray)
+@engine_node            # runs locally inside the engine
 class Add:
     exec_in   = ExecInput()
     a         = Input("int", default=0)
@@ -82,10 +95,12 @@ class Add:
         await ctx.fire("exec_out")
 ```
 
-- `@ray_node` corre distribuido sobre Ray (con exec pins es un actor persistente y stateful).
-- `@engine_node` corre local, dentro del motor (para lógica de control ligera).
+- `@engine_node` runs locally, inside the engine (best for lightweight control logic).
+- `@ray_node` runs distributed on Ray (with exec pins it is a persistent, stateful actor).
 
-Un flow se guarda como JSON. Por ejemplo, el `suma` del quickstart:
+The `run()` contract is identical for both — only the deployment differs.
+
+A flow is stored as JSON. For example, the `suma` flow from the quickstart:
 
 ```json
 {
@@ -93,7 +108,7 @@ Un flow se guarda como JSON. Por ejemplo, el `suma` del quickstart:
   "inputs":  { "a": "int", "b": "int" },
   "outputs": { "result": "int" },
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "OnStart" },
     { "id": "add", "type": "Add", "exec_in": "entry",
       "inputs": { "a": "entry.a", "b": "entry.b" } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -102,36 +117,52 @@ Un flow se guarda como JSON. Por ejemplo, el `suma` del quickstart:
 }
 ```
 
-## API de Python
+## Python API
 
 ```python
 import rayflow
 
-rayflow.run(source, **inputs)   # carga + ejecuta + descarga (one-shot)
-rayflow.load(source)            # deja el flow residente en Ray
-rayflow.execute(name, inputs)   # ejecuta un flow ya cargado (stream de eventos)
-rayflow.unload(name)            # descarga el flow
-rayflow.serve_events(source)    # deja el flow residente, suscrito al bus de eventos
-rayflow.stop(graph_id, events)  # desuscribe y descarga
+rayflow.run(source, **inputs)   # load + run + unload (one-shot)
+rayflow.load(source)            # keep the flow resident in Ray
+rayflow.execute(name, inputs)   # run an already-loaded flow (event stream)
+rayflow.unload(name)            # unload the flow
+rayflow.serve_events(source)    # keep the flow resident, subscribed to the event bus
+rayflow.stop(graph_id, events)  # unsubscribe and unload
 ```
 
-## Documentación
+## Documentation
 
-- Guía de arquitectura y desarrollo: [`CLAUDE.md`](https://github.com/alejoair/rayflow/blob/master/CLAUDE.md)
-- Análisis conceptual: [`docs/analisis-conceptual.md`](https://github.com/alejoair/rayflow/blob/master/docs/analisis-conceptual.md)
-- Ejemplos de flows: [`examples/`](https://github.com/alejoair/rayflow/tree/master/examples)
+- Flow examples: [`examples/`](examples/)
+- Contributing guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## Desarrollo
+## Development
 
 ```bash
 pip install -e ".[dev]"
 pytest tests/
 ```
 
-El frontend del editor (React + Vite) vive en `rayflow/editor/frontend/`:
+The editor frontend (React + Vite) lives in `rayflow/editor/frontend/`:
 
 ```bash
 cd rayflow/editor/frontend
 npm install
 npm run build
 ```
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full workflow and the
+Contributor License Agreement.
+
+## License
+
+Rayflow is **dual-licensed**:
+
+- **Open source:** [GNU AGPL-3.0-or-later](LICENSE). Free to use, modify, and
+  distribute under the AGPL's terms (note its network-use copyleft).
+- **Commercial:** for use without the AGPL obligations (e.g. embedding Rayflow
+  in a closed-source or hosted product), a separate commercial license is
+  required. See [`COMMERCIAL-LICENSE.md`](COMMERCIAL-LICENSE.md).
+
+Personal, educational, research, and non-profit use is fully covered by the
+AGPL at no cost. For commercial terms, contact **Manuel Alejandro Cuartas**
+(<alejandro.cuartas@yahoo.com>).

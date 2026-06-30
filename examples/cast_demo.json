@@ -12,7 +12,7 @@
   "nodes": [
     {
       "id": "entry",
-      "type": "FlowInput"
+      "type": "OnStart"
     },
     {
       "id": "to_str",

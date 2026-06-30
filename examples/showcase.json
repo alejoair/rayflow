@@ -16,7 +16,7 @@
   ],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "OnStart" },
 
     { "id": "par", "type": "Parallel", "exec_in": "entry" },
 

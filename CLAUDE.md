@@ -4,13 +4,14 @@ Guía para Claude Code al trabajar en este repositorio.
 
 ## Carpeta de pruebas
 
-Los flows y nodos custom de prueba viven en `C:\Users\alejandro.cuartas\Desktop\rayflow_sandbox\`:
+Los flows y nodos custom de prueba viven en un directorio de sandbox **fuera del
+repo** (configúralo en tu máquina, p.ej. `~/rayflow_sandbox/`):
 - `flows/` — flows JSON de prueba (no en el repo de Rayflow)
 - `custom_nodes/` — nodos custom de prueba del usuario
 
 Al lanzar el servidor desde el sandbox, Ray y el editor los detectan automáticamente:
 ```bash
-cd C:\Users\alejandro.cuartas\Desktop\rayflow_sandbox
+cd <tu-directorio-sandbox>
 rayflow serve --port 8000
 ```
 
