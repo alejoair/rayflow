@@ -1,4 +1,4 @@
-"""Endpoints del editor visual: catálogo, CRUD de flows, validación."""
+"""Visual editor endpoints: catalog, flow CRUD, validation."""
 from __future__ import annotations
 
 from typing import Any
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/editor", tags=["editor"])
 
 
 # ---------------------------------------------------------------------------
-# Catálogo de nodos
+# Node catalog
 # ---------------------------------------------------------------------------
 
 def _pin_spec(p) -> dict[str, Any]:
@@ -28,23 +28,23 @@ def _pin_spec(p) -> dict[str, Any]:
     return d
 
 
-# Pins que el build genera dinámicamente y que NO aparecen en la metadata
-# estática del catálogo. Documentarlos aquí permite que un cliente (editor o
-# agente LLM) sepa que existen y cómo se nombran, sin tener que conocer la
-# convención de memoria. Ver `_with_dynamic_pins` en build/validator.py.
+# Pins the build generates dynamically and that do NOT appear in the
+# catalog's static metadata. Documenting them here lets a client (the editor
+# or an LLM agent) know they exist and how they're named, without having to
+# memorize the convention. See `_with_dynamic_pins` in build/validator.py.
 _DYNAMIC_PINS: dict[str, dict[str, Any]] = {
     "OnStart": {"outputs_from": "flow.inputs",
-                "note": "Expone un data output por cada input declarado del flow (p.ej. 'entry.x')."},
+                "note": "Exposes one data output per declared input of the flow (e.g. 'entry.x')."},
     "FlowInput": {"outputs_from": "flow.inputs",
-                  "note": "Alias de OnStart. Expone un data output por cada input del flow."},
+                  "note": "Alias of OnStart. Exposes one data output per input of the flow."},
     "OnEvent": {"outputs_from": "flow.inputs",
-                "note": "Expone un data output por cada input declarado del flow (el payload del evento)."},
+                "note": "Exposes one data output per declared input of the flow (the event's payload)."},
     "FlowOutput": {"inputs_from": "flow.outputs",
-                   "note": "Recibe un data input requerido por cada output declarado del flow."},
+                   "note": "Receives one required data input per declared output of the flow."},
     "Parallel": {"exec_outputs_pattern": "branch_N",
-                 "note": "Las ramas branch_0, branch_1, … se descubren del wiring; 'joined' dispara al unir."},
+                 "note": "Branches branch_0, branch_1, … are discovered from the wiring; 'joined' fires once they're all done."},
     "CallFlow": {"inputs_pattern": "arbitrary",
-                 "note": "Acepta inputs arbitrarios que se mapean a los inputs del subflow invocado."},
+                 "note": "Accepts arbitrary inputs that get mapped to the invoked subflow's inputs."},
 }
 
 
@@ -66,10 +66,10 @@ def _node_spec(node_type: str, meta) -> dict[str, Any]:
         "inputs": [_pin_spec(p) for p in meta.inputs],
         "outputs": [{"name": p.name, "kind": p.kind, "type": p.type or "Any"} for p in meta.outputs],
         "exec_outputs": meta.exec_outputs,
-        # Nuevos campos:
-        "is_builtin": meta.is_builtin,           # True si builtin, False si custom
-        "category": meta.category,                # "Control", "Matemáticas", etc.
-        "description": meta.description,          # Docstring o None
+        # Newer fields:
+        "is_builtin": meta.is_builtin,           # True for builtin, False for custom
+        "category": meta.category,                # "Control", "Math", etc.
+        "description": meta.description,          # Docstring, or None
     }
     if node_type in _DYNAMIC_PINS:
         spec["dynamic"] = _DYNAMIC_PINS[node_type]
@@ -78,54 +78,54 @@ def _node_spec(node_type: str, meta) -> dict[str, Any]:
 
 @router.get("/info")
 async def editor_info() -> dict[str, Any]:
-    """Información del workspace activo: cwd y versión."""
+    """Active workspace info: cwd and version."""
     import os
     return {"cwd": os.getcwd()}
 
 
 @router.get("/nodes")
 async def list_nodes() -> list[dict[str, Any]]:
-    """Devuelve el catálogo completo de tipos de nodo con sus pines."""
+    """Returns the full catalog of node types with their pins."""
     catalog = get_catalog()
     return [_node_spec(name, meta) for name, _cls, meta in catalog]
 
 
 @router.get("/nodes/{node_type}")
 async def get_node(node_type: str) -> dict[str, Any]:
-    """Devuelve la spec de un tipo de nodo específico."""
+    """Returns the spec of a specific node type."""
     catalog = get_catalog()
     entry = catalog.get(node_type)
     if entry is None:
-        raise HTTPException(status_code=404, detail=f"Tipo de nodo '{node_type}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Node type '{node_type}' not found")
     _cls, meta = entry
     return _node_spec(node_type, meta)
 
 
 @router.get("/flows/{name}/catalog")
 async def flow_catalog(name: str) -> dict[str, Any]:
-    """Catálogo resuelto para un flow concreto: cada nodo con sus pins reales.
+    """Resolved catalog for a specific flow: each node with its real pins.
 
-    A diferencia de `/editor/nodes` (metadata estática), aquí se aplican los pins
-    dinámicos en el contexto de ESTE flow: los outputs de OnStart ya son los
-    inputs del flow, los inputs de FlowOutput sus outputs, las ramas branch_N de
-    Parallel, etc. Pensado para que un agente vea exactamente qué puede cablear.
+    Unlike `/editor/nodes` (static metadata), here the dynamic pins are
+    applied in the context of THIS flow: OnStart's outputs are already the
+    flow's inputs, FlowOutput's inputs are its outputs, Parallel's branch_N
+    branches, etc. Meant to let an agent see exactly what it can wire up.
     """
     from rayflow.build.validator import flatten, _with_dynamic_pins
 
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
     catalog = get_catalog()
     try:
         flat = flatten(load_flow(data), catalog)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo aplanar el flow: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not flatten the flow: {e}")
 
     nodes_out: list[dict[str, Any]] = []
     for nd in flat.nodes:
         entry = catalog.get(nd.type)
         if entry is None:
-            nodes_out.append({"id": nd.id, "type": nd.type, "error": "tipo no está en el catálogo"})
+            nodes_out.append({"id": nd.id, "type": nd.type, "error": "type is not in the catalog"})
             continue
         _cls, meta = entry
         meta = _with_dynamic_pins(meta, flat, nd)
@@ -141,7 +141,7 @@ async def flow_catalog(name: str) -> dict[str, Any]:
 
 @router.get("/guide")
 async def get_guide() -> dict[str, Any]:
-    """Guía curada del modelo de Rayflow (markdown) para construir flows."""
+    """Curated guide to Rayflow's model (markdown) for building flows."""
     from .guide import GUIDE
     return {"guide": GUIDE}
 
@@ -153,7 +153,7 @@ def _examples_dir():
 
 @router.get("/examples")
 async def list_examples() -> dict[str, Any]:
-    """Lista los flows de ejemplo incluidos (plantillas few-shot)."""
+    """Lists the bundled example flows (few-shot templates)."""
     import json
     examples = []
     d = _examples_dir()
@@ -174,20 +174,20 @@ async def list_examples() -> dict[str, Any]:
 
 @router.get("/examples/{name}")
 async def get_example(name: str) -> dict[str, Any]:
-    """Devuelve el JSON completo de un flow de ejemplo por nombre de archivo."""
+    """Returns the full JSON of an example flow by its file name."""
     import json
     path = _examples_dir() / f"{name}.json"
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Ejemplo '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Example '{name}' not found")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error leyendo el ejemplo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reading the example: {e}")
 
 
 @router.get("/types")
 async def get_types() -> dict[str, Any]:
-    """Tipos canónicos disponibles y reglas de compatibilidad."""
+    """Available canonical types and compatibility rules."""
     return {
         "primitives": sorted(PRIMITIVES),
         "generics": [
@@ -195,22 +195,22 @@ async def get_types() -> dict[str, Any]:
             {"base": "dict", "example": "dict[str, Any]", "description": "dict[str, V]"},
         ],
         "notes": [
-            "Compatibilidad estricta: mismo tipo o uno de los dos es Any",
-            "int y float son incompatibles — usar ToInt / ToFloat para castear",
+            "Strict compatibility: same type, or one of the two is Any",
+            "int and float are incompatible — use ToInt / ToFloat to cast",
         ],
     }
 
 
 @router.post("/type-check")
 async def type_check(body: dict = Body(...)) -> dict[str, Any]:
-    """Comprueba si from_type puede conectarse a to_type.
+    """Checks whether from_type can connect to to_type.
 
     Body: {"from_type": "int", "to_type": "str"}
     """
     from_type = body.get("from_type")
     to_type = body.get("to_type")
     if from_type is None or to_type is None:
-        raise HTTPException(status_code=400, detail="Se requieren 'from_type' y 'to_type'")
+        raise HTTPException(status_code=400, detail="'from_type' and 'to_type' are required")
     try:
         result = compatible(to_type, from_type)  # compatible(consumer, producer)
     except Exception as e:
@@ -219,19 +219,19 @@ async def type_check(body: dict = Body(...)) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Validación de flows
+# Flow validation
 # ---------------------------------------------------------------------------
 
 @router.post("/validate")
 async def validate_flow(flow_data: Any = Body(...)) -> dict[str, Any]:
-    """Valida un FlowDef sin ejecutarlo.
+    """Validates a FlowDef without running it.
 
-    Devuelve TODOS los errores de build de una sola pasada (no solo el primero)
-    para que un cliente que itera —editor o agente LLM— pueda corregir el flow
-    en menos round-trips. `warnings` lista claves desconocidas del schema.
+    Returns ALL build errors in a single pass (not just the first one) so an
+    iterating client — the editor or an LLM agent — can fix the flow in
+    fewer round-trips. `warnings` lists unknown schema keys.
     """
     if not isinstance(flow_data, dict):
-        raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON de FlowDef")
+        raise HTTPException(status_code=400, detail="Body must be a JSON object of a FlowDef")
     warnings = unknown_keys(flow_data)
     try:
         flow_def = load_flow(flow_data)
@@ -239,16 +239,16 @@ async def validate_flow(flow_data: Any = Body(...)) -> dict[str, Any]:
         errors = validate_all(flow_def, catalog)
         return {"valid": not errors, "errors": errors, "warnings": warnings}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error de parseo: {e}")
+        raise HTTPException(status_code=400, detail=f"Parse error: {e}")
 
 
 # ---------------------------------------------------------------------------
-# CRUD de flows
+# Flow CRUD
 # ---------------------------------------------------------------------------
 
 @router.get("/flows")
 async def list_editor_flows() -> dict[str, Any]:
-    """Lista todos los flows en el directorio flows/."""
+    """Lists every flow in the flows/ directory."""
     flows = list_flows()
     return {
         "flows": [
@@ -265,7 +265,7 @@ async def list_editor_flows() -> dict[str, Any]:
 
 @router.get("/flows/loaded")
 async def list_loaded_flows() -> dict[str, Any]:
-    """Lista todos los flows actualmente cargados en Ray con su interfaz pública."""
+    """Lists every flow currently loaded into Ray, with its public interface."""
     from rayflow.engine.executor import _loaded_flows
     result = []
     for name, lf in _loaded_flows.items():
@@ -283,25 +283,25 @@ async def list_loaded_flows() -> dict[str, Any]:
 
 @router.get("/flows/{name}")
 async def get_editor_flow(name: str) -> dict[str, Any]:
-    """Devuelve el FlowDef completo de un flow por nombre."""
+    """Returns the full FlowDef of a flow by name."""
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
     return data
 
 
 @router.post("/flows", status_code=201)
 async def create_flow(flow_data: Any = Body(...)) -> dict[str, Any]:
-    """Crea un flow nuevo y lo guarda en flows/{name}.json."""
+    """Creates a new flow and saves it to flows/{name}.json."""
     if not isinstance(flow_data, dict):
-        raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON de FlowDef")
+        raise HTTPException(status_code=400, detail="Body must be a JSON object of a FlowDef")
     try:
         flow_def = load_flow(flow_data)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"FlowDef inválido: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid FlowDef: {e}")
 
     if get_flow_dict(flow_def.name) is not None:
-        raise HTTPException(status_code=409, detail=f"Ya existe un flow con el nombre '{flow_def.name}'")
+        raise HTTPException(status_code=409, detail=f"A flow named '{flow_def.name}' already exists")
 
     save_flow(flow_def)
     from .storage import flow_to_dict
@@ -310,24 +310,24 @@ async def create_flow(flow_data: Any = Body(...)) -> dict[str, Any]:
 
 @router.put("/flows/{name}")
 async def update_flow(name: str, flow_data: Any = Body(...)) -> dict[str, Any]:
-    """Actualiza un flow existente. Crea el archivo si no existe."""
+    """Updates an existing flow. Creates the file if it doesn't exist."""
     if not isinstance(flow_data, dict):
-        raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON de FlowDef")
+        raise HTTPException(status_code=400, detail="Body must be a JSON object of a FlowDef")
 
-    # Permite que el frontend omita el nombre en el body y se tome del path
+    # Lets the frontend omit the name in the body and take it from the path.
     if "name" not in flow_data:
         flow_data = {**flow_data, "name": name}
 
     if flow_data.get("name") != name:
         raise HTTPException(
             status_code=400,
-            detail=f"El nombre del body ('{flow_data['name']}') no coincide con la ruta ('{name}')"
+            detail=f"The body's name ('{flow_data['name']}') doesn't match the path ('{name}')"
         )
 
     try:
         flow_def = load_flow(flow_data)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"FlowDef inválido: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid FlowDef: {e}")
 
     save_flow(flow_def)
     from .storage import flow_to_dict
@@ -336,21 +336,21 @@ async def update_flow(name: str, flow_data: Any = Body(...)) -> dict[str, Any]:
 
 @router.delete("/flows/{name}", status_code=204)
 async def delete_editor_flow(name: str) -> Response:
-    """Elimina un flow del directorio flows/."""
+    """Deletes a flow from the flows/ directory."""
     if not delete_flow(name):
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
     return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
-# Ejecución desde el editor
+# Execution from the editor
 # ---------------------------------------------------------------------------
 
 @router.post("/flows/{name}/load", status_code=200)
 async def load_editor_flow(name: str) -> dict[str, Any]:
-    """Carga un flow en Ray: inicializa actores y GraphState persistente.
+    """Loads a flow into Ray: initializes actors and persistent GraphState.
 
-    Idempotente — si ya está cargado lo recarga (resetea el estado).
+    Idempotent — if already loaded, reloads it (resets state).
     """
     import asyncio
     from functools import partial
@@ -358,18 +358,18 @@ async def load_editor_flow(name: str) -> dict[str, Any]:
 
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
     try:
         loop = asyncio.get_event_loop()
         graph_id = await loop.run_in_executor(None, partial(load_flow_api, data))
         return {"graph_id": graph_id, "flow": name, "loaded": True}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error cargando el flow: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 
 
 @router.delete("/flows/{name}/load", status_code=200)
 async def unload_editor_flow(name: str) -> dict[str, Any]:
-    """Descarga un flow de Ray, destruyendo sus actores y GraphState."""
+    """Unloads a flow from Ray, destroying its actors and GraphState."""
     from rayflow.api import unload as unload_flow_api
     unload_flow_api(name)
     return {"flow": name, "loaded": False}
@@ -377,16 +377,16 @@ async def unload_editor_flow(name: str) -> dict[str, Any]:
 
 @router.get("/flows/{name}/loaded")
 async def flow_loaded_status(name: str) -> dict[str, Any]:
-    """Devuelve si el flow está actualmente cargado en Ray."""
+    """Returns whether the flow is currently loaded into Ray."""
     from rayflow.api import is_flow_loaded
     return {"flow": name, "loaded": is_flow_loaded(name)}
 
 
 @router.post("/flows/{name}/run")
 async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
-    """Ejecuta un flow (cargándolo si es necesario) con streaming SSE.
+    """Runs a flow (loading it if needed) with SSE streaming.
 
-    Devuelve un stream de eventos: node_start, node_done, edge_fire, flow_done, flow_error.
+    Returns a stream of events: node_start, node_done, edge_fire, flow_done, flow_error.
     """
     import asyncio
     import json
@@ -397,19 +397,19 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
     if inputs is None:
         inputs = {}
     if not isinstance(inputs, dict):
-        raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON de inputs")
+        raise HTTPException(status_code=400, detail="Body must be a JSON object of inputs")
 
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
 
-    # Cargar si no está cargado
+    # Load if not already loaded.
     if not is_flow_loaded(name):
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, partial(load_flow_api, data))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error cargando el flow: {e}")
+            raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 
     async def event_generator():
         try:
@@ -428,13 +428,13 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
 
 @router.post("/flows/{name}/test")
 async def test_editor_flow(name: str, body: Any = Body(default=None)) -> dict[str, Any]:
-    """Ejecuta un flow y compara sus outputs con los esperados.
+    """Runs a flow and compares its outputs against the expected ones.
 
-    Cierra el loop de auto-verificación de un agente: `/validate` confirma que el
-    grafo es válido; `/test` confirma que HACE lo que se pidió.
+    Closes an agent's self-verification loop: `/validate` confirms the graph
+    is valid; `/test` confirms it DOES what was asked.
 
-    Body: {"inputs": {...}, "expected_outputs": {...}}. Si se omiten
-    expected_outputs, devuelve los outputs reales sin comparar (passed=null).
+    Body: {"inputs": {...}, "expected_outputs": {...}}. If expected_outputs
+    is omitted, returns the actual outputs without comparing (passed=null).
     """
     import asyncio
     from functools import partial
@@ -443,22 +443,22 @@ async def test_editor_flow(name: str, body: Any = Body(default=None)) -> dict[st
     if body is None:
         body = {}
     if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body debe ser un objeto JSON")
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
     inputs = body.get("inputs", {})
     expected = body.get("expected_outputs")
     if not isinstance(inputs, dict):
-        raise HTTPException(status_code=400, detail="'inputs' debe ser un objeto JSON")
+        raise HTTPException(status_code=400, detail="'inputs' must be a JSON object")
 
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
 
     if not is_flow_loaded(name):
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, partial(load_flow_api, data))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error cargando el flow: {e}")
+            raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 
     actual: dict[str, Any] = {}
     error: str | None = None
@@ -466,7 +466,7 @@ async def test_editor_flow(name: str, body: Any = Body(default=None)) -> dict[st
         if evt.get("event") == "flow_done":
             actual = evt.get("result", {}) or {}
         elif evt.get("event") == "flow_error":
-            error = evt.get("error", "Error desconocido")
+            error = evt.get("error", "Unknown error")
 
     if error is not None:
         return {"passed": False, "actual": actual, "expected": expected, "error": error}
@@ -489,17 +489,17 @@ async def test_editor_flow(name: str, body: Any = Body(default=None)) -> dict[st
 
 @router.get("/flows/{name}/run/{run_id}/stream")
 async def reconnect_flow_run(name: str, run_id: str):
-    """Reconecta a un run SSE activo sin relanzar la ejecución.
+    """Reconnects to an active SSE run without relaunching execution.
 
-    Útil cuando el cliente pierde la conexión mientras el flow todavía corre.
-    Devuelve los eventos pendientes desde el momento de reconexión.
+    Useful when the client loses connection while the flow is still
+    running. Returns the pending events from the moment of reconnection.
     """
     import json
     from fastapi.responses import StreamingResponse
     from rayflow.api import reconnect_async, is_flow_loaded
 
     if not is_flow_loaded(name):
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no está cargado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' is not loaded")
 
     async def event_generator():
         try:
@@ -517,40 +517,40 @@ async def reconnect_flow_run(name: str, run_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Eventos — suscripción y desuscripción
+# Events — subscribe and unsubscribe
 # ---------------------------------------------------------------------------
 
 @router.post("/flows/{name}/serve-events", status_code=201)
 async def serve_flow_events(name: str) -> dict[str, Any]:
-    """Registra un flow como oyente de eventos (serve_events).
+    """Registers a flow as an event listener (serve_events).
 
-    El flow debe tener un nodo OnEvent con el event_name configurado, y
-    declarar ese evento en su campo `events`. Devuelve el graph_id asignado;
-    úsalo para desuscribir después.
+    The flow must have an OnEvent node with event_name configured, and must
+    declare that event in its `events` field. Returns the assigned graph_id;
+    use it to unsubscribe later.
     """
     from rayflow.api import serve_events
 
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
     try:
         graph_id = serve_events(data)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error registrando el flow: {e}")
+        raise HTTPException(status_code=400, detail=f"Error registering the flow: {e}")
     return {"graph_id": graph_id, "flow": name}
 
 
 @router.delete("/flows/{name}/serve-events/{graph_id}", status_code=204)
 async def stop_flow_events(name: str, graph_id: str) -> Response:
-    """Desuscribe un flow residente del bus de eventos."""
+    """Unsubscribes a resident flow from the event bus."""
     from rayflow.api import stop
 
     data = get_flow_dict(name)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
     try:
         flow_def = load_flow(data)
         stop(graph_id, flow_def.events)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error desuscribiendo el flow: {e}")
+        raise HTTPException(status_code=400, detail=f"Error unsubscribing the flow: {e}")
     return Response(status_code=204)

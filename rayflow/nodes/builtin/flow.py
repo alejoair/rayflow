@@ -1,11 +1,12 @@
-"""Nodo CallFlow — ejecuta un subflow desde dentro de un flow.
+"""CallFlow node — runs a subflow from within a flow.
 
-Tras el flatten() del validator, el subflow ya está expandido inline en el
-grafo plano (ids prefijados "{callflow_id}/..."). El CallFlow shell ya NO crea
-un FlowEngine: es orquestado por el engine, que dispara el entry del subgrafo
-inline (bloqueante), lee el FlowOutput de retorno como 'result', y continúa.
+After the validator's flatten(), the subflow is already expanded inline
+into the flat graph (ids prefixed "{callflow_id}/..."). The CallFlow shell
+no longer creates a FlowEngine: it's orchestrated by the engine, which fires
+the inline subgraph's entry (blocking), reads the return FlowOutput as
+'result', and continues.
 
-Ver FlowEngine._fire_callflow_node y validator.flatten().
+See FlowEngine._fire_callflow_node and validator.flatten().
 """
 from rayflow.nodes.decorators import (
     ExecContext,
@@ -19,19 +20,19 @@ from rayflow.nodes.decorators import (
 
 @engine_node
 class CallFlow:
-    """Ejecuta otro flow como subgrafo, ya aplanado inline por el build.
+    """Runs another flow as a subgraph, already flattened inline by the build.
 
-    Modos según 'isolated' (resuelto en build como state_path del subgrafo):
-    - False (default): el subgrafo comparte el GraphState del padre.
-    - True: el subgrafo tiene su propio GraphState (segmento de ruta).
+    Modes per 'isolated' (resolved at build time as the subgraph's state_path):
+    - False (default): the subgraph shares the parent's GraphState.
+    - True: the subgraph gets its own GraphState (a path segment).
 
-    El output 'result' es un dict con los outputs del subflow ("callflow_id.result").
-    Los inputs extra (más allá de 'flow'/'isolated') se pasan al FlowInput del
-    subgrafo (cableados en build).
+    The 'result' output is a dict with the subflow's outputs
+    ("callflow_id.result"). Extra inputs (beyond 'flow'/'isolated') are
+    passed to the subgraph's FlowInput (wired at build time).
 
-    run() no se invoca: el engine orquesta el nodo vía _fire_callflow_node a
-    partir de subflow_entry/subflow_exit del NodeDef. Este cuerpo existe solo
-    como declaración de pins.
+    run() is never invoked: the engine orchestrates this node via
+    _fire_callflow_node, using subflow_entry/subflow_exit from the NodeDef.
+    This body exists only as a pin declaration.
     """
     exec_in  = ExecInput()
     flow     = Input("Any",  default="")
@@ -40,6 +41,6 @@ class CallFlow:
     exec_out = ExecOutput()
 
     async def run(self, ctx: ExecContext, flow: str, isolated: bool, **extra_inputs) -> None:
-        # No se usa: el engine orquesta CallFlow directamente (ver
-        # FlowEngine._fire_callflow_node). Se deja por simetría de declaración.
+        # Not used: the engine orchestrates CallFlow directly (see
+        # FlowEngine._fire_callflow_node). Left here for declaration symmetry.
         pass

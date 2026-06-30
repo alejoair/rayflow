@@ -7,22 +7,22 @@ import ray
 
 @ray.remote
 class GraphState:
-    """Actor Ray que mantiene la memoria persistente de un flow cargado.
+    """Ray actor that holds the persistent memory of a loaded flow.
 
-    Una responsabilidad: variables nombradas (binding mutable nombre → ObjectRef)
-    que persisten entre runs del flow. Los outputs de nodos NO viven aquí — son
-    scratch por-run y los posee el RunContext del FlowEngine.
+    Single responsibility: named variables (a mutable name → ObjectRef
+    binding) that persist across runs of the flow. Node outputs do NOT live
+    here — they're per-run scratch owned by the FlowEngine's RunContext.
 
-    La secuencialidad del engine garantiza que nunca llegan dos escrituras
-    concurrentes, por lo que no se necesita ningún mecanismo de locking adicional.
+    The engine's sequentiality guarantees that two writes never arrive
+    concurrently, so no additional locking mechanism is needed.
     """
 
     def __init__(self, variables_defaults: dict[str, Any] | None = None):
-        # nombre_variable → ObjectRef (o valor directo)
+        # variable_name → ObjectRef (or a direct value)
         self._variables: dict[str, Any] = {}
-        # variables vigiladas: clave_variable → nombre del evento a publicar al cambiar
+        # watched variables: variable_key → name of the event to publish on change
         self._watched: dict[str, str] = {}
-        self._broker = None  # handle al EventBroker (lazy)
+        self._broker = None  # handle to the EventBroker (lazy)
 
         if variables_defaults:
             for name, value in variables_defaults.items():
@@ -37,19 +37,19 @@ class GraphState:
         if event_name is None:
             self._variables[name] = ref
             return
-        # Variable vigilada: comparar viejo vs nuevo y, si cambió, publicar.
+        # Watched variable: compare old vs new and publish if it changed.
         old = self._resolve(self._variables.get(name))
         new = self._resolve(ref)
         self._variables[name] = ref
         try:
             changed = old != new
         except Exception:
-            changed = True  # si la comparación falla, asumir cambio
+            changed = True  # if the comparison fails, assume it changed
         if changed:
             self._publish_change(event_name, name, new, old)
 
     def watch_variable(self, key: str, event_name: str) -> None:
-        """Marca una variable como vigilada: al cambiar, publica `event_name`."""
+        """Marks a variable as watched: publishes `event_name` when it changes."""
         self._watched[key] = event_name
 
     def unwatch_variable(self, key: str) -> None:
@@ -60,7 +60,7 @@ class GraphState:
         return ray.get(v) if isinstance(v, ray.ObjectRef) else v
 
     def _publish_change(self, event_name: str, var: str, new: Any, old: Any) -> None:
-        # Fire-and-forget: no bloquear el actor de estado esperando al broker.
+        # Fire-and-forget: don't block the state actor waiting on the broker.
         try:
             if self._broker is None:
                 from rayflow.events.bus import get_event_broker

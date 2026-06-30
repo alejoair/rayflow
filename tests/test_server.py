@@ -1,4 +1,4 @@
-"""Tests de la API REST (rayflow serve)."""
+"""Tests for the REST API (rayflow serve)."""
 import pytest
 import ray
 from fastapi.testclient import TestClient
@@ -58,7 +58,7 @@ def test_flow_detail(client):
 
 
 def test_flow_detail_404(client):
-    r = client.get("/flows/inexistente")
+    r = client.get("/flows/nonexistent")
     assert r.status_code == 404
 
 
@@ -69,15 +69,15 @@ def test_run_flow(client):
 
 
 def test_run_flow_404(client):
-    r = client.post("/flows/inexistente/run", json={"x": 1})
+    r = client.post("/flows/nonexistent/run", json={"x": 1})
     assert r.status_code == 404
 
 
-def test_run_flow_body_no_es_objeto(client):
+def test_run_flow_body_is_not_an_object(client):
     r = client.post("/flows/suma/run", json=[1, 2, 3])
     assert r.status_code == 400
 
 
-def test_nombres_duplicados_falla_al_cargar():
-    with pytest.raises(ValueError, match="comparten el nombre"):
+def test_duplicate_names_fail_to_load():
+    with pytest.raises(ValueError, match="share the name"):
         load_served_flows([SUMA, dict(SUMA)])

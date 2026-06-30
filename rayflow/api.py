@@ -18,12 +18,12 @@ from rayflow.engine.executor import (
 
 
 def load(source: str | Path | dict) -> str:
-    """Carga un flow en Ray: crea actores y GraphState persistente.
+    """Loads a flow into Ray: creates actors and a persistent GraphState.
 
-    Idempotente: si el flow ya está cargado, lo recarga (destruye y recrea).
+    Idempotent: if the flow is already loaded, it reloads it (destroys and recreates).
 
     Returns:
-        graph_id del flow cargado (= nombre del flow).
+        graph_id of the loaded flow (= the flow's name).
     """
     flow_def = load_flow(source)
     catalog = get_catalog()
@@ -33,15 +33,15 @@ def load(source: str | Path | dict) -> str:
 
 
 def unload(name: str) -> None:
-    """Descarga un flow de Ray, destruyendo sus actores y GraphState."""
+    """Unloads a flow from Ray, destroying its actors and GraphState."""
     unload_flow_from_ray(name)
 
 
 def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[dict, None, None]:
-    """Ejecuta un flow ya cargado y hace streaming de eventos.
+    """Executes an already-loaded flow and streams its events.
 
-    Yields dicts con eventos: node_start, node_done, edge_fire, flow_done, flow_error.
-    Si el flow no está cargado, lo carga automáticamente primero.
+    Yields event dicts: node_start, node_done, edge_fire, flow_done, flow_error.
+    If the flow isn't loaded, it's loaded automatically first.
     """
     if not is_flow_loaded(name):
         load(name)
@@ -53,7 +53,7 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
     ray.get(queue.create_run.remote(run_id))
     lf.execute(flow_inputs or {}, run_id)
 
-    # get() bloquea en el actor hasta que llega cada evento — sin polling ni sleep
+    # get() blocks on the actor until each event arrives — no polling, no sleep.
     try:
         while True:
             evt = ray.get(queue.get.remote(run_id, timeout=300.0))
@@ -65,10 +65,10 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
 
 
 async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) -> AsyncGenerator[dict, None]:
-    """Versión async de execute() — usa await en lugar de ray.get bloqueante.
+    """Async version of execute() — uses await instead of a blocking ray.get.
 
-    Designed para usarse desde un async context (FastAPI async generator),
-    evitando el overhead de run_in_executor del generador síncrono.
+    Designed to be used from an async context (a FastAPI async generator),
+    avoiding the run_in_executor overhead of the sync generator.
     """
     import time as _time
 
@@ -107,14 +107,14 @@ async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) ->
 
 
 async def reconnect_async(name: str, run_id: str) -> AsyncGenerator[dict, None]:
-    """Reconecta a un run activo ya iniciado por execute_async().
+    """Reconnects to an active run already started by execute_async().
 
-    No crea ni cierra la sub-queue — solo consume eventos desde donde se quedó.
-    Termina cuando llega flow_done/flow_error o timeout.
+    Doesn't create or close the sub-queue — just consumes events from where
+    it left off. Ends when flow_done/flow_error arrives, or on timeout.
     """
     lf = get_loaded_flow(name)
     if lf is None:
-        yield {"event": "flow_error", "error": f"Flow '{name}' no está cargado", "ts": 0}
+        yield {"event": "flow_error", "error": f"Flow '{name}' is not loaded", "ts": 0}
         return
 
     queue = lf._queue
@@ -129,9 +129,9 @@ async def reconnect_async(name: str, run_id: str) -> AsyncGenerator[dict, None]:
 
 
 def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
-    """Carga, ejecuta y descarga un flow. Wrapper de compatibilidad one-shot.
+    """Loads, executes, and unloads a flow. One-shot compatibility wrapper.
 
-    Para flows stateful usar load() + execute() + unload().
+    For stateful flows use load() + execute() + unload().
     """
     flow_def = load_flow(source)
     name = flow_def.name
@@ -142,20 +142,20 @@ def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
             if evt.get("event") == "flow_done":
                 result = evt.get("result", {})
             elif evt.get("event") == "flow_error":
-                raise RuntimeError(evt.get("error", "Error desconocido"))
+                raise RuntimeError(evt.get("error", "Unknown error"))
         return result
     finally:
         unload(name)
 
 
 def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = None) -> str:
-    """Carga un flow en Ray y lo suscribe al bus de eventos.
+    """Loads a flow into Ray and subscribes it to the event bus.
 
-    El flow queda residente: cada vez que se emita uno de sus eventos
-    declarados, el engine existente recibe execute() con el payload.
+    The flow stays resident: every time one of its declared events is
+    emitted, the existing engine receives execute() with the payload.
 
     Returns:
-        graph_id asignado (= nombre del flow).
+        the assigned graph_id (= the flow's name).
     """
     flow_def = load_flow(source)
     catalog = get_catalog(extra_node_dirs)
@@ -168,9 +168,10 @@ def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = 
     for event_name in flow_def.events:
         ray.get(broker.subscribe.remote(event_name, flow_def.name, graph_id))
 
-    # Registrar vigilancia de variables (nodos OnVariableChange): suscribe este
-    # flow al evento sintético var:{source}/{variable} y marca la variable como
-    # vigilada en el GraphState del flow fuente (que debe estar ya cargado).
+    # Register variable watches (OnVariableChange nodes): subscribes this
+    # flow to the synthetic event var:{source}/{variable} and marks the
+    # variable as watched in the source flow's GraphState (which must
+    # already be loaded).
     for rnode in built.nodes.values():
         if rnode.meta.name != "OnVariableChange" or rnode.node_def.subflow_of is not None:
             continue
@@ -185,13 +186,13 @@ def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = 
             src_gs = ray.get_actor(f"gs_{src}", namespace="rayflow")
             ray.get(src_gs.watch_variable.remote(var, event_name))
         except ValueError:
-            pass  # el flow fuente aún no está cargado; cárgalo antes que el vigía
+            pass  # the source flow isn't loaded yet; load it before the watcher
 
     return graph_id
 
 
 def stop(graph_id: str, event_names: list[str]) -> None:
-    """Desuscribe un flow del bus de eventos y lo descarga de Ray."""
+    """Unsubscribes a flow from the event bus and unloads it from Ray."""
     from rayflow.events.bus import get_event_broker
     broker = get_event_broker()
     for event_name in event_names:
@@ -201,12 +202,12 @@ def stop(graph_id: str, event_names: list[str]) -> None:
 
 @ray.remote
 def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
-    """Task de Ray que ejecuta un flow residente al recibir un evento.
+    """Ray task that runs a resident flow when an event arrives.
 
-    Resuelve el flow por sus actores con nombre (engine_/queue_), no por el
-    registro _loaded_flows: esta task corre en un worker de Ray distinto del
-    proceso driver, donde _loaded_flows está vacío. Los actores detached del
-    flow cargado sí son alcanzables por nombre desde cualquier proceso.
+    Resolves the flow via its named actors (engine_/queue_), not via the
+    _loaded_flows registry: this task runs on a Ray worker distinct from
+    the driver process, where _loaded_flows is empty. The loaded flow's
+    detached actors ARE reachable by name from any process, though.
     """
     import uuid as _uuid
 
@@ -214,14 +215,14 @@ def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
         engine = ray.get_actor(f"engine_{flow_name}", namespace="rayflow")
         queue = ray.get_actor(f"queue_{flow_name}", namespace="rayflow")
     except ValueError:
-        return  # el flow no está cargado (sus actores no existen)
+        return  # the flow isn't loaded (its actors don't exist)
 
     run_id = _uuid.uuid4().hex[:8]
 
-    # Los eventos de cambio de variable (var:{flow}/{var}) llevan un payload dict
-    # que es directamente el conjunto de flow_inputs (value/old/variable) que
-    # consume el nodo OnVariableChange. El resto de eventos se envuelven en
-    # {"payload": ...} para el nodo OnEvent.
+    # Variable-change events (var:{flow}/{var}) carry a payload dict that IS
+    # directly the set of flow_inputs (value/old/variable) consumed by the
+    # OnVariableChange node. Every other event is wrapped in
+    # {"payload": ...} for the OnEvent node.
     if isinstance(payload, dict) and event_name.startswith("var:"):
         flow_inputs = payload
     else:

@@ -1,10 +1,10 @@
-"""Actor Ray de cola de eventos por ejecución.
+"""Ray actor for the per-execution event queue.
 
-Permite que el FlowEngine (actor remoto) publique eventos que FastAPI
-puede consumir via get() bloqueante para reenviarlos como SSE al cliente HTTP.
+Lets the FlowEngine (a remote actor) publish events that FastAPI consumes
+via a blocking get() to forward them as SSE to the HTTP client.
 
-Un único actor por flow persiste durante toda la vida del flow cargado.
-Cada ejecución reserva una sub-queue identificada por run_id.
+A single actor per flow persists for the whole lifetime of the loaded flow.
+Each execution reserves a sub-queue identified by run_id.
 """
 from __future__ import annotations
 import asyncio
@@ -14,13 +14,13 @@ import ray
 
 @ray.remote
 class RunQueue:
-    """Cola FIFO de eventos de ejecución, accesible desde cualquier proceso Ray.
+    """FIFO queue of execution events, reachable from any Ray process.
 
-    Gestiona múltiples ejecuciones simultáneas (en la práctica secuenciales por
-    el event loop del FlowEngine) mediante un dict {run_id -> asyncio.Queue}.
+    Manages multiple simultaneous executions (in practice sequential, due to
+    the FlowEngine's event loop) via a dict {run_id -> asyncio.Queue}.
 
-    El engine llama push() fire-and-forget. El driver llama get() bloqueante
-    — se desbloquea en el momento exacto en que llega cada evento, sin polling.
+    The engine calls push() fire-and-forget. The driver calls a blocking
+    get() — it unblocks the instant each event arrives, with no polling.
     """
 
     def __init__(self) -> None:
@@ -35,10 +35,10 @@ class RunQueue:
             await q.put(event)
 
     async def get(self, run_id: str, timeout: float = 300.0) -> dict[str, Any]:
-        """Bloquea hasta que haya un evento disponible o se agote el timeout."""
+        """Blocks until an event is available or the timeout elapses."""
         q = self._queues.get(run_id)
         if q is None:
-            raise KeyError(f"run_id desconocido: {run_id}")
+            raise KeyError(f"unknown run_id: {run_id}")
         return await asyncio.wait_for(q.get(), timeout)
 
     async def close_run(self, run_id: str) -> None:

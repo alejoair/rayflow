@@ -10,27 +10,28 @@ from rayflow.nodes.decorators import NodeMeta, _NODE_META_ATTR, get_node_meta
 
 
 class NodeCatalog:
-    """Descubre y registra nodos desde uno o varios directorios."""
+    """Discovers and registers nodes from one or more directories."""
 
     def __init__(self):
-        # nombre_nodo → (clase, NodeMeta)
+        # node_name → (class, NodeMeta)
         self._registry: dict[str, tuple[type, NodeMeta]] = {}
 
     def load_custom_nodes_package(self) -> None:
-        """Importa el paquete ./custom_nodes/ del cwd como módulo REAL.
+        """Imports the cwd's ./custom_nodes/ as a REAL package.
 
-        A diferencia de load_directory (que usa nombres de módulo sintéticos no
-        importables desde otro proceso), aquí los nodos quedan bajo
-        `custom_nodes.<modulo>` — un módulo importable. Esto es lo que permite
-        que sus clases se reconstruyan en los workers Ray (que reciben
-        custom_nodes/ vía runtime_env py_modules) al deserializar el BuiltFlow.
+        Unlike load_directory (which uses synthetic module names that can't
+        be imported from another process), here the nodes live under
+        `custom_nodes.<module>` — an importable module. This is what lets
+        their classes be reconstructed in Ray workers (which receive
+        custom_nodes/ via runtime_env py_modules) when deserializing the
+        BuiltFlow.
         """
         from rayflow.workspace import custom_nodes_path
 
         cn = custom_nodes_path()
         if not cn.exists():
             return
-        # El cwd debe estar en sys.path para que `import custom_nodes.*` funcione.
+        # cwd must be on sys.path for `import custom_nodes.*` to work.
         cwd = str(cn.parent)
         if cwd not in sys.path:
             sys.path.insert(0, cwd)
@@ -43,8 +44,8 @@ class NodeCatalog:
                 module = importlib.import_module(module_name)
             except Exception:
                 continue
-            # Forzar serialización por valor: custom_nodes/ solo está en sys.path
-            # del driver, no en los workers Ray ni en el actor FlowEngine.
+            # Force serialization by value: custom_nodes/ is only on the
+            # driver's sys.path, not on Ray workers or the FlowEngine actor.
             try:
                 import ray.cloudpickle as _cp
                 _cp.register_pickle_by_value(module)
@@ -53,10 +54,10 @@ class NodeCatalog:
             self._register_from_module(module)
 
     def load_directory(self, directory: str | Path) -> None:
-        """Importa todos los .py del directorio y registra los nodos encontrados.
+        """Imports every .py in the directory and registers the nodes found.
 
-        Usa nombres de módulo sintéticos — apto para nodos locales del driver,
-        NO para distribución a workers (usar custom_nodes/ para eso).
+        Uses synthetic module names — fine for nodes local to the driver,
+        NOT for distribution to workers (use custom_nodes/ for that).
         """
         directory = Path(directory)
         if not directory.exists():
@@ -79,10 +80,11 @@ class NodeCatalog:
             sys.modules.pop(module_name, None)
             return
         self._register_from_module(module)
-        # Quitar de sys.modules después de registrar: cloudpickle serializa las
-        # clases por referencia al módulo solo si está en sys.modules. Sin él,
-        # fuerza serialización por valor (inline), lo que permite deserializarlas
-        # en workers Ray sin necesidad de importar un módulo sintético no disponible.
+        # Remove from sys.modules after registering: cloudpickle serializes
+        # classes by reference to their module only if it's present in
+        # sys.modules. Without it, serialization falls back to by-value
+        # (inline), which lets them be deserialized in Ray workers without
+        # needing to import an unavailable synthetic module.
         sys.modules.pop(module_name, None)
 
     def _register_from_module(self, module) -> None:
@@ -94,20 +96,20 @@ class NodeCatalog:
     def register(self, cls: type) -> None:
         meta = get_node_meta(cls)
         if meta is None:
-            raise ValueError(f"{cls} no tiene metadata de nodo (@node no aplicado)")
+            raise ValueError(f"{cls} has no node metadata (@node was not applied)")
         existing = self._registry.get(meta.name)
         if existing is not None and existing[0] is not cls:
             raise ValueError(
-                f"Nodo '{meta.name}' duplicado: ya registrado como {existing[0]!r}, "
-                f"se intentó registrar {cls!r}. Renombra uno de los dos."
+                f"Duplicate node '{meta.name}': already registered as {existing[0]!r}, "
+                f"attempted to register {cls!r}. Rename one of the two."
             )
         self._registry[meta.name] = (cls, meta)
 
     def register_alias(self, alias: str, target: str) -> None:
-        """Registra `alias` apuntando a la misma clase y meta que `target`."""
+        """Registers `alias` pointing to the same class and metadata as `target`."""
         entry = self._registry.get(target)
         if entry is None:
-            raise ValueError(f"No se puede crear alias '{alias}': nodo '{target}' no está registrado")
+            raise ValueError(f"Can't create alias '{alias}': node '{target}' is not registered")
         self._registry[alias] = entry
 
     def get(self, name: str) -> tuple[type, NodeMeta] | None:

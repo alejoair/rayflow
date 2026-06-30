@@ -1,4 +1,4 @@
-"""Tests de nodos custom por convención (custom_nodes/ + flows/ en el cwd)."""
+"""Tests for convention-based custom nodes (custom_nodes/ + flows/ in the cwd)."""
 import sys
 import textwrap
 
@@ -32,8 +32,8 @@ CUSTOM_NODE_SRC = textwrap.dedent('''
         loud = Output("str")
         exec_out = ExecOutput()
         async def run(self, ctx, text):
-            # set_output expone 'loud' ANTES del await fire, así el
-            # subgrafo disparado por exec_out ya lo puede leer.
+            # set_output exposes 'loud' BEFORE the await fire, so the
+            # subgraph triggered by exec_out can already read it.
             ctx.set_output("loud", text.upper() + "!")
             await ctx.fire("exec_out")
 ''')
@@ -52,11 +52,11 @@ TRIPLE_FLOW = {
 
 @pytest.fixture
 def workspace_dir(tmp_path, monkeypatch):
-    """Crea un workspace temporal con custom_nodes/ y flows/, y hace cwd ahí."""
+    """Creates a temp workspace with custom_nodes/ and flows/, and chdirs into it."""
     cn = tmp_path / "custom_nodes"
     cn.mkdir()
     (cn / "__init__.py").write_text("", encoding="utf-8")
-    (cn / "mis_nodos.py").write_text(CUSTOM_NODE_SRC, encoding="utf-8")
+    (cn / "my_nodes.py").write_text(CUSTOM_NODE_SRC, encoding="utf-8")
     (tmp_path / "flows").mkdir()
     import json
     (tmp_path / "flows" / "triple_flow.json").write_text(
@@ -66,52 +66,52 @@ def workspace_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
-    # Limpiar módulos custom_nodes cacheados de runs anteriores para que
-    # importlib.import_module() reimporte desde el nuevo cwd.
+    # Clear custom_nodes modules cached from previous runs so
+    # importlib.import_module() re-imports them from the new cwd.
     for key in list(sys.modules):
         if key == "custom_nodes" or key.startswith("custom_nodes."):
             sys.modules.pop(key)
     reset_catalog()
-    get_catalog()  # fuerza carga del catálogo desde el nuevo cwd
+    get_catalog()  # forces the catalog to load from the new cwd
     yield tmp_path
 
 
-def test_custom_nodes_descubiertos_por_convencion(workspace_dir):
-    """get_catalog descubre Triple y Shout desde ./custom_nodes/."""
+def test_custom_nodes_discovered_by_convention(workspace_dir):
+    """get_catalog discovers Triple and Shout from ./custom_nodes/."""
     cat = get_catalog()
     assert cat.get("Triple") is not None
     assert cat.get("Shout") is not None
 
 
-def test_ensure_workspace_crea_carpetas(tmp_path, monkeypatch):
-    """ensure_workspace crea custom_nodes/ (con __init__.py) y flows/."""
+def test_ensure_workspace_creates_folders(tmp_path, monkeypatch):
+    """ensure_workspace creates custom_nodes/ (with __init__.py) and flows/."""
     monkeypatch.chdir(tmp_path)
     workspace.ensure_workspace()
     assert (tmp_path / "custom_nodes" / "__init__.py").exists()
     assert (tmp_path / "flows").exists()
 
 
-def test_resolve_flow_por_nombre(workspace_dir):
-    """resolve_flow encuentra flows/triple_flow.json por nombre."""
+def test_resolve_flow_by_name(workspace_dir):
+    """resolve_flow finds flows/triple_flow.json by name."""
     path = workspace.resolve_flow("triple_flow")
     assert path.endswith("triple_flow.json")
 
 
-def test_resolve_flow_inexistente(workspace_dir):
+def test_resolve_flow_nonexistent(workspace_dir):
     with pytest.raises(FileNotFoundError):
         workspace.resolve_flow("no_existe")
 
 
-def test_runtime_env_con_nodos(workspace_dir):
-    """runtime_env apunta a custom_nodes/ cuando hay nodos custom."""
+def test_runtime_env_with_nodes(workspace_dir):
+    """runtime_env points at custom_nodes/ when there are custom nodes."""
     env = workspace.runtime_env()
     assert env is not None
     assert "py_modules" in env
     assert env["py_modules"][0].endswith("custom_nodes")
 
 
-def test_engine_node_custom_se_ejecuta(workspace_dir):
-    """Un @engine_node custom (corre en el driver) funciona."""
+def test_custom_engine_node_runs(workspace_dir):
+    """A custom @engine_node (runs on the driver) works."""
     out = rayflow.run({
         "name": "shout_flow",
         "inputs": {"msg": "str"},

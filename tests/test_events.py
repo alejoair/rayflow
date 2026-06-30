@@ -1,9 +1,9 @@
-"""Tests del EventBroker: pub/sub fire-and-forget con namespaces.
+"""Tests for the EventBroker: fire-and-forget pub/sub with namespaces.
 
-La comunicación entre flows se verifica con solo nodos builtin: el flow
-receptor (OnEvent) re-emite un evento de 'done' al ejecutarse, y el test lo
-observa con el contador de publicaciones del broker. Así se evita un nodo
-custom (que no viajaría al worker que ejecuta el receptor).
+Communication between flows is verified using only builtin nodes: the
+receiving flow (OnEvent) re-emits a 'done' event when it runs, and the test
+observes it via the broker's publish counter. This avoids needing a custom
+node (which wouldn't travel to the worker running the receiver).
 """
 import time
 
@@ -35,12 +35,12 @@ def _wait_count(event_name, n, timeout=20.0):
     return ray.get(broker.publish_count.remote(event_name))
 
 
-def test_emit_dispara_onevent_de_otro_flow():
-    """Un flow emite a 'demo/ping'; otro suscrito se ejecuta y re-emite 'demo/done'."""
-    done_event = f"demo/done/{time.time_ns()}"  # único por corrida
+def test_emit_triggers_onevent_of_another_flow():
+    """A flow emits to 'demo/ping'; another subscribed to it runs and re-emits 'demo/done'."""
+    done_event = f"demo/done/{time.time_ns()}"  # unique per run
 
-    receptor = {
-        "name": "receptor",
+    receiver = {
+        "name": "receiver",
         "events": ["demo/ping"],
         "nodes": [
             {"id": "on", "type": "OnEvent", "inputs": {"event_name": "demo/ping"}},
@@ -48,28 +48,28 @@ def test_emit_dispara_onevent_de_otro_flow():
              "inputs": {"event_name": done_event, "payload": "on.payload"}},
         ],
     }
-    serve_events(receptor)
+    serve_events(receiver)
 
-    emisor = {
-        "name": "emisor",
+    sender = {
+        "name": "sender",
         "nodes": [
             {"id": "s", "type": "OnStart"},
             {"id": "emit", "type": "EmitEvent", "exec_in": "s",
              "inputs": {"event_name": "demo/ping", "payload": "hola"}},
         ],
     }
-    rayflow.run(emisor)
+    rayflow.run(sender)
 
-    # Si el receptor se ejecutó, habrá publicado 'demo/done/...' exactamente 1 vez.
+    # If the receiver ran, it will have published 'demo/done/...' exactly once.
     assert _wait_count(done_event, 1) == 1
 
 
-def test_onvariablechange_dispara_al_cambiar_variable():
-    """Cambiar una variable vigilada dispara el flow que la observa.
+def test_onvariablechange_triggers_when_variable_changes():
+    """Changing a watched variable triggers the flow watching it.
 
-    src_var escribe la variable `counter`; watcher_var la vigila con
-    OnVariableChange y re-emite un evento 'done' al dispararse. Además se
-    verifica que escribir el mismo valor NO vuelve a disparar.
+    src_var writes the `counter` variable; watcher_var watches it with
+    OnVariableChange and re-emits a 'done' event when triggered. Also
+    verifies that writing the same value does NOT trigger it again.
     """
     done_event = f"varchg/done/{time.time_ns()}"
 
@@ -93,14 +93,14 @@ def test_onvariablechange_dispara_al_cambiar_variable():
         ],
     }
 
-    rayflow.load(src)       # crea gs_src_var antes de registrar la vigilancia
-    serve_events(watcher)   # registra el watch sobre gs_src_var
+    rayflow.load(src)       # creates gs_src_var before registering the watch
+    serve_events(watcher)   # registers the watch on gs_src_var
     try:
         for _ in rayflow.execute("src_var", {"n": 42}):
             pass
         assert _wait_count(done_event, 1) == 1
 
-        # Escribir el mismo valor no debe disparar de nuevo.
+        # Writing the same value again must not trigger it again.
         for _ in rayflow.execute("src_var", {"n": 42}):
             pass
         time.sleep(2)
@@ -110,12 +110,12 @@ def test_onvariablechange_dispara_al_cambiar_variable():
         rayflow.unload("src_var")
 
 
-def test_namespaces_aislados_no_se_cruzan():
-    """Emitir a 'ns_a/ev' no dispara un suscriptor de 'ns_b/ev' (matching exacto)."""
+def test_isolated_namespaces_dont_cross():
+    """Emitting to 'ns_a/ev' doesn't trigger a subscriber of 'ns_b/ev' (exact matching)."""
     done_event = f"ns_b/done/{time.time_ns()}"
 
-    receptor_b = {
-        "name": "receptor_b",
+    receiver_b = {
+        "name": "receiver_b",
         "events": ["ns_b/ev"],
         "nodes": [
             {"id": "on", "type": "OnEvent", "inputs": {"event_name": "ns_b/ev"}},
@@ -123,25 +123,25 @@ def test_namespaces_aislados_no_se_cruzan():
              "inputs": {"event_name": done_event, "payload": "x"}},
         ],
     }
-    serve_events(receptor_b)
+    serve_events(receiver_b)
 
-    emisor_a = {
-        "name": "emisor_a",
+    sender_a = {
+        "name": "sender_a",
         "nodes": [
             {"id": "s", "type": "OnStart"},
             {"id": "emit", "type": "EmitEvent", "exec_in": "s",
-             "inputs": {"event_name": "ns_a/ev", "payload": "no-deberia-llegar"}},
+             "inputs": {"event_name": "ns_a/ev", "payload": "should-not-arrive"}},
         ],
     }
-    rayflow.run(emisor_a)
+    rayflow.run(sender_a)
 
-    # Dar tiempo a que (no) se dispare nada; el receptor de ns_b no debe ejecutarse.
+    # Give it time for (nothing) to fire; the ns_b receiver must not run.
     time.sleep(3)
     assert ray.get(get_event_broker().publish_count.remote(done_event)) == 0
 
 
-def test_publish_sin_suscriptores_no_falla():
-    """Publicar a un evento sin suscriptores devuelve 0 y no lanza."""
+def test_publish_without_subscribers_does_not_fail():
+    """Publishing to an event with no subscribers returns 0 and doesn't raise."""
     broker = get_event_broker()
-    n = ray.get(broker.publish.remote("nadie/escucha", "x"))
+    n = ray.get(broker.publish.remote("nobody/listening", "x"))
     assert n == 0

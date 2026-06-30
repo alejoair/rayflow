@@ -1,41 +1,42 @@
-"""Sistema de tipos de los data pins.
+"""Type system for data pins.
 
-Decisiones de diseño (acordadas para v1):
-- Registro cerrado de primitivos: int, float, str, bool, list, dict, Any.
-- Genéricos opcionales: list[T] y dict[str, T]. list sin parámetro == list[Any].
-- Compatibilidad ESTRICTA: dos pins conectados deben tener el mismo tipo, o uno
-  ser Any. No hay coerción implícita. En particular int y float son incompatibles
-  (los casteos se hacen con nodos explícitos: ToInt, ToFloat, ...).
-- Sin tipos de usuario en v1.
+Design decisions (settled for v1):
+- Closed registry of primitives: int, float, str, bool, list, dict, Any.
+- Optional generics: list[T] and dict[str, T]. list with no parameter ==
+  list[Any].
+- STRICT compatibility: two connected pins must have the same type, or one
+  must be Any. No implicit coercion. In particular, int and float are
+  incompatible (casting is done with explicit nodes: ToInt, ToFloat, ...).
+- No user-defined types in v1.
 
-Un tipo se representa siempre como string canónico ("int", "list[str]",
-"dict[str, Any]"). Las clases Python (int, str, ...) usadas en anotaciones se
-normalizan a ese string.
+A type is always represented as a canonical string ("int", "list[str]",
+"dict[str, Any]"). Python classes (int, str, ...) used in annotations are
+normalized to that string.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Conjunto cerrado de tipos primitivos permitidos.
+# Closed set of allowed primitive types.
 PRIMITIVES: frozenset[str] = frozenset(
     {"int", "float", "str", "bool", "list", "dict", "Any"}
 )
 
-# Tipos que admiten parámetro genérico.
+# Types that accept a generic parameter.
 GENERIC_CONTAINERS: frozenset[str] = frozenset({"list", "dict"})
 
 
 class TypeError_(Exception):
-    """Error de tipo del sistema de pines (nombre con _ para no chocar con builtin)."""
+    """Pin-type-system error (named with a trailing _ to avoid clashing with the builtin)."""
 
 
 @dataclass(frozen=True)
 class PinType:
-    """Tipo de un data pin ya parseado y validado.
+    """An already-parsed and validated data pin type.
 
-    base: nombre del contenedor o primitivo ("int", "list", "dict", "Any").
-    param: tipo del elemento para list[T] / dict[str, T]; None si no aplica.
-           Para dict solo se modela el tipo del valor (la clave es siempre str).
+    base: container or primitive name ("int", "list", "dict", "Any").
+    param: element type for list[T] / dict[str, T]; None if not applicable.
+           For dict, only the value type is modeled (the key is always str).
     """
     base: str
     param: "PinType | None" = None
@@ -52,14 +53,14 @@ ANY = PinType("Any")
 
 
 # ---------------------------------------------------------------------------
-# Parseo / normalización
+# Parsing / normalization
 # ---------------------------------------------------------------------------
 
 def parse_type(spec) -> PinType:
-    """Convierte un tipo canónico (string) en un PinType validado.
+    """Converts a canonical type (string) into a validated PinType.
 
-    La ÚNICA forma de expresar un tipo es un string: "int", "list[str]",
-    "dict[str, Any]", "Any". Lanza TypeError_ si es desconocido o mal formado.
+    The ONLY way to express a type is a string: "int", "list[str]",
+    "dict[str, Any]", "Any". Raises TypeError_ if unknown or malformed.
     """
     if spec is None:
         return ANY
@@ -68,34 +69,34 @@ def parse_type(spec) -> PinType:
     if isinstance(spec, str):
         return _parse_str(spec.strip())
     raise TypeError_(
-        f"El tipo de un pin debe ser un string canónico (p.ej. 'int', 'list[str]'); "
-        f"recibido {spec!r}"
+        f"A pin's type must be a canonical string (e.g. 'int', 'list[str]'); "
+        f"got {spec!r}"
     )
 
 
 def _parse_str(s: str) -> PinType:
     if "[" not in s:
         if s not in PRIMITIVES:
-            raise TypeError_(f"Tipo desconocido: '{s}'. Permitidos: {sorted(PRIMITIVES)}")
+            raise TypeError_(f"Unknown type: '{s}'. Allowed: {sorted(PRIMITIVES)}")
         return PinType(s)
 
-    # Contenedor genérico: base[...]
+    # Generic container: base[...]
     if not s.endswith("]"):
-        raise TypeError_(f"Tipo mal formado: '{s}'")
+        raise TypeError_(f"Malformed type: '{s}'")
     base, inner = s[: s.index("[")], s[s.index("[") + 1 : -1]
     base = base.strip()
     inner = inner.strip()
 
     if base not in GENERIC_CONTAINERS:
-        raise TypeError_(f"'{base}' no admite parámetro genérico")
+        raise TypeError_(f"'{base}' doesn't accept a generic parameter")
 
     if base == "dict":
-        # dict[str, V]: la clave debe ser str.
+        # dict[str, V]: the key must be str.
         key, _, val = inner.partition(",")
         if val == "":
-            raise TypeError_("dict requiere dos parámetros: dict[str, V]")
+            raise TypeError_("dict requires two parameters: dict[str, V]")
         if key.strip() != "str":
-            raise TypeError_("La clave de dict debe ser str: dict[str, V]")
+            raise TypeError_("dict's key must be str: dict[str, V]")
         return PinType("dict", _parse_str(val.strip()))
 
     # list[T]
@@ -103,15 +104,15 @@ def _parse_str(s: str) -> PinType:
 
 
 # ---------------------------------------------------------------------------
-# Compatibilidad estricta
+# Strict compatibility
 # ---------------------------------------------------------------------------
 
 def compatible(consumer, producer) -> bool:
-    """True si un valor de tipo `producer` puede conectarse a un pin `consumer`.
+    """True if a value of type `producer` can connect to a `consumer` pin.
 
-    Estricto: mismo tipo o uno de los dos es Any. Recursivo en el parámetro
-    genérico (list[str] conecta con list[str] y con list[Any], no con list[int]).
-    Sin coerción: int y float son incompatibles.
+    Strict: same type, or one of the two is Any. Recursive on the generic
+    parameter (list[str] connects with list[str] and with list[Any], not
+    with list[int]). No coercion: int and float are incompatible.
     """
     c = parse_type(consumer)
     p = parse_type(producer)
@@ -123,8 +124,8 @@ def _compatible(c: PinType, p: PinType) -> bool:
         return True
     if c.base != p.base:
         return False
-    # Mismo base. Comparar parámetro si ambos lo tienen.
+    # Same base. Compare the parameter if both have one.
     if c.param is None or p.param is None:
-        # list vs list[str]: uno sin parámetro == list[Any] -> compatible.
+        # list vs list[str]: one with no parameter == list[Any] -> compatible.
         return True
     return _compatible(c.param, p.param)

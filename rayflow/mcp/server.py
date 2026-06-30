@@ -1,11 +1,11 @@
-"""Set curado de tools MCP construido con FastMCP.
+"""Curated set of MCP tools built with FastMCP.
 
-Reusa la misma lógica que la API REST del editor (catálogo, validación, CRUD,
-ejecución) en vez de reimplementarla, exponiéndola como tools pensadas para un
-LLM: nombres claros, descripciones de cuándo usarlas y formatos de entrada.
+Reuses the same logic as the editor's REST API (catalog, validation, CRUD,
+execution) instead of reimplementing it, exposing it as tools designed for
+an LLM: clear names, descriptions of when to use them, and input formats.
 
-El loop típico de un agente:
-    get_guide -> list_nodes -> [get_example] -> validate_flow (itera) ->
+An agent's typical loop:
+    get_guide -> list_nodes -> [get_example] -> validate_flow (iterate) ->
     create_flow/update_flow -> test_flow / run_flow.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 
 
 def create_mcp(served: dict | None = None):
-    """Construye el servidor FastMCP con las tools curadas de Rayflow."""
+    """Builds the FastMCP server with Rayflow's curated tools."""
     from fastmcp import FastMCP
 
     from rayflow.nodes.registry import get_catalog
@@ -34,76 +34,76 @@ def create_mcp(served: dict | None = None):
 
     mcp = FastMCP("Rayflow")
 
-    # ----- Descubrimiento -----
+    # ----- Discovery -----
 
     @mcp.tool
     def get_guide() -> str:
-        """Guía del modelo de Rayflow (estructura del flow JSON, reglas de
-        cableado, pins dinámicos, tipos). LLAMA ESTO PRIMERO para saber cómo se
-        construye un flow."""
+        """Guide to Rayflow's model (flow JSON structure, wiring rules,
+        dynamic pins, types). CALL THIS FIRST to learn how a flow is
+        built."""
         from rayflow.editor.guide import GUIDE
         return GUIDE
 
     @mcp.tool
     def list_nodes() -> list[dict[str, Any]]:
-        """Catálogo completo de tipos de nodo con sus pins de entrada/salida,
-        exec outputs, categoría, descripción y pins dinámicos. Úsalo para saber
-        qué nodos existen y cómo se conectan."""
+        """Full catalog of node types with their input/output pins, exec
+        outputs, category, description, and dynamic pins. Use it to learn
+        which nodes exist and how they connect."""
         return [_node_spec(name, meta) for name, _cls, meta in get_catalog()]
 
     @mcp.tool
     def get_node(node_type: str) -> dict[str, Any]:
-        """Spec de un tipo de nodo concreto (pins, tipos, defaults, descripción)."""
+        """Spec of a specific node type (pins, types, defaults, description)."""
         entry = get_catalog().get(node_type)
         if entry is None:
-            return {"error": f"Tipo de nodo '{node_type}' no encontrado"}
+            return {"error": f"Node type '{node_type}' not found"}
         _cls, meta = entry
         return _node_spec(node_type, meta)
 
     @mcp.tool
     def list_types() -> dict[str, Any]:
-        """Tipos canónicos disponibles y reglas de compatibilidad estricta."""
+        """Available canonical types and strict compatibility rules."""
         from rayflow.types import PRIMITIVES
         return {
             "primitives": sorted(PRIMITIVES),
             "generics": ["list[T]", "dict[str, V]"],
             "notes": [
-                "Compatibilidad estricta: mismo tipo o uno de los dos es Any.",
-                "int y float son incompatibles — usar ToInt / ToFloat para castear.",
+                "Strict compatibility: same type, or one of the two is Any.",
+                "int and float are incompatible — use ToInt / ToFloat to cast.",
             ],
         }
 
     @mcp.tool
     def type_check(from_type: str, to_type: str) -> dict[str, Any]:
-        """Comprueba si un pin de tipo from_type puede conectarse a uno to_type."""
+        """Checks whether a pin of type from_type can connect to one of type to_type."""
         try:
             ok = compatible(to_type, from_type)
         except Exception as e:
             return {"error": str(e)}
         return {"compatible": ok, "from_type": from_type, "to_type": to_type}
 
-    # ----- Validación -----
+    # ----- Validation -----
 
     @mcp.tool
     def validate_flow(flow: dict) -> dict[str, Any]:
-        """Valida un FlowDef SIN ejecutarlo. Devuelve TODOS los errores y
-        warnings de una sola pasada. Úsalo en bucle hasta valid=true antes de
-        guardar el flow. `flow` es el objeto JSON completo del flow."""
+        """Validates a FlowDef WITHOUT running it. Returns ALL errors and
+        warnings in a single pass. Use it in a loop until valid=true before
+        saving the flow. `flow` is the flow's full JSON object."""
         if not isinstance(flow, dict):
-            return {"valid": False, "errors": ["El flow debe ser un objeto JSON"], "warnings": []}
+            return {"valid": False, "errors": ["The flow must be a JSON object"], "warnings": []}
         warnings = unknown_keys(flow)
         try:
             flow_def = load_flow(flow)
             errors = validate_all(flow_def, get_catalog())
         except Exception as e:
-            return {"valid": False, "errors": [f"Error de parseo: {e}"], "warnings": warnings}
+            return {"valid": False, "errors": [f"Parse error: {e}"], "warnings": warnings}
         return {"valid": not errors, "errors": errors, "warnings": warnings}
 
-    # ----- CRUD de flows -----
+    # ----- Flow CRUD -----
 
     @mcp.tool
     def list_flows() -> list[dict[str, Any]]:
-        """Lista los flows guardados con su interfaz pública (inputs/outputs)."""
+        """Lists saved flows with their public interface (inputs/outputs)."""
         return [
             {
                 "name": f.get("name"),
@@ -116,70 +116,71 @@ def create_mcp(served: dict | None = None):
 
     @mcp.tool
     def get_flow(name: str) -> dict[str, Any]:
-        """Devuelve el FlowDef JSON completo de un flow guardado."""
+        """Returns the full JSON FlowDef of a saved flow."""
         data = get_flow_dict(name)
         if data is None:
-            return {"error": f"Flow '{name}' no encontrado"}
+            return {"error": f"Flow '{name}' not found"}
         return data
 
     @mcp.tool
     def create_flow(flow: dict) -> dict[str, Any]:
-        """Crea y guarda un flow nuevo. Valida primero con validate_flow.
-        Falla si ya existe un flow con ese nombre (usa update_flow para editar)."""
+        """Creates and saves a new flow. Validate first with validate_flow.
+        Fails if a flow with that name already exists (use update_flow to edit)."""
         if not isinstance(flow, dict):
-            return {"error": "El flow debe ser un objeto JSON"}
+            return {"error": "The flow must be a JSON object"}
         try:
             flow_def = load_flow(flow)
         except Exception as e:
-            return {"error": f"FlowDef inválido: {e}"}
+            return {"error": f"Invalid FlowDef: {e}"}
         if get_flow_dict(flow_def.name) is not None:
-            return {"error": f"Ya existe un flow con el nombre '{flow_def.name}'"}
+            return {"error": f"A flow named '{flow_def.name}' already exists"}
         save_flow(flow_def)
         return flow_to_dict(flow_def)
 
     @mcp.tool
     def update_flow(name: str, flow: dict) -> dict[str, Any]:
-        """Actualiza (o crea) el flow `name` con el FlowDef dado."""
+        """Updates (or creates) the flow `name` with the given FlowDef."""
         if not isinstance(flow, dict):
-            return {"error": "El flow debe ser un objeto JSON"}
+            return {"error": "The flow must be a JSON object"}
         if "name" not in flow:
             flow = {**flow, "name": name}
         if flow.get("name") != name:
-            return {"error": f"El nombre del body ('{flow.get('name')}') no coincide con '{name}'"}
+            return {"error": f"The body's name ('{flow.get('name')}') doesn't match '{name}'"}
         try:
             flow_def = load_flow(flow)
         except Exception as e:
-            return {"error": f"FlowDef inválido: {e}"}
+            return {"error": f"Invalid FlowDef: {e}"}
         save_flow(flow_def)
         return flow_to_dict(flow_def)
 
     @mcp.tool
     def delete_flow(name: str) -> dict[str, Any]:
-        """Elimina un flow guardado."""
+        """Deletes a saved flow."""
         ok = _delete_flow(name)
         return {"deleted": ok, "flow": name}
 
     @mcp.tool
     def flow_catalog(name: str) -> dict[str, Any]:
-        """Catálogo resuelto de un flow: cada nodo con sus pins REALES en este
-        contexto, incluyendo los dinámicos (outputs de OnStart = inputs del flow,
-        ramas branch_N de Parallel, etc.). Úsalo para saber exactamente qué cablear."""
+        """Resolved catalog of a flow: each node with its REAL pins in this
+        context, including the dynamic ones (OnStart's outputs = the
+        flow's inputs, Parallel's branch_N branches, etc.). Use it to know
+        exactly what you can wire up."""
         from rayflow.build.validator import flatten, _with_dynamic_pins
         from rayflow.editor.routes import _pin_spec
 
         data = get_flow_dict(name)
         if data is None:
-            return {"error": f"Flow '{name}' no encontrado"}
+            return {"error": f"Flow '{name}' not found"}
         catalog = get_catalog()
         try:
             flat = flatten(load_flow(data), catalog)
         except Exception as e:
-            return {"error": f"No se pudo aplanar el flow: {e}"}
+            return {"error": f"Could not flatten the flow: {e}"}
         nodes_out = []
         for nd in flat.nodes:
             entry = catalog.get(nd.type)
             if entry is None:
-                nodes_out.append({"id": nd.id, "type": nd.type, "error": "tipo desconocido"})
+                nodes_out.append({"id": nd.id, "type": nd.type, "error": "unknown type"})
                 continue
             _cls, meta = entry
             meta = _with_dynamic_pins(meta, flat, nd)
@@ -192,47 +193,47 @@ def create_mcp(served: dict | None = None):
             })
         return {"flow": name, "nodes": nodes_out}
 
-    # ----- Ejecución / verificación -----
+    # ----- Execution / verification -----
 
     @mcp.tool
     async def run_flow(name: str, inputs: dict | None = None) -> dict[str, Any]:
-        """Ejecuta un flow guardado (cargándolo si hace falta) y devuelve sus
-        outputs. `inputs` mapea cada input declarado del flow a su valor."""
+        """Runs a saved flow (loading it if needed) and returns its
+        outputs. `inputs` maps each declared input of the flow to its value."""
         from rayflow.api import execute_async, load as load_api, is_flow_loaded
 
         if get_flow_dict(name) is None:
-            return {"error": f"Flow '{name}' no encontrado"}
+            return {"error": f"Flow '{name}' not found"}
         data = get_flow_dict(name)
         if not is_flow_loaded(name):
             try:
                 load_api(data)
             except Exception as e:
-                return {"error": f"Error cargando el flow: {e}"}
+                return {"error": f"Error loading the flow: {e}"}
         result: dict[str, Any] = {}
         async for evt in execute_async(name, inputs or {}):
             if evt.get("event") == "flow_done":
                 result = evt.get("result", {}) or {}
             elif evt.get("event") == "flow_error":
-                return {"error": evt.get("error", "Error desconocido")}
+                return {"error": evt.get("error", "Unknown error")}
         return {"outputs": result}
 
     @mcp.tool
     async def test_flow(
         name: str, inputs: dict | None = None, expected_outputs: dict | None = None
     ) -> dict[str, Any]:
-        """Ejecuta un flow y compara sus outputs con expected_outputs. Úsalo para
-        verificar que el flow HACE lo que se pidió (no solo que es válido).
-        Devuelve passed, actual, expected y los mismatches."""
+        """Runs a flow and compares its outputs against expected_outputs.
+        Use it to verify the flow DOES what was asked (not just that it's
+        valid). Returns passed, actual, expected, and the mismatches."""
         from rayflow.api import execute_async, load as load_api, is_flow_loaded
 
         data = get_flow_dict(name)
         if data is None:
-            return {"error": f"Flow '{name}' no encontrado"}
+            return {"error": f"Flow '{name}' not found"}
         if not is_flow_loaded(name):
             try:
                 load_api(data)
             except Exception as e:
-                return {"error": f"Error cargando el flow: {e}"}
+                return {"error": f"Error loading the flow: {e}"}
         actual: dict[str, Any] = {}
         async for evt in execute_async(name, inputs or {}):
             if evt.get("event") == "flow_done":
@@ -250,14 +251,14 @@ def create_mcp(served: dict | None = None):
         return {"passed": not mismatches, "actual": actual,
                 "expected": expected_outputs, "mismatches": mismatches}
 
-    # ----- Ejemplos -----
+    # ----- Examples -----
 
     def _examples_dir() -> Path:
         return Path(__file__).parent.parent / "editor" / "examples"
 
     @mcp.tool
     def list_examples() -> list[dict[str, Any]]:
-        """Lista los flows de ejemplo incluidos (plantillas few-shot)."""
+        """Lists the bundled example flows (few-shot templates)."""
         out = []
         d = _examples_dir()
         if d.exists():
@@ -272,10 +273,10 @@ def create_mcp(served: dict | None = None):
 
     @mcp.tool
     def get_example(name: str) -> dict[str, Any]:
-        """Devuelve el JSON completo de un flow de ejemplo (úsalo como plantilla)."""
+        """Returns the full JSON of an example flow (use it as a template)."""
         path = _examples_dir() / f"{name}.json"
         if not path.exists():
-            return {"error": f"Ejemplo '{name}' no encontrado"}
+            return {"error": f"Example '{name}' not found"}
         try:
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception as e:

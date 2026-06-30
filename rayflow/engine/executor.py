@@ -15,22 +15,23 @@ from rayflow.state.actor import GraphState
 
 @dataclass
 class RunContext:
-    """Frontera de aislamiento de una ejecución (run) del flow.
+    """Isolation boundary for a single flow execution (run).
 
-    Posee todo el scratch transitorio de un run: identidad, handle a la cola de
-    eventos, outputs de nodos (scope por-run), readiness de joins AND y el
-    acumulador del resultado del flow. Lo persistente y compartido entre runs
-    (variables del GraphState, `self` de los @ray_node) vive fuera de aquí.
+    Owns all of a run's transient scratch state: identity, the event queue
+    handle, node outputs (per-run scoped), AND-join readiness, and the
+    flow result accumulator. What's persistent and shared across runs
+    (GraphState variables, @ray_node `self`) lives outside this object.
 
-    Threadeando un RunContext por cada execute() en vez de guardar el run activo
-    en `self`, el engine soporta runs concurrentes aislados sin lock.
+    By threading a RunContext through each execute() call instead of keeping
+    the active run in `self`, the engine supports isolated concurrent runs
+    with no lock.
     """
 
     run_id: str
-    queue: Any                                          # handle a la RunQueue
-    node_outputs: dict[str, dict[str, Any]] = field(default_factory=dict)  # node_id → {pin → valor}
-    exec_arrivals: dict[str, set[str]] = field(default_factory=dict)       # readiness de joins AND
-    output_refs: dict[str, Any] = field(default_factory=dict)              # acumulador del resultado
+    queue: Any                                          # RunQueue handle
+    node_outputs: dict[str, dict[str, Any]] = field(default_factory=dict)  # node_id → {pin → value}
+    exec_arrivals: dict[str, set[str]] = field(default_factory=dict)       # AND-join readiness
+    output_refs: dict[str, Any] = field(default_factory=dict)              # result accumulator
 
 
 def _var_key(state_path: str | None, var_name: str) -> str:
@@ -38,7 +39,7 @@ def _var_key(state_path: str | None, var_name: str) -> str:
 
 
 def _resolve_refs(obj: Any) -> Any:
-    """Resuelve recursivamente ObjectRefs anidados en dicts y listas."""
+    """Recursively resolves nested ObjectRefs in dicts and lists."""
     if isinstance(obj, ray.ObjectRef):
         return _resolve_refs(ray.get(obj))
     if isinstance(obj, dict):
@@ -50,16 +51,16 @@ def _resolve_refs(obj: Any) -> Any:
 
 @ray.remote
 class FlowEngine:
-    """Motor de ejecución stateful de un flow ya construido (BuiltFlow).
+    """Stateful execution engine for an already-built flow (BuiltFlow).
 
-    El actor vive mientras el flow esté cargado. El GraphState y los actores
-    @ray_node se crean en __init__ y persisten entre ejecuciones — las variables
-    mantienen su valor entre requests.
+    The actor lives as long as the flow stays loaded. GraphState and the
+    @ray_node actors are created in __init__ and persist across executions —
+    variables keep their value between requests.
 
-    Cada llamada a execute() es serializada por Ray (event loop del actor):
-    si llega un segundo request mientras el primero corre, espera en la cola.
+    Each execute() call is serialized by Ray (the actor's event loop): if a
+    second request arrives while the first is running, it waits in queue.
 
-    Emite eventos a una RunQueue por ejecución para streaming SSE al cliente.
+    Emits events to a per-execution RunQueue for SSE streaming to the client.
     """
 
     def __init__(
@@ -70,7 +71,7 @@ class FlowEngine:
         self._built = built
         self._actors: dict[str, Any] = actors
 
-        # GraphState persistente — se inicializa con los defaults de variables
+        # Persistent GraphState — initialized with variable defaults.
         var_defaults = {v.name: v.default for v in self._built.flow_def.variables}
         self._state = GraphState.options(
             name=f"gs_{self._get_graph_id()}",
@@ -78,29 +79,30 @@ class FlowEngine:
             lifetime="detached",
         ).remote(var_defaults)
 
-        # Runs vivos, indexados por run_id. Cada uno posee su propio scratch
+        # Live runs, indexed by run_id. Each owns its own scratch state
         # (RunContext: run_id, queue, node_outputs, exec_arrivals, output_refs)
-        # — nada por-run vive en self, así que dos execute() concurrentes están
-        # aislados y el actor async puede intercalarlos sin lock. Lo único
-        # compartido entre runs es lo que debe serlo: variables del GraphState
-        # y el `self` de los @ray_node.
+        # — nothing per-run lives on self, so two concurrent execute() calls
+        # are isolated and the async actor can interleave them with no lock.
+        # The only thing shared across runs is what should be: GraphState
+        # variables and @ray_node `self`.
         self._runs: dict[str, RunContext] = {}
 
     def _get_graph_id(self) -> str:
-        # El graph_id se deriva del nombre del actor engine — se asigna en LoadedFlow
-        # Usamos el nombre del flow como base estable
+        # graph_id is derived from the engine actor's name — assigned in LoadedFlow.
+        # We use the flow's name as a stable base.
         return self._built.flow_def.name
 
     # ------------------------------------------------------------------
-    # API pública
+    # Public API
     # ------------------------------------------------------------------
 
     async def execute(self, flow_inputs: dict[str, Any], queue_ref: Any, run_id: str) -> dict[str, Any]:
-        """Ejecuta el flow con los inputs dados, emitiendo eventos a queue_ref.
+        """Executes the flow with the given inputs, emitting events to queue_ref.
 
-        Todo el scratch del run vive en un RunContext local (no en self), que se
-        threadea por los métodos internos. Sin lock: dos execute() concurrentes
-        están aislados por su RunContext y el actor async puede intercalarlos.
+        All of a run's scratch state lives in a local RunContext (not in
+        self), threaded through the internal methods. No lock: two
+        concurrent execute() calls are isolated by their own RunContext and
+        the async actor can interleave them.
         """
         run = RunContext(run_id=run_id, queue=queue_ref)
         for node_id, rnode in self._built.nodes.items():
@@ -152,7 +154,7 @@ class FlowEngine:
         return self._get_graph_id()
 
     # ------------------------------------------------------------------
-    # Ciclo interno
+    # Internal execution loop
     # ------------------------------------------------------------------
 
     async def _run_loop(self, run: RunContext, entry_id: str, arrived_from: str | None = None) -> None:
@@ -171,9 +173,9 @@ class FlowEngine:
         if arrived_from is not None:
             arrivals.add(arrived_from)
         if len(arrivals) >= len(self._built.nodes[node_id].exec_sources):
-            # Reset para la siguiente ola: un join AND recorrido más de una vez
-            # (dentro de un loop / reentrancia) debe volver a esperar a TODAS sus
-            # fuentes, no quedar permanentemente "listo".
+            # Reset for the next wave: an AND join visited more than once
+            # (inside a loop / re-entrancy) must wait on ALL its sources
+            # again, not stay permanently "ready".
             arrivals.clear()
             return True
         return False
@@ -218,7 +220,7 @@ class FlowEngine:
         return rnode.exec_targets.get("exec_out", [])
 
     # ------------------------------------------------------------------
-    # @engine_node y @parallel_node
+    # @engine_node and @parallel_node
     # ------------------------------------------------------------------
 
     async def _fire_engine_node(self, run: RunContext, node_id: str, rnode: ResolvedNode) -> list[str]:
@@ -244,16 +246,17 @@ class FlowEngine:
         ctx = ExecContext(node_id, graph_id, rnode.state_path)
 
         async def _engine_fire(pin: str) -> None:
-            # Flushea los outputs acumulados al RunContext solo si hay nodos
-            # sucesores que puedan leerlos. Evita escrituras en cada iteración
-            # de un loop cuyo pin (p.ej. loop_body) no tiene targets directos.
+            # Flushes accumulated outputs to the RunContext only if there are
+            # successor nodes that can read them. Avoids writes on every
+            # iteration of a loop whose pin (e.g. loop_body) has no direct
+            # targets.
             targets = rnode.exec_targets.get(pin, [])
             if ctx._pending_outputs and targets:
                 await self._write_node_outputs(run, node_id, ctx._pending_outputs.copy())
                 ctx._pending_outputs.clear()
             await self._local_fire(run, node_id, rnode, pin)
 
-        ctx._output_writer = lambda nid, pin, val: None  # set_output acumula en _pending_outputs
+        ctx._output_writer = lambda nid, pin, val: None  # set_output accumulates into _pending_outputs
         ctx._fire_handler = _engine_fire
 
         started_at = time.time()
@@ -284,7 +287,7 @@ class FlowEngine:
 
         graph_id = self._get_graph_id()
         ctx = ExecContext(node_id, graph_id, rnode.state_path)
-        ctx._run_id = run.run_id  # viaja serializado al worker: las RPC de vuelta (fire/set_output) van scopeadas al run
+        ctx._run_id = run.run_id  # travels serialized to the worker: return RPCs (fire/set_output) are scoped to this run
 
         started_at = time.time()
         await self._emit_node_start(run, node_id, rnode)
@@ -298,15 +301,16 @@ class FlowEngine:
         return []
 
     # ------------------------------------------------------------------
-    # Emisión de eventos a la RunQueue
+    # Pushing events to the RunQueue
     # ------------------------------------------------------------------
 
     async def _emit_node_start(self, run: RunContext, node_id: str, rnode: ResolvedNode) -> None:
         if run.queue is None:
             return
-        # Fire-and-forget: el push es trivial y el driver drena la queue por
-        # polling. Esperar el ObjectRef (await) introduce latencia de Ray sin
-        # beneficio — el orden FIFO lo garantiza el event loop del RunQueue.
+        # Fire-and-forget: the push is trivial and the driver drains the
+        # queue via blocking get(). Awaiting the ObjectRef here would add Ray
+        # RPC latency with no benefit — FIFO order is already guaranteed by
+        # the RunQueue actor's sequential event loop.
         run.queue.push.remote(run.run_id, {
             "event": "node_start",
             "node_id": node_id,
@@ -326,7 +330,7 @@ class FlowEngine:
         })
 
     # ------------------------------------------------------------------
-    # Resolución de data inputs
+    # Data input resolution
     # ------------------------------------------------------------------
 
     async def _resolve_inputs(self, run: RunContext, rnode: ResolvedNode) -> dict[str, Any]:
@@ -345,10 +349,10 @@ class FlowEngine:
         src_pin = res_pin.source_pin
         src_rnode = self._built.nodes.get(src_id)
 
-        # Lee del scratch por-run: si el productor no se disparó EN ESTE run, no
-        # hay entrada y caemos al default (o a evaluar el pure node). La
-        # staleness entre runs desaparece por construcción (run.node_outputs
-        # arranca vacío en cada execute()).
+        # Read from per-run scratch: if the producer wasn't fired IN THIS run,
+        # there's no entry, and we fall back to the default (or evaluate the
+        # pure node). Staleness across runs disappears by construction
+        # (run.node_outputs starts empty on every execute()).
         node_outs = run.node_outputs.get(src_id)
         ref = node_outs.get(src_pin) if node_outs is not None else None
         if ref is not None:
@@ -391,7 +395,7 @@ class FlowEngine:
         }
 
     async def _write_node_outputs(self, run: RunContext, node_id: str, outputs: dict[str, Any]) -> None:
-        # Scratch por-run: dict local en memoria, sin round-trip al GraphState.
+        # Per-run scratch: a plain in-memory dict, no GraphState round-trip.
         existing = run.node_outputs.get(node_id)
         if existing is None:
             run.node_outputs[node_id] = dict(outputs)
@@ -400,14 +404,14 @@ class FlowEngine:
 
 
 # ---------------------------------------------------------------------------
-# LoadedFlow — ciclo de vida de un flow cargado en Ray
+# LoadedFlow — lifecycle of a flow loaded into Ray
 # ---------------------------------------------------------------------------
 
 class LoadedFlow:
-    """Flow con actores Ray vivos y GraphState persistente.
+    """A flow with live Ray actors and persistent GraphState.
 
-    Se crea con LoadedFlow.load(built) y se destruye con .unload().
-    Entre requests, el GraphState mantiene el estado de variables.
+    Created with LoadedFlow.load(built) and destroyed with .unload().
+    Between requests, GraphState keeps variable values around.
     """
 
     def __init__(self, graph_id: str, engine: Any, actors: dict[str, Any], queue: Any, flow_def=None):
@@ -415,26 +419,26 @@ class LoadedFlow:
         self._engine = engine
         self._actors = actors
         self._queue = queue
-        self.flow_def = flow_def  # FlowDef original para inspección de interfaz
+        self.flow_def = flow_def  # original FlowDef, for interface inspection
 
     @classmethod
     def load(cls, built: BuiltFlow) -> "LoadedFlow":
         graph_id = built.flow_def.name
 
-        # Destruir actores previos si existían (recarga)
+        # Destroy previous actors if they existed (reload).
         for actor_name in (f"engine_{graph_id}", f"gs_{graph_id}", f"queue_{graph_id}"):
             try:
                 ray.kill(ray.get_actor(actor_name, namespace="rayflow"))
             except Exception:
                 pass
 
-        # Spawn actores @ray_node
+        # Spawn @ray_node actors.
         actors: dict[str, Any] = {}
         for node_id, rnode in built.nodes.items():
             if rnode.meta.is_engine_node or rnode.meta.is_parallel:
                 continue
             if rnode.meta.is_exec_node and rnode.meta.ray_handle is not None:
-                # Destruir actor previo si existe
+                # Destroy a previous actor of the same name if it exists.
                 try:
                     old_actor = ray.get_actor(f"{node_id}_{graph_id}", namespace="rayflow")
                     ray.kill(old_actor)
@@ -460,20 +464,21 @@ class LoadedFlow:
             lifetime="detached",
         ).remote(built, actors)
 
-        # Esperar a que el engine termine __init__ (que crea el GraphState) antes
-        # de devolver: así engine_{graph_id} y gs_{graph_id} son localizables por
-        # nombre apenas load() retorna (lo necesita, p.ej., el registro de
-        # vigilancia de variables de un flow que se sirva después).
+        # Wait for the engine to finish __init__ (which creates GraphState)
+        # before returning: this guarantees engine_{graph_id} and
+        # gs_{graph_id} are resolvable by name as soon as load() returns —
+        # needed, e.g., by variable-watch registration for a flow served
+        # afterward.
         ray.get(engine.get_graph_id.remote())
 
         return cls(graph_id, engine, actors, queue, flow_def=built.flow_def)
 
     def execute(self, flow_inputs: dict[str, Any], run_id: str) -> Any:
-        """Lanza execute() en el engine y devuelve el ObjectRef (no bloquea)."""
+        """Dispatches execute() on the engine and returns the ObjectRef (non-blocking)."""
         return self._engine.execute.remote(flow_inputs, self._queue, run_id)
 
     def unload(self) -> None:
-        """Destruye todos los actores del flow."""
+        """Destroys every actor belonging to the flow."""
         for actor in self._actors.values():
             try:
                 ray.kill(actor)
@@ -491,7 +496,7 @@ class LoadedFlow:
 
 
 # ---------------------------------------------------------------------------
-# Registro global de flows cargados (en el proceso driver)
+# Global registry of loaded flows (in the driver process)
 # ---------------------------------------------------------------------------
 
 _loaded_flows: dict[str, LoadedFlow] = {}
