@@ -82,11 +82,12 @@ def create_app(served: dict[str, ServedFlow]):
     from pathlib import Path as _Path
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.staticfiles import StaticFiles
+    from rayflow import __version__
     from rayflow.api import run
     from rayflow.editor.routes import router as editor_router
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
 
-    app = FastAPI(title="Rayflow", version="0.1.0")
+    app = FastAPI(title="Rayflow", version=__version__)
     app.include_router(editor_router)
     app.include_router(custom_nodes_router)
 

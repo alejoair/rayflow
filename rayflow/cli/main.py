@@ -1,8 +1,10 @@
 import click
 
+from rayflow import __version__
+
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version=__version__)
 def cli():
     """RayFlow - Visual flow editor with Ray distributed execution"""
     pass
