@@ -10,5 +10,19 @@
       "Search",
       "Explore"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/file_map_context.py 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
