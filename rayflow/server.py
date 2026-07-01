@@ -16,6 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 from rayflow.schema.loader import load_flow
 from rayflow.schema.models import FlowDef
 from rayflow.nodes.registry import get_catalog
@@ -141,7 +144,7 @@ def create_app(served: dict[str, ServedFlow]):
         return sf.interface
 
     @app.post("/flows/{name}/run")
-    async def run_flow(name: str, inputs: Any = Body(default=None)) -> dict[str, Any]:
+    async def run_flow(request: Request, name: str, inputs: Any = Body(default=None)) -> JSONResponse:
         sf = served.get(name)
         if sf is None:
             raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
@@ -153,13 +156,29 @@ def create_app(served: dict[str, ServedFlow]):
                 status_code=400, detail="Body must be a JSON object of inputs"
             )
 
+        # Every served flow's trigger IS this HTTP request — OnStart always
+        # exposes headers/query/body/method (see _with_dynamic_pins in
+        # build/validator.py), alongside whatever named inputs the flow
+        # declares from the body. Reserved names win on collision.
+        flow_inputs = {
+            **inputs,
+            "headers": dict(request.headers),
+            "query": dict(request.query_params),
+            "body": inputs,
+            "method": request.method,
+        }
+
         # execute_async reuses the persistent graph loaded once at startup
         # (see create_app above) instead of reloading per request.
         result: dict[str, Any] = {}
+        response_status = 200
+        response_headers: dict[str, str] = {}
         try:
-            async for evt in execute_async(name, inputs):
+            async for evt in execute_async(name, flow_inputs):
                 if evt.get("event") == "flow_done":
                     result = evt.get("result", {}) or {}
+                    response_status = evt.get("response_status", 200)
+                    response_headers = evt.get("response_headers", {}) or {}
                 elif evt.get("event") == "flow_error":
                     raise HTTPException(
                         status_code=500, detail=f"Error running the flow: {evt.get('error')}"
@@ -168,7 +187,7 @@ def create_app(served: dict[str, ServedFlow]):
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error running the flow: {e}")
-        return result
+        return JSONResponse(content=result, status_code=response_status, headers=response_headers)
 
     return app
 

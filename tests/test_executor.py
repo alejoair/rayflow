@@ -516,3 +516,151 @@ def test_outputs_not_stale_between_runs():
         )
     finally:
         rayflow.unload("stale_check")
+
+
+# ---------------------------------------------------------------------------
+# OnStart's request pins + ctx.set_response_status/set_response_header
+# ---------------------------------------------------------------------------
+
+def _execute_flow_done_event(name: str, inputs: dict) -> dict:
+    """Runs an already-loaded flow and returns the raw flow_done event
+    (not just its 'result'), so response_status/response_headers are
+    visible too."""
+    evt_out = None
+    for evt in rayflow.execute(name, inputs):
+        if evt.get("event") == "flow_done":
+            evt_out = evt
+        elif evt.get("event") == "flow_error":
+            raise AssertionError(f"flow_error: {evt.get('error')}")
+    assert evt_out is not None
+    return evt_out
+
+
+def test_onstart_request_pins_default_when_not_triggered_over_http():
+    """Calling execute() directly (no server.py involved) never supplies
+    headers/query/body/method in flow_inputs — a node wiring from
+    entry.headers falls back to its own Input's declared default, per
+    _resolve_pin's fallback chain (node_outputs miss -> not a pure node ->
+    consumer's default). Uses a custom node with an explicit {} default
+    rather than wiring straight into FlowOutput, whose auto-generated
+    dynamic pins always default to None regardless of declared type."""
+    from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput, Input, Output
+    from rayflow.nodes.registry import get_catalog
+
+    @engine_node
+    class EchoHeaders:
+        exec_in = ExecInput()
+        headers = Input("dict[str, str]", default={})
+        out = Output("dict")
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext, headers: dict) -> None:
+            ctx.set_output("out", headers)
+            await ctx.fire("exec_out")
+
+    get_catalog().register(EchoHeaders)
+
+    flow = {
+        "name": "no_http_context",
+        "outputs": {"headers": "dict"},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "echo", "type": "EchoHeaders", "exec_in": "entry", "inputs": {"headers": "entry.headers"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "echo", "inputs": {"headers": "echo.out"}},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        result = _execute_collect("no_http_context", {})
+        assert result["headers"] == {}
+    finally:
+        rayflow.unload("no_http_context")
+
+
+def test_set_response_status_and_header_engine_node():
+    """ctx.set_response_status()/set_response_header() land in the
+    flow_done event via the engine_node local-closure path (no RPC)."""
+    from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput
+    from rayflow.nodes.registry import get_catalog
+
+    @engine_node
+    class SetRespEngine:
+        exec_in = ExecInput()
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext) -> None:
+            ctx.set_response_status(201)
+            ctx.set_response_header("x-foo", "bar")
+            await ctx.fire("exec_out")
+
+    get_catalog().register(SetRespEngine)
+
+    flow = {
+        "name": "resp_engine_node",
+        "outputs": {},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "s", "type": "SetRespEngine", "exec_in": "entry"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "s"},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        evt = _execute_flow_done_event("resp_engine_node", {})
+        assert evt["response_status"] == 201
+        assert evt["response_headers"] == {"x-foo": "bar"}
+    finally:
+        rayflow.unload("resp_engine_node")
+
+
+def test_set_response_status_ray_node():
+    """Same as above, but via a @ray_node — exercises the RPC path
+    (set_response_meta on the FlowEngine actor) instead of the local
+    closure, from a separate worker process."""
+    from rayflow.nodes.decorators import ray_node, ExecContext, ExecInput, ExecOutput
+    from rayflow.nodes.registry import get_catalog
+
+    @ray_node
+    class SetRespRay:
+        exec_in = ExecInput()
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext) -> None:
+            ctx.set_response_status(403)
+            await ctx.fire("exec_out")
+
+    get_catalog().register(SetRespRay)
+
+    flow = {
+        "name": "resp_ray_node",
+        "outputs": {},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "s", "type": "SetRespRay", "exec_in": "entry"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "s"},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        evt = _execute_flow_done_event("resp_ray_node", {})
+        assert evt["response_status"] == 403
+    finally:
+        rayflow.unload("resp_ray_node")
+
+
+def test_response_status_defaults_to_200_when_never_set():
+    flow = {
+        "name": "resp_default",
+        "outputs": {},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "entry"},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        evt = _execute_flow_done_event("resp_default", {})
+        assert evt["response_status"] == 200
+        assert evt["response_headers"] == {}
+    finally:
+        rayflow.unload("resp_default")

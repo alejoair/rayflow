@@ -89,6 +89,7 @@ class ExecContext:
         state_path: str | None = None,
         _output_writer=None,
         _fire_handler=None,
+        _response_writer=None,
     ):
         self._node_id = node_id
         self._graph_id = graph_id
@@ -98,6 +99,7 @@ class ExecContext:
         self._state_handle = None
         self._output_writer = _output_writer  # only valid locally
         self._fire_handler = _fire_handler    # only valid locally
+        self._response_writer = _response_writer  # only valid locally
         self._pending_outputs: dict[str, Any] = {}  # local in-memory buffer for engine_nodes
 
     def __getstate__(self):
@@ -113,6 +115,7 @@ class ExecContext:
             "_state_handle": None,
             "_output_writer": None,
             "_fire_handler": None,
+            "_response_writer": None,
             "_pending_outputs": {},
         }
 
@@ -169,6 +172,28 @@ class ExecContext:
         """Writes a variable into the GraphState (prefixed by state_path if applicable)."""
         key = f"{self._state_path}/{name}" if self._state_path else name
         ray.get(self._state_actor().set_variable.remote(key, value))
+
+    def set_response_status(self, status: int) -> None:
+        """Sets the HTTP status code for this run's response, if the flow
+        is being served over rayflow serve's REST API (a no-op effect for
+        MCP tools / programmatic execute() callers — they don't read it).
+        Written into this run's RunContext, so whichever branch actually
+        executes determines the final status regardless of how many
+        FlowOutput nodes the flow has. If two truly parallel branches both
+        call this, the last write wins — only one branch of a fork should
+        set it."""
+        if self._response_writer is not None:
+            self._response_writer("status", status)
+        else:
+            ray.get(self._engine().set_response_meta.remote(self._run_id, "status", status))
+
+    def set_response_header(self, name: str, value: str) -> None:
+        """Sets a response header for this run's HTTP response, if served.
+        Same caveats as set_response_status regarding parallel branches."""
+        if self._response_writer is not None:
+            self._response_writer("header", (name, value))
+        else:
+            ray.get(self._engine().set_response_meta.remote(self._run_id, "header", (name, value)))
 
     def emit_event(self, event_name: str, payload: Any = None) -> None:
         """Emits an event to the global bus (fire-and-forget)."""

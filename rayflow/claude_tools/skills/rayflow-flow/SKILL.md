@@ -79,6 +79,38 @@ conversation on the noisy back-and-forth.
   careful with a flow that watches and rewrites its own variable — it can
   loop.
 
+## HTTP request/response (flows served via `rayflow serve --file`)
+
+Every served flow's trigger IS an HTTP request, so `OnStart` always exposes
+4 fixed outputs alongside whatever named `inputs` the flow declares:
+`headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`,
+the parsed JSON body), `method` (`str`). Wire from `entry.headers` etc.
+like any other pin — no special node needed. Outside HTTP (MCP tools,
+programmatic calls) these just come back empty.
+
+For the response, `ctx.set_response_status(code)` /
+`ctx.set_response_header(name, value)` inside any node's `run()` set the
+real HTTP status/headers — invisible to non-HTTP callers (`run_flow`/
+`test_flow`), since they live outside `flow.outputs`. Default is 200, no
+extra headers, if never called. A simple API-key check is just an ordinary
+node:
+
+```python
+@engine_node
+class CheckApiKey:
+    exec_in = ExecInput()
+    headers = Input("dict[str, str]", default={})
+    authorized = ExecOutput()
+    denied = ExecOutput()
+
+    async def run(self, ctx, headers: dict) -> None:
+        if headers.get("x-api-key") == os.environ.get("MY_SECRET"):
+            await ctx.fire("authorized")
+        else:
+            ctx.set_response_status(401)
+            await ctx.fire("denied")
+```
+
 ## Common mistakes
 
 - Wiring an `int` output to a `float` input (or vice versa) expecting silent
