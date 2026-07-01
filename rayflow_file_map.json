@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 149,
+  "file_count": 155,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -290,7 +290,7 @@
       "system": "cli"
     },
     "rayflow/cli/main.py": {
-      "description": "Click-based CLI: defines `rayflow serve`, which initializes Ray and starts the REST/editor/MCP server.",
+      "description": "Click-based CLI: `rayflow serve` initializes Ray and starts the REST/editor/MCP server; `rayflow install claude-tools` copies packaged Claude Code skills/agent templates (rayflow/claude_tools/) into the current working directory's .claude/ and drops a .mcp.json registering the local MCP server, for an end user's own project (not this repo's own dev tooling).",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/events/bus.py",
@@ -299,7 +299,8 @@
       ],
       "dependents": [
         "rayflow/__main__.py",
-        "rayflow/cli/__init__.py"
+        "rayflow/cli/__init__.py",
+        "tests/test_cli.py"
       ],
       "system": "cli"
     },
@@ -1403,6 +1404,44 @@
         ".claude/hooks/stale_reminder.py"
       ],
       "system": "docs"
+    },
+    "rayflow/claude_tools/__init__.py": {
+      "description": "Marks claude_tools as a package so setuptools' packages.find (include=['rayflow*']) picks it up automatically; no code, just the template assets `rayflow install claude-tools` copies.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/mcp.json": {
+      "description": "Template copied to <cwd>/.mcp.json by `rayflow install claude-tools`, identical in shape to this repo's own .mcp.json — registers the local rayflow MCP server at http://localhost:8000/mcp/. Only written if the destination doesn't already have one.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/skills/rayflow-node/SKILL.md": {
+      "description": "Installable Claude Code skill (end-user template, not for this repo's own dev process): how to create/edit a custom Rayflow node in a user's own project — decorator choice, pin contract, create_custom_node/update_custom_node_source MCP tools, hot reload.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/skills/rayflow-flow/SKILL.md": {
+      "description": "Installable Claude Code skill (end-user template): the MCP tool loop for building/editing/testing a flow (get_guide -> list_nodes -> validate_flow iterate -> create_flow/update_flow -> test_flow/run_flow), plus CallFlow composition and event-reactive flows.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/agents/rayflow-debugger.md": {
+      "description": "Installable Claude Code subagent (end-user template): diagnoses why a user's flow fails/misbehaves. Deliberately restricted to read-only tools (Read/Grep/Glob + diagnostic-only MCP tools, no create_flow/update_flow/Write) so it can only report a diagnosis, never silently modify the flow it's investigating.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "tests/test_cli.py": {
+      "description": "Tests for `rayflow install claude-tools` via Click's CliRunner: fresh install writes skills/agent/.mcp.json, idempotency without --force, and --force overwriting skills/agent but never .mcp.json.",
+      "depends_on": [
+        "rayflow/cli/main.py"
+      ],
+      "dependents": [],
+      "system": "tests"
     }
   },
   "systems": {
@@ -1437,6 +1476,11 @@
     "cli": {
       "description": "The `rayflow` command-line entry point (serve, and future subcommands) built on top of rayflow.api and rayflow.server.",
       "files": [
+        "rayflow/claude_tools/__init__.py",
+        "rayflow/claude_tools/agents/rayflow-debugger.md",
+        "rayflow/claude_tools/mcp.json",
+        "rayflow/claude_tools/skills/rayflow-flow/SKILL.md",
+        "rayflow/claude_tools/skills/rayflow-node/SKILL.md",
         "rayflow/cli/__init__.py",
         "rayflow/cli/main.py"
       ],
@@ -1809,6 +1853,7 @@
         "tests/__init__.py",
         "tests/test_build.py",
         "tests/test_callflow.py",
+        "tests/test_cli.py",
         "tests/test_custom_nodes.py",
         "tests/test_editor.py",
         "tests/test_events.py",

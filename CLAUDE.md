@@ -280,6 +280,17 @@ Loop típico de un agente: `get_guide` → `list_nodes` → (`get_example`) → 
 
 `fastmcp` es dependencia core. Los flows de ejemplo se empaquetan en `rayflow/editor/examples/*.json` (package-data) para que estén disponibles aunque se instale por pip.
 
+### `rayflow install claude-tools` (para usuarios finales de `pip install rayflow`)
+
+Copia plantillas empaquetadas en `rayflow/claude_tools/` (package-data) al directorio de trabajo del usuario — **no** es tooling para desarrollar rayflow mismo, es para que alguien que instaló rayflow por pip y usa Claude Code para construir sus propios flows/nodos tenga contexto automático:
+
+- `.claude/skills/rayflow-node/SKILL.md` — cómo crear/editar un nodo custom.
+- `.claude/skills/rayflow-flow/SKILL.md` — el loop de construir/validar/probar un flow vía MCP.
+- `.claude/agents/rayflow-debugger.md` — subagente restringido a tools de solo lectura/diagnóstico (sin `create_flow`/`update_flow`/`Write`), para diagnosticar sin poder modificar el flow que está investigando.
+- `.mcp.json` — registra el server MCP local (`http://localhost:8000/mcp/`); solo se escribe si el usuario no tiene uno ya (nunca se sobreescribe, ni con `--force`, para no pisar otros servers MCP configurados).
+
+`--force` sobreescribe skills/agente existentes; nunca `.mcp.json`. Sin `--force`, la instalación es idempotente (archivos existentes se saltean).
+
 ## Schema de un flow (JSON)
 
 ```json
