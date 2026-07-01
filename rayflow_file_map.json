@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 155,
+  "file_count": 156,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -209,7 +209,7 @@
       "system": "packaging"
     },
     "rayflow/__init__.py": {
-      "description": "Package entry point: re-exports the public Python API (run/load/unload/execute/serve_events/stop) and exposes rayflow.__version__ resolved from installed package metadata.",
+      "description": "Package entry point: re-exports the public Python API (load/unload/execute/serve_events/stop) and exposes rayflow.__version__ resolved from installed package metadata. run() was removed from both api.py and this export.",
       "depends_on": [
         "rayflow/api.py"
       ],
@@ -233,7 +233,7 @@
       "system": "server"
     },
     "rayflow/api.py": {
-      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/run/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray.",
+      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray. The one-shot run() wrapper (load+execute+unload every call) was removed: rayflow/server.py was using it to serve HTTP requests, silently destroying and recreating a served flow's actors (losing GraphState) on every single request instead of reusing the persistent graph the engine already supports sharing across concurrent runs.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/engine/executor.py",
@@ -262,7 +262,7 @@
       "system": "build"
     },
     "rayflow/build/validator.py": {
-      "description": "Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one graph, checks types/wiring/cycles, and either raises on the first error (build()) or collects every error in one pass (validate_all()) for editor/MCP clients.",
+      "description": "Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one namespace, checks type/wiring/cycle correctness, and either raises on the first error (build()) or collects every error in one pass (validate_all()) for editor/MCP clients. _with_dynamic_pins() also always adds fixed headers/query/body/method outputs to OnStart/OnEvent, alongside whatever it generates from the flow's declared inputs — every served flow's trigger is an HTTP request, so the entry node always exposes it.",
       "depends_on": [
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/loader.py",
@@ -808,7 +808,7 @@
       "system": "frontend-build"
     },
     "rayflow/editor/guide.py": {
-      "description": "Curated markdown guide to Rayflow's flow model, served by GET /editor/guide and the MCP get_guide tool as the semantic contract an LLM agent needs to build flows.",
+      "description": "Curated markdown guide to Rayflow's flow model, served by GET /editor/guide and the MCP get_guide tool as the semantic contract an LLM agent needs to build flows. Documents OnStart/OnEvent's fixed headers/query/body/method outputs and ctx.set_response_status()/set_response_header() for flows served over HTTP.",
       "depends_on": [],
       "dependents": [
         "rayflow/editor/routes.py",
@@ -888,7 +888,7 @@
       "system": "engine"
     },
     "rayflow/engine/executor.py": {
-      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (the lifecycle of a flow's actors in Ray).",
+      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (the lifecycle of a flow's actors in Ray). RunContext carries response_status/response_headers (set via ctx.set_response_status()/set_response_header()), included in the flow_done event so rayflow serve's HTTP layer can use them as the real response status/headers — invisible to non-HTTP callers since they live outside output_refs.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/nodes/decorators.py",
@@ -1044,7 +1044,7 @@
       "system": "nodes"
     },
     "rayflow/nodes/decorators.py": {
-      "description": "Defines the node-authoring contract: the Input/Output/ExecInput/ExecOutput pin descriptors, the @ray_node/@engine_node/@parallel_node decorators, NodeMeta/PinSpec metadata, and the unified ExecContext used by every node's run().",
+      "description": "Defines the node-authoring contract: the Input/Output/ExecInput/ExecOutput pin descriptors, the @ray_node/@engine_node/@parallel_node decorators, NodeMeta/PinSpec metadata, and the unified ExecContext used by every node's run(). ExecContext.set_response_status()/set_response_header() set this run's HTTP response metadata (RunContext-scoped) using the same dual local-closure (engine_node)/RPC (ray_node) pattern as fire()/set_output(), avoiding a blocking self-call when the caller is running inside the engine's own actor.",
       "depends_on": [
         "rayflow/events/bus.py",
         "rayflow/types.py"
@@ -1156,7 +1156,7 @@
       "system": "schema"
     },
     "rayflow/server.py": {
-      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend.",
+      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Loads every served flow into Ray once at startup and /flows/{name}/run reuses that persistent graph via execute_async. Builds a richer flow_inputs dict per request (headers/query/body/method, alongside the parsed body) since a served flow's trigger IS the HTTP request, and reads response_status/response_headers off the flow_done event to shape the real HTTP response instead of always returning 200.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
@@ -1259,7 +1259,8 @@
       "description": "Tests for the CallFlow node: isolated vs. shared subflow state, meta['flow'] attribution, CallFlow inside a Parallel branch, and nested CallFlows.",
       "depends_on": [
         "rayflow/__init__.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1269,7 +1270,8 @@
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/nodes/registry.py",
-        "rayflow/workspace.py"
+        "rayflow/workspace.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1292,17 +1294,19 @@
         "rayflow/__init__.py",
         "rayflow/api.py",
         "rayflow/events/bus.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
     },
     "tests/test_executor.py": {
-      "description": "End-to-end execution tests with Ray: fan-out, Parallel fork/join (including nested), AND/OR exec_in join semantics, While/Map nodes, pure comparisons, and per-run output isolation (the RunContext regression test).",
+      "description": "End-to-end execution tests with Ray: fan-out, Parallel fork/join (including nested), AND/OR exec_in join semantics, While/Map nodes, pure comparisons, per-run output isolation (the RunContext regression test), OnStart's request pins defaulting gracefully outside HTTP, and ctx.set_response_status()/set_response_header() via both the engine_node local-closure and ray_node RPC paths.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/nodes/decorators.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1337,7 +1341,7 @@
       "system": "tests"
     },
     "tests/test_server.py": {
-      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, and duplicate-name validation.",
+      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, duplicate-name validation, GraphState persistence across requests, OnStart's fixed headers/query/body/method outputs, and ctx.set_response_status()/set_response_header() reaching the real HTTP response (including header isolation between separate requests).",
       "depends_on": [
         "rayflow/nodes/registry.py",
         "rayflow/server.py"
@@ -1424,7 +1428,7 @@
       "system": "cli"
     },
     "rayflow/claude_tools/skills/rayflow-flow/SKILL.md": {
-      "description": "Installable Claude Code skill (end-user template): the MCP tool loop for building/editing/testing a flow (get_guide -> list_nodes -> validate_flow iterate -> create_flow/update_flow -> test_flow/run_flow), plus CallFlow composition and event-reactive flows.",
+      "description": "Installable Claude Code skill (end-user template): the MCP tool loop for building/editing/testing a flow (get_guide -> list_nodes -> validate_flow iterate -> create_flow/update_flow -> test_flow/run_flow), CallFlow composition, event-reactive flows, and the HTTP request/response mechanism (OnStart's headers/query/body/method, ctx.set_response_status/set_response_header) for flows served via rayflow serve.",
       "depends_on": [],
       "dependents": [],
       "system": "cli"
@@ -1441,6 +1445,19 @@
         "rayflow/cli/main.py"
       ],
       "dependents": [],
+      "system": "tests"
+    },
+    "tests/helpers.py": {
+      "description": "Test-only helper (run_once) replacing the removed rayflow.api.run(): loads, executes, and unconditionally unloads a flow — the always-fresh-reload behavior many tests rely on (reusing generic throwaway flow names like \"parent\"/\"counter\" across unrelated test functions), scoped to test code now that it's no longer part of the public API.",
+      "depends_on": [
+        "rayflow/__init__.py"
+      ],
+      "dependents": [
+        "tests/test_executor.py",
+        "tests/test_callflow.py",
+        "tests/test_events.py",
+        "tests/test_custom_nodes.py"
+      ],
       "system": "tests"
     }
   },
@@ -1851,6 +1868,7 @@
       "description": "The pytest suite covering build/validation, the engine/executor, the editor REST API, custom nodes, events, CallFlow subflows, MCP tools, node behavior, and schema parsing.",
       "files": [
         "tests/__init__.py",
+        "tests/helpers.py",
         "tests/test_build.py",
         "tests/test_callflow.py",
         "tests/test_cli.py",

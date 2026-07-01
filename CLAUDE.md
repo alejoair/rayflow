@@ -313,6 +313,29 @@ Copia plantillas empaquetadas en `rayflow/claude_tools/` (package-data) al direc
 
 Los flows se guardan en `flows/` dentro del directorio de trabajo.
 
+### Request/response HTTP en flows servidos (`rayflow serve --file`)
+
+Todo flow servido se dispara por una request HTTP a `/flows/{name}/run` — por eso `OnStart` (y `OnEvent`) exponen siempre 4 outputs fijos además de los que genera desde `inputs`: `headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`, el JSON del body ya parseado), `method` (`str`). No hace falta declararlos ni un nodo especial — cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos).
+
+Para la respuesta, `ctx.set_response_status(code)` / `ctx.set_response_header(name, value)` (en `ExecContext`) fijan el status/headers HTTP reales de la respuesta — viven en el `RunContext` de la ejecución (no en `flow.outputs`), así que **no aparecen** en el resultado que ve un caller no-HTTP (`run_flow`/`test_flow` de MCP, `execute()` directo). Sin llamarlos, el default es 200 sin headers extra. Cuidado con `Parallel`: si dos ramas verdaderamente paralelas llaman `set_response_status` a la vez, gana la última escritura — solo una rama de un fork debería fijarlos.
+
+Ejemplo (nodo de auth con API key, un `@engine_node`/`@ray_node` normal, sin nada especial):
+```python
+@engine_node
+class CheckApiKey:
+    exec_in = ExecInput()
+    headers = Input("dict[str, str]", default={})
+    authorized = ExecOutput()
+    denied = ExecOutput()
+
+    async def run(self, ctx: ExecContext, headers: dict) -> None:
+        if headers.get("x-api-key") == os.environ.get("MY_SECRET"):
+            await ctx.fire("authorized")
+        else:
+            ctx.set_response_status(401)
+            await ctx.fire("denied")
+```
+
 ## Reglas de UI (frontend Vite)
 
 > Tailwind v4 no genera clases de forma fiable en este proyecto. **Usar siempre `style={{}}`** para espaciado, colores y tamaños. Tailwind solo se usa para utilidades que sí se detectan en build time (p.ej. `className="flex flex-col overflow-hidden"`).
@@ -470,6 +493,6 @@ Set escribe variable vigilada → GraphState.set_variable
 | `rayflow/nodes/registry.py` | Singleton del catálogo, `reset_catalog()` para hot reload |
 | `rayflow/state/actor.py` | `GraphState` — variables persistentes y su vigilancia (`watch_variable`). Los outputs de nodos viven en el `RunContext` del engine, no aquí |
 | `rayflow/events/bus.py` | `EventBroker` — pub/sub fire-and-forget entre flows |
-| `rayflow/api.py` | API pública: `run()`, `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
+| `rayflow/api.py` | API pública: `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
 | `rayflow/workspace.py` | Convenciones de directorio: `custom_nodes/`, `flows/` |

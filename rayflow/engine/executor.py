@@ -32,6 +32,8 @@ class RunContext:
     node_outputs: dict[str, dict[str, Any]] = field(default_factory=dict)  # node_id → {pin → value}
     exec_arrivals: dict[str, set[str]] = field(default_factory=dict)       # AND-join readiness
     output_refs: dict[str, Any] = field(default_factory=dict)              # result accumulator
+    response_status: int = 200                          # set via ctx.set_response_status()
+    response_headers: dict[str, str] = field(default_factory=dict)         # set via ctx.set_response_header()
 
 
 def _var_key(state_path: str | None, var_name: str) -> str:
@@ -114,7 +116,11 @@ class FlowEngine:
             await self._write_node_outputs(run, self._built.entry_node_id, dict(flow_inputs))
             await self._run_loop(run, self._built.entry_node_id)
             result = _resolve_refs(run.output_refs)
-            await queue_ref.push.remote(run_id, {"event": "flow_done", "result": result, "ts": time.time()})
+            await queue_ref.push.remote(run_id, {
+                "event": "flow_done", "result": result, "ts": time.time(),
+                "response_status": run.response_status,
+                "response_headers": run.response_headers,
+            })
             return result
         except Exception as e:
             await queue_ref.push.remote(run_id, {"event": "flow_error", "error": str(e), "ts": time.time()})
@@ -130,7 +136,11 @@ class FlowEngine:
     async def _local_fire(self, run: RunContext, source_node_id: str, rnode: Any, pin_name: str) -> None:
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            run.queue.push.remote(run.run_id, {
+            # Awaited (not fire-and-forget): otherwise execute() can return
+            # (its flow_done push IS awaited) before this event reaches the
+            # RunQueue mailbox, so a driver draining the queue sees flow_done
+            # first and closes the run — the trace ends up empty or mis-ordered.
+            await run.queue.push.remote(run.run_id, {
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
@@ -145,6 +155,18 @@ class FlowEngine:
     async def set_output(self, run_id: str, node_id: str, pin_name: str, value: Any) -> None:
         run = self._runs[run_id]
         await self._write_node_outputs(run, node_id, {pin_name: value})
+
+    async def set_response_meta(self, run_id: str, kind: str, value: Any) -> None:
+        """RPC path for ctx.set_response_status()/set_response_header() from
+        a @ray_node running in a separate worker process. An engine_node
+        instead uses a local closure (see _fire_engine_node) that writes
+        directly to `run`, avoiding a blocking self-call."""
+        run = self._runs[run_id]
+        if kind == "status":
+            run.response_status = value
+        elif kind == "header":
+            name, header_value = value
+            run.response_headers[name] = header_value
 
     async def get_exec_outputs(self, node_id: str, exclude: list[str]) -> list[str]:
         rnode = self._built.nodes[node_id]
@@ -256,8 +278,19 @@ class FlowEngine:
                 ctx._pending_outputs.clear()
             await self._local_fire(run, node_id, rnode, pin)
 
+        def _response_writer(kind: str, value: Any) -> None:
+            # Same rationale as _output_writer/_fire_handler: writes `run`
+            # directly instead of an RPC back to this same actor, which
+            # would deadlock (see set_response_meta's docstring).
+            if kind == "status":
+                run.response_status = value
+            elif kind == "header":
+                name, header_value = value
+                run.response_headers[name] = header_value
+
         ctx._output_writer = lambda nid, pin, val: None  # set_output accumulates into _pending_outputs
         ctx._fire_handler = _engine_fire
+        ctx._response_writer = _response_writer
 
         started_at = time.time()
         await self._emit_node_start(run, node_id, rnode)
@@ -307,11 +340,11 @@ class FlowEngine:
     async def _emit_node_start(self, run: RunContext, node_id: str, rnode: ResolvedNode) -> None:
         if run.queue is None:
             return
-        # Fire-and-forget: the push is trivial and the driver drains the
-        # queue via blocking get(). Awaiting the ObjectRef here would add Ray
-        # RPC latency with no benefit — FIFO order is already guaranteed by
-        # the RunQueue actor's sequential event loop.
-        run.queue.push.remote(run.run_id, {
+        # Awaited (not fire-and-forget): see _local_fire. Awaiting guarantees
+        # the event is in the RunQueue mailbox before the next one is pushed,
+        # so a driver draining the queue sees node_start before node_done and
+        # both before flow_done.
+        await run.queue.push.remote(run.run_id, {
             "event": "node_start",
             "node_id": node_id,
             "node_type": rnode.meta.name,
@@ -321,7 +354,7 @@ class FlowEngine:
     async def _emit_node_done(self, run: RunContext, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
         if run.queue is None:
             return
-        run.queue.push.remote(run.run_id, {
+        await run.queue.push.remote(run.run_id, {
             "event": "node_done",
             "node_id": node_id,
             "node_type": rnode.meta.name,

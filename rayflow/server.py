@@ -1,9 +1,12 @@
 """REST API for serving flows as HTTP endpoints.
 
-`rayflow serve --file flow.json` starts a FastAPI server that exposes each
-loaded flow under `/flows/{name}/run`. Each request executes the flow in
-isolation (a UUID graph_id per execution), so concurrent requests to the
-same flow don't collide.
+`rayflow serve --file flow.json` starts a FastAPI server that loads each
+served flow into Ray once at startup and exposes it under
+`/flows/{name}/run`. Every request reuses that same persistent graph
+(engine/GraphState/queue actors) rather than reloading per request —
+concurrent/repeated requests are isolated by their own run_id/RunContext,
+not by recreating the graph, which is how the engine is designed to work
+(see CLAUDE.md's concurrency notes on FlowEngine.execute()).
 
 This is distinct from `rayflow.serve_events()` (api.py), which registers a
 flow on the internal event bus.
@@ -12,6 +15,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from rayflow.schema.loader import load_flow
 from rayflow.schema.models import FlowDef
@@ -83,9 +89,18 @@ def create_app(served: dict[str, ServedFlow]):
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.staticfiles import StaticFiles
     from rayflow import __version__
-    from rayflow.api import run
+    from rayflow.api import execute_async, load as load_api
     from rayflow.editor.routes import router as editor_router
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
+
+    # Load every served flow into Ray once, up front. load() always
+    # destroys and recreates (safe to call unconditionally, even if a test
+    # fixture calls create_app() repeatedly for the same flow name) — the
+    # point is that /flows/{name}/run below does NOT reload per request,
+    # so concurrent/repeated requests reuse this same persistent graph
+    # instead of tearing it down and losing GraphState after every call.
+    for _sf in served.values():
+        load_api(_sf.source)
 
     # Build the MCP server before the app: its lifespan (the streamable-http
     # session manager) must be passed to FastAPI so it starts when mounted.
@@ -129,8 +144,7 @@ def create_app(served: dict[str, ServedFlow]):
         return sf.interface
 
     @app.post("/flows/{name}/run")
-    async def run_flow(name: str, inputs: Any = Body(default=None)) -> dict[str, Any]:
-        import asyncio
+    async def run_flow(request: Request, name: str, inputs: Any = Body(default=None)) -> JSONResponse:
         sf = served.get(name)
         if sf is None:
             raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
@@ -142,12 +156,38 @@ def create_app(served: dict[str, ServedFlow]):
                 status_code=400, detail="Body must be a JSON object of inputs"
             )
 
-        loop = asyncio.get_event_loop()
+        # Every served flow's trigger IS this HTTP request — OnStart always
+        # exposes headers/query/body/method (see _with_dynamic_pins in
+        # build/validator.py), alongside whatever named inputs the flow
+        # declares from the body. Reserved names win on collision.
+        flow_inputs = {
+            **inputs,
+            "headers": dict(request.headers),
+            "query": dict(request.query_params),
+            "body": inputs,
+            "method": request.method,
+        }
+
+        # execute_async reuses the persistent graph loaded once at startup
+        # (see create_app above) instead of reloading per request.
+        result: dict[str, Any] = {}
+        response_status = 200
+        response_headers: dict[str, str] = {}
         try:
-            outputs = await loop.run_in_executor(None, lambda: run(sf.source, **inputs))
+            async for evt in execute_async(name, flow_inputs):
+                if evt.get("event") == "flow_done":
+                    result = evt.get("result", {}) or {}
+                    response_status = evt.get("response_status", 200)
+                    response_headers = evt.get("response_headers", {}) or {}
+                elif evt.get("event") == "flow_error":
+                    raise HTTPException(
+                        status_code=500, detail=f"Error running the flow: {evt.get('error')}"
+                    )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error running the flow: {e}")
-        return outputs
+        return JSONResponse(content=result, status_code=response_status, headers=response_headers)
 
     return app
 

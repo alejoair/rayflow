@@ -46,6 +46,14 @@ A flow is a graph of nodes connected by two kinds of wire:
 
 - `OnStart`/`FlowInput`/`OnEvent`: expose **one data output per input of the
   flow**. If the flow declares `inputs: {x: int}`, you can read `entry.x`.
+  They ALSO always expose 4 fixed outputs — `headers`/`query` (`dict[str, str]`),
+  `body` (`Any`), `method` (`str`) — since a served flow's trigger is an HTTP
+  request. Wire from these like any other pin; outside HTTP they default to
+  whatever the consuming `Input` declares. To set the response's real HTTP
+  status/headers, call `ctx.set_response_status(code)` /
+  `ctx.set_response_header(name, value)` from any node's `run()` — this is
+  invisible to non-HTTP callers (MCP's `run_flow`/`test_flow`), since it
+  lives outside `flow.outputs`.
 - `FlowOutput`: has **one required data input per output of the flow**.
 - `Parallel`: its branches `branch_0`, `branch_1`, … are discovered from the
   wiring (nodes whose `exec_in` is `parallel_id.branch_N`); `joined` fires

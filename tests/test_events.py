@@ -14,6 +14,7 @@ import rayflow
 from rayflow.api import serve_events
 from rayflow.events.bus import get_event_broker
 from rayflow.nodes.registry import reset_catalog
+from tests.helpers import run_once
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +59,7 @@ def test_emit_triggers_onevent_of_another_flow():
              "inputs": {"event_name": "demo/ping", "payload": "hola"}},
         ],
     }
-    rayflow.run(sender)
+    run_once(sender)
 
     # If the receiver ran, it will have published 'demo/done/...' exactly once.
     assert _wait_count(done_event, 1) == 1
@@ -133,7 +134,7 @@ def test_isolated_namespaces_dont_cross():
              "inputs": {"event_name": "ns_a/ev", "payload": "should-not-arrive"}},
         ],
     }
-    rayflow.run(sender_a)
+    run_once(sender_a)
 
     # Give it time for (nothing) to fire; the ns_b receiver must not run.
     time.sleep(3)

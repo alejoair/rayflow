@@ -361,10 +361,24 @@ def _index_nodes(flow: FlowDef, catalog: NodeCatalog, err: _Errors) -> dict[str,
     return nodes
 
 
+_REQUEST_PINS = (
+    ("headers", "dict[str, str]"),
+    ("query", "dict[str, str]"),
+    ("body", "Any"),
+    ("method", "str"),
+)
+
+
 def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta:
     """Generates the dynamic pins of public-interface nodes.
 
-    - FlowInput / OnEvent: data outputs = the flow's declared inputs.
+    - FlowInput / OnEvent: data outputs = the flow's declared inputs, PLUS
+      fixed headers/query/body/method pins — every served flow's trigger
+      IS an HTTP request, so the entry node always exposes the raw
+      envelope alongside whatever named inputs the flow declares. A flow
+      that doesn't run over HTTP (or wasn't given a request) just sees
+      empty dicts/strings for these — see execute()'s seeding in
+      engine/executor.py.
     - FlowOutput: data inputs = the flow's declared outputs.
     - CallFlow: extra data inputs = any key in node_def.inputs not already
       declared as a pin. Lets arbitrary inputs be passed to the subflow.
@@ -383,6 +397,9 @@ def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta
         meta.outputs = list(meta.outputs) + [
             PinSpec(name=name, kind="data_out", type=type_str)
             for name, type_str in flow_inputs.items()
+        ] + [
+            PinSpec(name=name, kind="data_out", type=type_str)
+            for name, type_str in _REQUEST_PINS
         ]
         # In a spliced OnStart/OnEvent, the same names are also data inputs:
         # they come in from the CallFlow and get re-exposed as outputs to the subgraph.

@@ -3,6 +3,7 @@ import pytest
 import ray
 import rayflow
 from rayflow.nodes.registry import reset_catalog
+from tests.helpers import run_once
 
 
 @pytest.fixture(autouse=True)
@@ -14,7 +15,7 @@ def ray_init():
 
 
 def test_flow_sum():
-    result = rayflow.run({"name": "suma", "inputs": {"a": "int", "b": "int"},
+    result = run_once({"name": "suma", "inputs": {"a": "int", "b": "int"},
         "outputs": {"result": "int"}, "nodes": [
             {"id": "entry", "type": "FlowInput"},
             {"id": "add", "type": "Add", "exec_in": "entry",
@@ -43,7 +44,7 @@ def test_fan_out_both_nodes_run():
     catalog.register(SetFlag)
 
     # entry fires node_a and node_b in parallel (fan-out)
-    result = rayflow.run({
+    result = run_once({
         "name": "fanout",
         "outputs": {"meta_a": "dict", "meta_b": "dict"},
         "nodes": [
@@ -62,7 +63,7 @@ def test_fan_out_both_nodes_run():
 
 def test_parallel_fork_join():
     """A Parallel node launches branch_0 and branch_1 simultaneously, joined when done."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parallel_test",
         "outputs": {"sum_a": "int", "sum_b": "int"},
         "nodes": [
@@ -83,7 +84,7 @@ def test_parallel_fork_join():
 
 def test_parallel_with_foreach_in_branch():
     """Parallel with an @engine_node (ForEach) inside a branch — correct isolation."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parallel_foreach",
         "inputs": {"items": "list"},
         "outputs": {"done": "dict"},
@@ -103,7 +104,7 @@ def test_parallel_with_foreach_in_branch():
 
 def test_parallel_n_branches():
     """Parallel with 4 dynamic branches (branch_0 through branch_3)."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parallel_4branches",
         "outputs": {"r0": "int", "r1": "int", "r2": "int", "r3": "int"},
         "nodes": [
@@ -134,7 +135,7 @@ def test_parallel_n_branches():
 
 def test_parallel_with_pure_engine_node():
     """Parallel with branches made only of @engine_node (Branch + Set), no @ray_node."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parallel_engine_only",
         "outputs": {"done": "dict"},
         "variables": [{"name": "x", "type": "int", "default": 0}],
@@ -160,7 +161,7 @@ def test_parallel_with_pure_engine_node():
 
 def test_parallel_nested():
     """A Parallel inside a branch of another Parallel (nested fork/join)."""
-    result = rayflow.run({
+    result = run_once({
         "name": "nested_parallel",
         "outputs": {"r0": "int", "r1": "int", "r2": "int"},
         "nodes": [
@@ -192,7 +193,7 @@ def test_parallel_nested():
 
 def test_and_join_waits_for_both_branches():
     """Fan-out of 2 branches; the exit node with a list exec_in (AND) waits for both."""
-    result = rayflow.run({
+    result = run_once({
         "name": "and_join_basic",
         "outputs": {"r0": "int", "r1": "int"},
         "nodes": [
@@ -212,7 +213,7 @@ def test_and_join_waits_for_both_branches():
 
 def test_and_join_waits_for_slow_branch():
     """The AND-join waits for the branch with more nodes in its chain."""
-    result = rayflow.run({
+    result = run_once({
         "name": "and_join_slow_branch",
         "outputs": {"r0": "int", "r1": "int"},
         "nodes": [
@@ -242,7 +243,7 @@ def test_and_join_inside_loop_resets():
     arrival (2x per iteration instead of 1x). With 3 iterations, the counter
     ended up at 5 instead of 3.
     """
-    result = rayflow.run({
+    result = run_once({
         "name": "and_join_in_loop",
         "inputs": {"items": "list"},
         "outputs": {"count": "int"},
@@ -270,7 +271,7 @@ def test_and_join_inside_loop_resets():
 
 def test_or_join_post_branch():
     """Explicit OR: convergence after a Branch; only one branch runs."""
-    result = rayflow.run({
+    result = run_once({
         "name": "or_join_branch",
         "inputs": {"cond": "bool"},
         "outputs": {"out": "int"},
@@ -292,7 +293,7 @@ def test_or_join_post_branch():
 
 def test_or_join_post_branch_false():
     """OR: the Branch's false branch also reaches the join."""
-    result = rayflow.run({
+    result = run_once({
         "name": "or_join_branch_false",
         "inputs": {"cond": "bool"},
         "outputs": {"out": "int"},
@@ -318,7 +319,7 @@ def test_or_join_post_branch_false():
 
 def test_pure_comparison_lazy():
     """LessThan evaluated lazily as a FlowOutput data input, with no exec wire."""
-    result = rayflow.run({
+    result = run_once({
         "name": "lt_lazy",
         "inputs": {"x": "int"},
         "outputs": {"is_small": "bool"},
@@ -334,7 +335,7 @@ def test_pure_comparison_lazy():
 
 def test_pure_comparison_as_branch_condition():
     """A pure GreaterThan feeds Branch.condition directly."""
-    result = rayflow.run({
+    result = run_once({
         "name": "gt_branch",
         "inputs": {"x": "int"},
         "outputs": {"out": "int"},
@@ -361,7 +362,7 @@ def test_pure_comparison_as_branch_condition():
 
 def test_while_iterates_until_condition():
     """While with a variable-based condition — counts up to 5."""
-    result = rayflow.run({
+    result = run_once({
         "name": "while_count",
         "outputs": {"count": "int"},
         "variables": [
@@ -393,7 +394,7 @@ def test_while_iterates_until_condition():
 
 def test_while_zero_iterations():
     """While with a condition that's False from the start: zero iterations."""
-    result = rayflow.run({
+    result = run_once({
         "name": "while_zero",
         "outputs": {"count": "int"},
         "variables": [
@@ -418,7 +419,7 @@ def test_while_zero_iterations():
 
 def test_map_with_ray_node_exec():
     """Map applies an exec @ray_node (ToStr) to each element of the array."""
-    result = rayflow.run({
+    result = run_once({
         "name": "map_tostr",
         "inputs": {"items": "list"},
         "outputs": {"strings": "list"},
@@ -435,7 +436,7 @@ def test_map_with_ray_node_exec():
 
 def test_map_with_pure_engine_node():
     """Map applies a pure @engine_node (Get) — always returns the same value."""
-    result = rayflow.run({
+    result = run_once({
         "name": "map_get",
         "inputs": {"items": "list"},
         "outputs": {"values": "list"},
@@ -515,3 +516,151 @@ def test_outputs_not_stale_between_runs():
         )
     finally:
         rayflow.unload("stale_check")
+
+
+# ---------------------------------------------------------------------------
+# OnStart's request pins + ctx.set_response_status/set_response_header
+# ---------------------------------------------------------------------------
+
+def _execute_flow_done_event(name: str, inputs: dict) -> dict:
+    """Runs an already-loaded flow and returns the raw flow_done event
+    (not just its 'result'), so response_status/response_headers are
+    visible too."""
+    evt_out = None
+    for evt in rayflow.execute(name, inputs):
+        if evt.get("event") == "flow_done":
+            evt_out = evt
+        elif evt.get("event") == "flow_error":
+            raise AssertionError(f"flow_error: {evt.get('error')}")
+    assert evt_out is not None
+    return evt_out
+
+
+def test_onstart_request_pins_default_when_not_triggered_over_http():
+    """Calling execute() directly (no server.py involved) never supplies
+    headers/query/body/method in flow_inputs — a node wiring from
+    entry.headers falls back to its own Input's declared default, per
+    _resolve_pin's fallback chain (node_outputs miss -> not a pure node ->
+    consumer's default). Uses a custom node with an explicit {} default
+    rather than wiring straight into FlowOutput, whose auto-generated
+    dynamic pins always default to None regardless of declared type."""
+    from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput, Input, Output
+    from rayflow.nodes.registry import get_catalog
+
+    @engine_node
+    class EchoHeaders:
+        exec_in = ExecInput()
+        headers = Input("dict[str, str]", default={})
+        out = Output("dict")
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext, headers: dict) -> None:
+            ctx.set_output("out", headers)
+            await ctx.fire("exec_out")
+
+    get_catalog().register(EchoHeaders)
+
+    flow = {
+        "name": "no_http_context",
+        "outputs": {"headers": "dict"},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "echo", "type": "EchoHeaders", "exec_in": "entry", "inputs": {"headers": "entry.headers"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "echo", "inputs": {"headers": "echo.out"}},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        result = _execute_collect("no_http_context", {})
+        assert result["headers"] == {}
+    finally:
+        rayflow.unload("no_http_context")
+
+
+def test_set_response_status_and_header_engine_node():
+    """ctx.set_response_status()/set_response_header() land in the
+    flow_done event via the engine_node local-closure path (no RPC)."""
+    from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput
+    from rayflow.nodes.registry import get_catalog
+
+    @engine_node
+    class SetRespEngine:
+        exec_in = ExecInput()
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext) -> None:
+            ctx.set_response_status(201)
+            ctx.set_response_header("x-foo", "bar")
+            await ctx.fire("exec_out")
+
+    get_catalog().register(SetRespEngine)
+
+    flow = {
+        "name": "resp_engine_node",
+        "outputs": {},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "s", "type": "SetRespEngine", "exec_in": "entry"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "s"},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        evt = _execute_flow_done_event("resp_engine_node", {})
+        assert evt["response_status"] == 201
+        assert evt["response_headers"] == {"x-foo": "bar"}
+    finally:
+        rayflow.unload("resp_engine_node")
+
+
+def test_set_response_status_ray_node():
+    """Same as above, but via a @ray_node — exercises the RPC path
+    (set_response_meta on the FlowEngine actor) instead of the local
+    closure, from a separate worker process."""
+    from rayflow.nodes.decorators import ray_node, ExecContext, ExecInput, ExecOutput
+    from rayflow.nodes.registry import get_catalog
+
+    @ray_node
+    class SetRespRay:
+        exec_in = ExecInput()
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext) -> None:
+            ctx.set_response_status(403)
+            await ctx.fire("exec_out")
+
+    get_catalog().register(SetRespRay)
+
+    flow = {
+        "name": "resp_ray_node",
+        "outputs": {},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "s", "type": "SetRespRay", "exec_in": "entry"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "s"},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        evt = _execute_flow_done_event("resp_ray_node", {})
+        assert evt["response_status"] == 403
+    finally:
+        rayflow.unload("resp_ray_node")
+
+
+def test_response_status_defaults_to_200_when_never_set():
+    flow = {
+        "name": "resp_default",
+        "outputs": {},
+        "nodes": [
+            {"id": "entry", "type": "OnStart"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "entry"},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        evt = _execute_flow_done_event("resp_default", {})
+        assert evt["response_status"] == 200
+        assert evt["response_headers"] == {}
+    finally:
+        rayflow.unload("resp_default")
