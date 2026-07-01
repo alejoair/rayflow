@@ -1,4 +1,7 @@
 """Tests de la capa MCP curada (rayflow/mcp/server.py)."""
+import copy
+from typing import Any
+
 import pytest
 import ray
 from fastmcp import Client
@@ -20,6 +23,19 @@ def flows_dir(tmp_path, monkeypatch):
     import rayflow.editor.storage as storage_mod
     monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
     return tmp_path
+
+
+@pytest.fixture
+def custom_nodes_dir(tmp_path, monkeypatch):
+    """Isolates custom_nodes_path() (cwd-relative) in a temp dir and clears
+    any cached custom_nodes.* modules so the catalog re-imports fresh."""
+    import sys
+    (tmp_path / "custom_nodes").mkdir()
+    monkeypatch.chdir(tmp_path)
+    for key in list(sys.modules):
+        if key == "custom_nodes" or key.startswith("custom_nodes."):
+            sys.modules.pop(key)
+    yield tmp_path
 
 
 @pytest.fixture
@@ -97,3 +113,138 @@ async def test_examples_disponibles(mcp):
         assert any(e["name"] == "branch_demo" for e in ex)
         full = (await c.call_tool("get_example", {"name": "suma"})).data
         assert full["name"] == "suma"
+
+
+DOUBLE_SRC = (
+    "from rayflow.nodes.decorators import engine_node, ExecContext, "
+    "ExecInput, ExecOutput, Input, Output\n\n"
+    "@engine_node\n"
+    "class DoubleIt:\n"
+    "    exec_in = ExecInput()\n"
+    "    value = Input(\"int\", default=0)\n"
+    "    result = Output(\"int\")\n"
+    "    exec_out = ExecOutput()\n\n"
+    "    async def run(self, ctx: ExecContext, value: int) -> None:\n"
+    "        ctx.set_output(\"result\", value * 2)\n"
+    "        await ctx.fire(\"exec_out\")\n"
+)
+
+DOUBLE_FLOW: dict[str, Any] = {
+    "name": "double_flow",
+    "inputs": {"x": "int"},
+    "outputs": {"y": "int"},
+    "nodes": [
+        {"id": "entry", "type": "OnStart"},
+        {"id": "d", "type": "DoubleIt", "exec_in": "entry", "inputs": {"value": "entry.x"}},
+        {"id": "exit", "type": "FlowOutput", "exec_in": "d", "inputs": {"y": "d.result"}},
+    ],
+}
+
+
+async def test_custom_node_lifecycle_hot_reloads_without_restart(mcp, custom_nodes_dir):
+    async with Client(mcp) as c:
+        assert (await c.call_tool("list_custom_nodes", {})).data == []
+
+        created = (await c.call_tool(
+            "create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC}
+        )).data
+        assert created["created"] is True
+        assert "DoubleIt" in created["custom_nodes"]
+
+        # No server restart, no explicit reload call: list_nodes sees it immediately.
+        types = {n["type"] for n in (await c.call_tool("list_nodes", {})).data}
+        assert "DoubleIt" in types
+
+        src = (await c.call_tool("get_custom_node_source", {"name": "DoubleIt"})).data
+        assert "value * 2" in src["source"]
+
+        updated_src = DOUBLE_SRC.replace("value * 2", "value * 10")
+        saved = (await c.call_tool(
+            "update_custom_node_source", {"name": "DoubleIt", "source": updated_src}
+        )).data
+        assert saved["saved"] is True
+
+        deleted = (await c.call_tool("delete_custom_node", {"name": "DoubleIt"})).data
+        assert deleted["deleted"] is True
+        assert (await c.call_tool("list_custom_nodes", {})).data == []
+
+
+async def test_create_custom_node_rejects_duplicate_and_bad_syntax(mcp, custom_nodes_dir):
+    async with Client(mcp) as c:
+        await c.call_tool("create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC})
+        dup = (await c.call_tool(
+            "create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC}
+        )).data
+        assert "error" in dup
+
+        bad = (await c.call_tool(
+            "create_custom_node", {"name": "Broken", "source": "def bad(:\n"}
+        )).data
+        assert "error" in bad
+
+
+async def test_update_flow_unloads_stale_loaded_graph(mcp, flows_dir, custom_nodes_dir):
+    """Regression test: without unloading on update, run_flow/test_flow would
+    silently keep executing the OLD graph after update_flow, because they
+    skip reloading a flow that's already loaded."""
+    async with Client(mcp) as c:
+        await c.call_tool("create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC})
+        await c.call_tool("create_flow", {"flow": DOUBLE_FLOW})
+
+        first = (await c.call_tool("run_flow", {"name": "double_flow", "inputs": {"x": 5}})).data
+        assert first["outputs"] == {"y": 10}  # loads the flow as a side effect
+
+        changed = copy.deepcopy(DOUBLE_FLOW)
+        changed["nodes"][1]["inputs"] = {"value": 999}  # ignore entry.x now
+        await c.call_tool("update_flow", {"name": "double_flow", "flow": changed})
+
+        second = (await c.call_tool("run_flow", {"name": "double_flow", "inputs": {"x": 5}})).data
+        assert second["outputs"] == {"y": 1998}  # 999 * 2, NOT the stale 10
+
+
+async def test_unload_flow_reports_whether_it_was_loaded(mcp, flows_dir):
+    async with Client(mcp) as c:
+        await c.call_tool("create_flow", {"flow": SUMA})
+        # A previous test in this module may have left "suma" loaded in Ray
+        # (nothing tears down loaded flows between tests) — force a clean
+        # unloaded baseline before asserting on was_loaded's value.
+        await c.call_tool("unload_flow", {"name": "suma"})
+
+        not_loaded = (await c.call_tool("unload_flow", {"name": "suma"})).data
+        assert not_loaded["was_loaded"] is False
+
+        await c.call_tool("run_flow", {"name": "suma", "inputs": {"x": 1, "y": 1}})
+        was_loaded = (await c.call_tool("unload_flow", {"name": "suma"})).data
+        assert was_loaded["was_loaded"] is True
+
+
+async def test_run_flow_trace_returns_ordered_node_events(mcp, flows_dir):
+    async with Client(mcp) as c:
+        await c.call_tool("create_flow", {"flow": SUMA})
+        r = (await c.call_tool(
+            "run_flow", {"name": "suma", "inputs": {"x": 2, "y": 3}, "trace": True}
+        )).data
+        assert r["outputs"] == {"resultado": 5}
+        assert r["trace"], "trace should not be empty when trace=True"
+        assert all(e["event"] in ("node_start", "node_done", "edge_fire") for e in r["trace"])
+
+
+async def test_serve_and_stop_flow_events(mcp, flows_dir):
+    listener = {
+        "name": "listener",
+        "events": ["ping"],
+        "outputs": {},
+        "nodes": [
+            {"id": "on_ping", "type": "OnEvent", "inputs": {"event_name": "ping"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "on_ping"},
+        ],
+    }
+    async with Client(mcp) as c:
+        await c.call_tool("create_flow", {"flow": listener})
+        served = (await c.call_tool("serve_flow_events", {"name": "listener"})).data
+        assert served["graph_id"] == "listener"
+
+        stopped = (await c.call_tool(
+            "stop_flow_events", {"name": "listener", "graph_id": served["graph_id"]}
+        )).data
+        assert stopped["stopped"] is True

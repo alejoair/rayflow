@@ -933,7 +933,7 @@
       "system": "mcp"
     },
     "rayflow/mcp/server.py": {
-      "description": "Builds the FastMCP server exposing a curated set of tools (get_guide, list_nodes, validate_flow, create_flow, run_flow, test_flow, etc.) that reuse the editor's REST logic, so an LLM agent can build/validate/run flows autonomously.",
+      "description": "Builds the FastMCP server exposing the curated MCP tool set for LLM agents: discovery (get_guide/list_nodes/get_node/list_types/type_check), validation (validate_flow), flow CRUD (list/get/create/update/delete_flow, flow_catalog), custom-node CRUD with hot reload (list/get_source/create/update_source/delete_custom_node, reload_custom_nodes), events (serve_flow_events, stop_flow_events), and execution (run_flow/test_flow with an optional trace of per-node events, unload_flow). All reuse the editor REST logic instead of reimplementing it. update_flow/delete_flow unload the flow from Ray if it was already loaded, so the next run picks up the change instead of silently reusing the stale graph.",
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
@@ -1307,7 +1307,7 @@
       "system": "tests"
     },
     "tests/test_mcp.py": {
-      "description": "Tests for the curated MCP tool layer (rayflow/mcp/server.py), exercised through FastMCP's in-memory client.",
+      "description": "Tests for the curated MCP tool layer (rayflow/mcp/server.py), exercised through FastMCP's in-memory client: discovery/validation/flow CRUD, the custom-node hot-reload lifecycle, the update_flow/delete_flow stale-graph regression, unload_flow, run_flow's trace=True, and serve/stop_flow_events.",
       "depends_on": [
         "rayflow/editor/storage.py",
         "rayflow/mcp/server.py",
