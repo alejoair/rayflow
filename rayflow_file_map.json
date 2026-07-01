@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 148,
+  "file_count": 149,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -1345,9 +1345,10 @@
       "system": "tests"
     },
     ".claude/hooks/stale_reminder.py": {
-      "description": "Stop hook: scans the session transcript for Edit/Write calls made since the last check; if any touched a mapped file, blocks once (decision:block, guarded by stop_hook_active) to remind the model to verify/update that file's description in rayflow_file_map.json before ending the turn. On the very first Stop fire of a session it only records a baseline offset and reports nothing, instead of scanning the whole prior transcript.",
+      "description": "Stop hook: scans the session transcript for Edit/Write calls made since the last check; if any touched a mapped file, blocks once (decision:block, guarded by stop_hook_active) to remind the model to verify/update that file's description in rayflow_file_map.json before ending the turn, and to hint (same block) when the edit touches a system referenced in rayflow_scenarios.json's end-to-end narratives. On the very first Stop fire of a session it only records a baseline offset and reports nothing, instead of scanning the whole prior transcript.",
       "depends_on": [
-        ".claude/hooks/_file_map.py"
+        ".claude/hooks/_file_map.py",
+        "rayflow_scenarios.json"
       ],
       "dependents": [],
       "system": "hooks-infra"
@@ -1394,6 +1395,14 @@
       ],
       "dependents": [],
       "system": "hooks-infra"
+    },
+    "rayflow_scenarios.json": {
+      "description": "End-to-end scenario narratives describing how systems cooperate to accomplish something a user or LLM agent actually cares about (running a flow from the editor, an agent authoring via MCP, event-reactive flows, custom-node hot reload, CallFlow subflow splicing). Unlike depends_on_systems/dependents_systems, these can't be derived mechanically — they require an LLM to understand intent, and have no automated correctness check.",
+      "depends_on": [],
+      "dependents": [
+        ".claude/hooks/stale_reminder.py"
+      ],
+      "system": "docs"
     }
   },
   "systems": {
@@ -1454,6 +1463,7 @@
         "docs/propuesta-runcontext.md",
         "docs/rayflow.md",
         "rayflow_file_map.json",
+        "rayflow_scenarios.json",
         "rayflow_workflows.json",
         "signatures/cla.json"
       ],

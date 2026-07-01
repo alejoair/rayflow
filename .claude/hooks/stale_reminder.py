@@ -5,6 +5,11 @@ listed in rayflow_file_map.json, blocks once (via decision:"block") to
 remind the model to check whether that file's description still matches
 its behavior — content can drift out of sync with the map on an Edit,
 unlike a file being added/removed (which staleness_guard already covers).
+Also hints (same block) when an edited file's system participates in one
+of rayflow_scenarios.json's end-to-end narratives — those narratives have
+no mechanical correctness check (they require understanding intent, not
+just structure), so the best a hook can do is nudge toward a re-read, not
+claim the narrative is actually wrong.
 
 Uses stop_hook_active to fire at most once per stop cycle, avoiding an
 infinite block loop. Tracks a per-session read offset in a state file
@@ -22,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _file_map import load_map, repo_relative  # noqa: E402
 
 STATE_DIR = Path(tempfile.gettempdir()) / "rayflow-stale-reminder"
+SCENARIOS_PATH = Path(__file__).resolve().parent.parent.parent / "rayflow_scenarios.json"
 
 
 def _state_path(session_id: str) -> Path:
@@ -71,6 +77,26 @@ def _edited_paths_since(transcript_path: str, offset: int) -> tuple[set[str], in
             if fp:
                 paths.add(fp)
     return paths, len(lines)
+
+
+def _touched_scenarios(mapped_edits: list[str], files: dict) -> list[str]:
+    """Titles of scenarios whose systems_path includes the system of any
+    edited file. Best-effort: returns [] if the scenarios file is
+    missing/unreadable, never raises."""
+    try:
+        scenarios = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8")).get("scenarios", [])
+    except Exception:
+        return []
+
+    touched_systems = {files[rel].get("system") for rel in mapped_edits if rel in files}
+    touched_systems.discard(None)
+    if not touched_systems:
+        return []
+
+    return [
+        s["title"] for s in scenarios
+        if touched_systems & set(s.get("systems_path") or [])
+    ]
 
 
 def main() -> None:
@@ -125,6 +151,16 @@ def main() -> None:
         "stays accurate for future sessions. If the description still holds, "
         "no action needed."
     )
+
+    scenario_titles = _touched_scenarios(mapped_edits, files)
+    if scenario_titles:
+        reason += (
+            " Also: these edits touch a system involved in rayflow_scenarios.json "
+            "scenario(s) — " + "; ".join(scenario_titles) + ". Worth a re-read if "
+            "the change affects that end-to-end path, though there's no automated "
+            "way to confirm the narrative is still accurate."
+        )
+
     print(json.dumps({"decision": "block", "reason": reason}))
 
 
