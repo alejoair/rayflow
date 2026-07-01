@@ -14,9 +14,9 @@ class PinKind(str, Enum):
 class PinDef:
     name: str
     kind: PinKind
-    # None para pins exec o tipo Any implícito
+    # None for exec pins or an implicit Any type
     type: str | None = None
-    # Valor literal estático o referencia "node_id.pin_name"
+    # A static literal value, or a reference "node_id.pin_name"
     value: Any = None
     required: bool = False
 
@@ -24,40 +24,41 @@ class PinDef:
 @dataclass
 class NodeDef:
     id: str
-    type: str  # nombre del nodo en el catálogo
-    # data inputs: nombre → valor literal o "node_id.pin_name"
+    type: str  # node name in the catalog
+    # data inputs: name → literal value or "node_id.pin_name"
     inputs: dict[str, Any] = field(default_factory=dict)
-    # exec input: None si OnStart/OnEvent, o "node_id" si viene de otro nodo
+    # exec input: None for OnStart/OnEvent, or "node_id" if it comes from another node
     exec_in: str | list[str] | dict | None = None
-    # Ruta del GraphState al que pertenece este nodo. None = el del flow raíz.
-    # Asignado por flatten() al expandir un CallFlow isolated: los nodos del
-    # subgrafo aislado apuntan a su propio segmento de estado.
+    # GraphState path this node belongs to. None = the root flow's.
+    # Assigned by flatten() when expanding an isolated CallFlow: nodes in the
+    # isolated subgraph point to their own state segment.
     state_path: str | None = None
-    # CallFlow shell de empalme inmediato (un solo salto hacia arriba, como
-    # parentNode en el DOM). Solo lo llevan los FlowInput/FlowOutput de frontera
-    # de un subgrafo spliced. None = nodo del flow raíz. Asignado por flatten().
+    # Immediate splice-point CallFlow shell (a single hop up, like parentNode
+    # in the DOM). Only carried by the boundary FlowInput/FlowOutput of a
+    # spliced subgraph. None = a root-flow node. Assigned by flatten().
     subflow_of: str | None = None
-    # Interfaz declarada del flow al que pertenece este nodo de frontera:
-    # {"inputs": {...}, "outputs": {...}}. Permite que _with_dynamic_pins genere
-    # los pins correctos de un FlowInput/FlowOutput spliced (que ya no coinciden
-    # con la interfaz del flow raíz). None = usar la interfaz del flow raíz.
+    # Declared interface of the flow this boundary node belongs to:
+    # {"inputs": {...}, "outputs": {...}}. Lets _with_dynamic_pins generate
+    # the correct pins for a spliced FlowInput/FlowOutput (which no longer
+    # match the root flow's interface). None = use the root flow's interface.
     iface: dict | None = None
-    # Solo en un CallFlow shell: id del nodo de entrada del subgrafo inline y del
-    # FlowOutput de retorno. El shell los orquesta en runtime: dispara
-    # subflow_entry (bloqueante), lee los outputs de subflow_exit como 'result',
-    # y luego sigue su propio exec_out (la continuación del padre).
+    # Only on a CallFlow shell: id of the inline subgraph's entry node and of
+    # the return FlowOutput. The shell orchestrates them at runtime: fires
+    # subflow_entry (blocking), reads subflow_exit's outputs as 'result',
+    # then continues its own exec_out (the parent's continuation).
     subflow_entry: str | None = None
     subflow_exit: str | None = None
-    # Solo en un CallFlow shell isolated: variables del subflow a sembrar (lazy)
-    # con clave prefijada por el state_path del subgrafo al entrar. Lista de
-    # (nombre, default). Vacío si el subflow comparte estado con el padre.
+    # Only on an isolated CallFlow shell: subflow variables to seed (lazily)
+    # with a key prefixed by the subgraph's state_path on entry. List of
+    # (name, default). Empty if the subflow shares state with its parent.
     subflow_vars: list = field(default_factory=list)
-    # Nombre del flow que DECLARÓ este nodo. Para nodos del flow raíz es el flow
-    # raíz; para nodos de un CallFlow spliced es el nombre del subflow. Lo usa
-    # _build_meta para meta['flow']. None = flow raíz (resuelto en el engine).
+    # Name of the flow that DECLARED this node. For root-flow nodes it's the
+    # root flow; for nodes of a spliced CallFlow it's the subflow's name.
+    # Used by _build_meta for meta['flow']. None = root flow (resolved by
+    # the engine).
     flow_name: str | None = None
-    # Metadatos del editor visual: posición en canvas, comentarios, etc.
-    # Ignorado completamente por el engine — solo lo lee/escribe el editor.
+    # Visual editor metadata: canvas position, comments, etc. Completely
+    # ignored by the engine — only the editor reads/writes it.
     ui: dict | None = None
 
 
@@ -72,10 +73,10 @@ class VariableDef:
 class FlowDef:
     name: str
     version: str = "1"
-    # Inputs/outputs de la interfaz pública: nombre → tipo
+    # Public interface inputs/outputs: name → type
     inputs: dict[str, str] = field(default_factory=dict)
     outputs: dict[str, str] = field(default_factory=dict)
     variables: list[VariableDef] = field(default_factory=list)
-    # Eventos que este flow puede emitir (informativo)
+    # Events this flow may emit (informational)
     events: list[str] = field(default_factory=list)
     nodes: list[NodeDef] = field(default_factory=list)

@@ -3,3 +3,6 @@
 exclude CLAUDE.md
 prune docs
 prune examples
+
+# Generated LLM-orientation file map — internal tooling artifact, not user docs.
+exclude rayflow_file_map.json

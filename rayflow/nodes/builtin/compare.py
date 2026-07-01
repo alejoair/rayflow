@@ -1,7 +1,7 @@
-"""Nodos de comparación y lógica booleana — pure nodes (sin exec pins).
+"""Comparison and boolean logic nodes — pure nodes (no exec pins).
 
-Se evalúan bajo demanda como inputs de otros nodos (Branch, While, Map…)
-sin necesidad de exec wire. Tipos Any para soportar int, float y str.
+Evaluated on demand as inputs of other nodes (Branch, While, Map…) without
+needing an exec wire. Typed Any to support int, float, and str.
 """
 from typing import Any
 
@@ -10,7 +10,7 @@ from rayflow.nodes.decorators import ExecContext, Input, Output, engine_node, ra
 
 @engine_node
 class GreaterThan:
-    """Devuelve True si a > b. Pure node: evaluable como input de Branch/While."""
+    """Returns True if a > b. Pure node: evaluable as an input of Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -21,7 +21,7 @@ class GreaterThan:
 
 @engine_node
 class LessThan:
-    """Devuelve True si a < b. Pure node: evaluable como input de Branch/While."""
+    """Returns True if a < b. Pure node: evaluable as an input of Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -32,7 +32,7 @@ class LessThan:
 
 @engine_node
 class GreaterThanOrEqual:
-    """Devuelve True si a >= b. Pure node: evaluable como input de Branch/While."""
+    """Returns True if a >= b. Pure node: evaluable as an input of Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -43,7 +43,7 @@ class GreaterThanOrEqual:
 
 @engine_node
 class LessThanOrEqual:
-    """Devuelve True si a <= b. Pure node: evaluable como input de Branch/While."""
+    """Returns True if a <= b. Pure node: evaluable as an input of Branch/While."""
     a = Input("Any", default=0)
     b = Input("Any", default=0)
     result = Output("bool")
@@ -54,7 +54,7 @@ class LessThanOrEqual:
 
 @ray_node
 class Equal:
-    """Devuelve True si a == b. Pure node: evaluable como input de Branch/While."""
+    """Returns True if a == b. Pure node: evaluable as an input of Branch/While."""
     a = Input("Any", default=None)
     b = Input("Any", default=None)
     result = Output("bool")
@@ -65,7 +65,7 @@ class Equal:
 
 @engine_node
 class NotEqual:
-    """Devuelve True si a != b. Pure node: evaluable como input de Branch/While."""
+    """Returns True if a != b. Pure node: evaluable as an input of Branch/While."""
     a = Input("Any", default=None)
     b = Input("Any", default=None)
     result = Output("bool")
@@ -76,7 +76,7 @@ class NotEqual:
 
 @engine_node
 class Not:
-    """Negación lógica: devuelve True si value es False y viceversa."""
+    """Logical negation: returns True if value is False and vice versa."""
     value = Input("bool", default=False)
     result = Output("bool")
 
@@ -86,7 +86,7 @@ class Not:
 
 @engine_node
 class And:
-    """Conjunción lógica: devuelve True solo si a y b son ambos True."""
+    """Logical conjunction: returns True only if both a and b are True."""
     a = Input("bool", default=False)
     b = Input("bool", default=False)
     result = Output("bool")
@@ -97,7 +97,7 @@ class And:
 
 @engine_node
 class Or:
-    """Disyunción lógica: devuelve True si a o b (o ambos) son True."""
+    """Logical disjunction: returns True if a or b (or both) are True."""
     a = Input("bool", default=False)
     b = Input("bool", default=False)
     result = Output("bool")

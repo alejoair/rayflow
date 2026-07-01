@@ -12,15 +12,15 @@ def cli():
 
 @cli.command()
 @click.option("--file", "-f", "files", multiple=True, required=False, metavar="PATH",
-              help="Flow JSON a servir. Repetible para varios flows.")
-@click.option("--host", default="127.0.0.1", show_default=True, help="Host del servidor")
-@click.option("--port", "-p", default=8000, show_default=True, help="Puerto del servidor")
+              help="Flow JSON to serve. Repeatable for multiple flows.")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Server host")
+@click.option("--port", "-p", default=8000, show_default=True, help="Server port")
 @click.option("--nodes-dir", "nodes_dirs", multiple=True, metavar="DIR",
-              help="Directorio extra de nodos de usuario. Repetible.")
+              help="Extra directory of user nodes. Repeatable.")
 @click.option("--debug", is_flag=True, default=False,
-              help="Redirige los logs de los actores Ray (prints incluidos) a la consola.")
+              help="Redirects Ray actor logs (including prints) to the console.")
 def serve(files, host, port, nodes_dirs, debug):
-    """Lanza el servidor REST y el editor visual."""
+    """Launches the REST server and the visual editor."""
     import ray
     from rayflow.workspace import ensure_workspace, runtime_env
     from rayflow.events.bus import get_event_broker

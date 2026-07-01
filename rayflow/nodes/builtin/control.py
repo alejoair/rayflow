@@ -1,4 +1,4 @@
-"""Nodos de control de flujo."""
+"""Flow-control nodes."""
 import asyncio
 import inspect
 from typing import Any
@@ -16,11 +16,11 @@ from rayflow.nodes.decorators import (
 
 
 class _MapCaptureCtx:
-    """Contexto de captura para Map: recoge set_output, ignora fire().
+    """Capture context for Map: collects set_output, ignores fire().
 
-    Permite ejecutar el run() de cualquier nodo inline (sin actores Ray)
-    capturando sus data outputs sin propagar el exec flow.
-    Las operaciones de variables/eventos se delegan al contexto padre.
+    Lets any inline node's run() execute (no Ray actors) while capturing its
+    data outputs without propagating the exec flow.
+    Variable/event operations are delegated to the parent context.
     """
 
     def __init__(self, parent: ExecContext):
@@ -48,19 +48,19 @@ class _MapCaptureCtx:
 
 @engine_node
 class OnStart:
-    """Punto de entrada del flow.
+    """Entry point of the flow.
 
-    Sus data outputs se generan en build a partir de los `inputs` declarados
-    en el flow. El engine inyecta los valores antes de llamar run().
+    Its data outputs are generated at build time from the flow's declared
+    `inputs`. The engine injects their values before calling run().
     """
     category = "Control"
     exec_out = ExecOutput()
 
 @engine_node
 class FlowOutput:
-    """Punto de salida del flow.
+    """Exit point of the flow.
 
-    Sus data inputs se generan en build a partir de los `outputs` del flow.
+    Its data inputs are generated at build time from the flow's `outputs`.
     """
     category = "Control"
     exec_in = ExecInput()
@@ -71,7 +71,7 @@ class FlowOutput:
 
 @ray_node
 class Branch:
-    """Desvío condicional. Dispara `true` o `false` según `condition`."""
+    """Conditional branch. Fires `true` or `false` based on `condition`."""
     category = "Control"
     exec_in = ExecInput()
     condition = Input("bool", default=False)
@@ -84,7 +84,7 @@ class Branch:
 
 @ray_node
 class Sequence:
-    """Dispara sus exec outputs en orden secuencial."""
+    """Fires its exec outputs in sequential order."""
     category = "Control"
     exec_in = ExecInput()
     then_0 = ExecOutput()
@@ -99,14 +99,14 @@ class Sequence:
 
 @parallel_node
 class Parallel:
-    """Fork/join paralelo. Lanza N ramas simultáneamente.
+    """Parallel fork/join. Launches N branches simultaneously.
 
-    Los branch pins (branch_0, branch_1, …, branch_N) se inyectan dinámicamente
-    en build a partir del wiring del JSON. Las ramas se descubren en runtime via
-    ctx.exec_outputs_except("joined") y se lanzan con asyncio.gather.
-    El pin 'joined' se dispara cuando todas las ramas han terminado.
+    Branch pins (branch_0, branch_1, …, branch_N) are dynamically injected
+    at build time from the JSON wiring. Branches are discovered at runtime
+    via ctx.exec_outputs_except("joined") and launched with asyncio.gather.
+    The 'joined' pin fires once every branch has finished.
     """
-    category = "Bucles"
+    category = "Loops"
     exec_in = ExecInput()
     joined = ExecOutput()
 
@@ -118,8 +118,8 @@ class Parallel:
 
 @engine_node
 class ForEach:
-    """Itera sobre un array disparando loop_body por cada elemento."""
-    category = "Bucles"
+    """Iterates over an array, firing loop_body for each element."""
+    category = "Loops"
     exec_in = ExecInput()
     array = Input("list", default=None)
     loop_body = ExecOutput()
@@ -137,12 +137,13 @@ class ForEach:
 
 @engine_node
 class While:
-    """Itera mientras una variable booleana sea True.
+    """Iterates while a boolean variable stays True.
 
-    Lee la variable `condition_var` del GraphState al inicio de cada iteración.
-    El loop body es responsable de actualizarla (via Set) para controlar la salida.
+    Reads the `condition_var` variable from GraphState at the start of each
+    iteration. The loop body is responsible for updating it (via Set) to
+    control exit.
 
-    Ejemplo de uso en JSON:
+    Example JSON usage:
         variables: [{"name": "keep_going", "type": "bool", "default": true}]
         {"id": "w", "type": "While", "exec_in": "entry",
          "inputs": {"condition_var": "keep_going"}}
@@ -160,17 +161,17 @@ class While:
 
 @engine_node
 class Map:
-    """Aplica un nodo de transformación a cada elemento de un array.
+    """Applies a transform node to each element of an array.
 
-    `node_type` es el nombre del tipo de nodo (string literal en el JSON).
-    El elemento se pasa al primer data input del nodo; los demás inputs
-    usan sus valores por defecto declarados. El primer data output de cada
-    invocación se recoge en la lista resultado.
+    `node_type` is the catalog node type's name (a string literal in the
+    JSON). The element is passed to the node's first data input; remaining
+    inputs use their declared defaults. The first data output of each
+    invocation is collected into the result list.
 
-    Funciona con cualquier nodo del catálogo (pure o exec, engine o ray_node).
-    Los exec outputs del nodo aplicado se ignoran — Map solo captura datos.
+    Works with any node in the catalog (pure or exec, engine or ray_node).
+    The applied node's exec outputs are ignored — Map only captures data.
 
-    Ejemplo de uso en JSON:
+    Example JSON usage:
         {"id": "m", "type": "Map", "exec_in": "entry",
          "inputs": {"array": "entry.items", "node_type": "ToStr"}}
     """
@@ -184,12 +185,12 @@ class Map:
         from rayflow.nodes.registry import get_catalog
         entry = get_catalog().get(node_type)
         if entry is None:
-            raise RuntimeError(f"Map: nodo '{node_type}' no encontrado en el catálogo")
+            raise RuntimeError(f"Map: node '{node_type}' not found in the catalog")
         cls, meta = entry
         if not meta.inputs:
-            raise RuntimeError(f"Map: '{node_type}' no tiene data inputs")
+            raise RuntimeError(f"Map: '{node_type}' has no data inputs")
         if not meta.outputs:
-            raise RuntimeError(f"Map: '{node_type}' no tiene data outputs")
+            raise RuntimeError(f"Map: '{node_type}' has no data outputs")
 
         first_in = meta.inputs[0].name
         first_out = meta.outputs[0].name
@@ -203,7 +204,7 @@ class Map:
             ret = node_instance.run(capture, **inputs)
             if inspect.isawaitable(ret):
                 ret = await ret
-            # pure nodes devuelven dict; exec nodes usan set_output (ret=None)
+            # pure nodes return a dict; exec nodes use set_output (ret=None)
             if isinstance(ret, dict):
                 results.append(ret.get(first_out))
             else:

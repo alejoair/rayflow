@@ -1,12 +1,12 @@
-"""API REST para servir flows como endpoints HTTP.
+"""REST API for serving flows as HTTP endpoints.
 
-`rayflow serve --file flow.json` levanta un servidor FastAPI que expone cada
-flow cargado bajo `/flows/{name}/run`. Cada request ejecuta el flow de forma
-aislada (un graph_id UUID por ejecución), así que requests concurrentes al
-mismo flow no colisionan.
+`rayflow serve --file flow.json` starts a FastAPI server that exposes each
+loaded flow under `/flows/{name}/run`. Each request executes the flow in
+isolation (a UUID graph_id per execution), so concurrent requests to the
+same flow don't collide.
 
-Esto es distinto de `rayflow.serve_events()` (api.py), que registra un flow en
-el bus de eventos interno.
+This is distinct from `rayflow.serve_events()` (api.py), which registers a
+flow on the internal event bus.
 """
 from __future__ import annotations
 
@@ -20,17 +20,17 @@ from rayflow.build.validator import build
 
 
 class ServedFlow:
-    """Un flow cargado y validado, listo para ejecutarse por request."""
+    """A loaded, validated flow, ready to run per request."""
 
     def __init__(self, source: str | Path | dict, flow_def: FlowDef):
-        # Conserva el source original (ruta o dict) para re-ejecutar el flow por
-        # request vía run_async — NO su str(), que perdería un dict inline.
+        # Keeps the original source (path or dict) to re-run the flow per
+        # request via run_async — NOT its str(), which would lose an inline dict.
         self.source = source
         self.flow_def = flow_def
 
     @property
     def source_label(self) -> str:
-        """Etiqueta legible del origen (para mensajes de error)."""
+        """Human-readable origin label (for error messages)."""
         return self.source if isinstance(self.source, (str, Path)) else f"<dict:{self.name}>"
 
     @property
@@ -58,27 +58,27 @@ class ServedFlow:
 def load_served_flows(sources: list[str | Path | dict],
                       extra_node_dirs: list[str | Path] | None = None
                       ) -> dict[str, ServedFlow]:
-    """Carga y valida cada flow al arrancar; los indexa por su `name`.
+    """Loads and validates every flow at startup; indexes them by `name`.
 
-    Falla temprano (antes de levantar el servidor) si un flow no compila o si
-    dos flows comparten el mismo nombre.
+    Fails early (before the server starts) if a flow doesn't build, or if
+    two flows share the same name.
     """
     catalog = get_catalog(extra_node_dirs)
     served: dict[str, ServedFlow] = {}
     for src in sources:
         flow_def = load_flow(src)
-        build(flow_def, catalog)  # validación temprana — lanza BuildError si falla
+        build(flow_def, catalog)  # early validation — raises BuildError on failure
         if flow_def.name in served:
             raise ValueError(
-                f"Dos flows comparten el nombre '{flow_def.name}': "
-                f"'{served[flow_def.name].source_label}' y '{src}'"
+                f"Two flows share the name '{flow_def.name}': "
+                f"'{served[flow_def.name].source_label}' and '{src}'"
             )
         served[flow_def.name] = ServedFlow(src, flow_def)
     return served
 
 
 def create_app(served: dict[str, ServedFlow]):
-    """Construye la app FastAPI con los endpoints sobre los flows servidos."""
+    """Builds the FastAPI app with the endpoints for the served flows."""
     from pathlib import Path as _Path
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.staticfiles import StaticFiles
@@ -87,15 +87,15 @@ def create_app(served: dict[str, ServedFlow]):
     from rayflow.editor.routes import router as editor_router
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
 
-    # Construir el servidor MCP antes que la app: su lifespan (gestor de sesiones
-    # streamable-http) debe pasarse a FastAPI para que arranque al montarlo.
+    # Build the MCP server before the app: its lifespan (the streamable-http
+    # session manager) must be passed to FastAPI so it starts when mounted.
     mcp_app = None
     try:
         from rayflow.mcp.server import create_mcp
         mcp_app = create_mcp(served).http_app(path="/")
-    except Exception as e:  # pragma: no cover - degradación si fastmcp falla
+    except Exception as e:  # pragma: no cover - graceful degradation if fastmcp fails
         import logging
-        logging.getLogger("rayflow").warning("Capa MCP no disponible: %s", e)
+        logging.getLogger("rayflow").warning("MCP layer unavailable: %s", e)
 
     app = FastAPI(
         title="Rayflow",
@@ -105,7 +105,7 @@ def create_app(served: dict[str, ServedFlow]):
     app.include_router(editor_router)
     app.include_router(custom_nodes_router)
 
-    # Tools MCP curadas en /mcp (streamable-http) para agentes LLM.
+    # Curated MCP tools at /mcp (streamable-http) for LLM agents.
     if mcp_app is not None:
         app.mount("/mcp", mcp_app)
 
@@ -125,7 +125,7 @@ def create_app(served: dict[str, ServedFlow]):
     async def flow_detail(name: str) -> dict[str, Any]:
         sf = served.get(name)
         if sf is None:
-            raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
         return sf.interface
 
     @app.post("/flows/{name}/run")
@@ -133,20 +133,20 @@ def create_app(served: dict[str, ServedFlow]):
         import asyncio
         sf = served.get(name)
         if sf is None:
-            raise HTTPException(status_code=404, detail=f"Flow '{name}' no encontrado")
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
 
         if inputs is None:
             inputs = {}
         if not isinstance(inputs, dict):
             raise HTTPException(
-                status_code=400, detail="Body debe ser un objeto JSON de inputs"
+                status_code=400, detail="Body must be a JSON object of inputs"
             )
 
         loop = asyncio.get_event_loop()
         try:
             outputs = await loop.run_in_executor(None, lambda: run(sf.source, **inputs))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error ejecutando el flow: {e}")
+            raise HTTPException(status_code=500, detail=f"Error running the flow: {e}")
         return outputs
 
     return app
@@ -154,16 +154,16 @@ def create_app(served: dict[str, ServedFlow]):
 
 def serve(sources: list[str | Path], host: str = "127.0.0.1", port: int = 8000,
           extra_node_dirs: list[str | Path] | None = None) -> None:
-    """Carga los flows, valida, y levanta el servidor REST (bloqueante)."""
+    """Loads the flows, validates them, and starts the REST server (blocking)."""
     import signal
     import uvicorn
     served = load_served_flows(sources, extra_node_dirs)
     app = create_app(served)
-    names = ", ".join(served) or "(ninguno)"
-    print(f"Rayflow sirviendo {len(served)} flow(s): {names}")
+    names = ", ".join(served) or "(none)"
+    print(f"Rayflow serving {len(served)} flow(s): {names}")
     print(f"  -> REST:   http://{host}:{port}/flows")
     print(f"  -> Editor: http://{host}:{port}/editor")
-    print(f"  -> MCP:    http://{host}:{port}/mcp/  (tools para agentes LLM)")
+    print(f"  -> MCP:    http://{host}:{port}/mcp/  (tools for LLM agents)")
 
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port))
 

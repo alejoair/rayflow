@@ -1,14 +1,15 @@
-"""Convención del working directory de Rayflow.
+"""Rayflow's working-directory convention.
 
-Donde se lanza rayflow es la carpeta de trabajo. Por convención contiene:
+Wherever rayflow is launched from is the working directory. By convention
+it contains:
 
     <cwd>/
-    ├── custom_nodes/     ← paquete de nodos custom (auto-descubierto y distribuido)
+    ├── custom_nodes/     ← package of custom nodes (auto-discovered and distributed)
     │   └── __init__.py
-    └── flows/            ← flows JSON, resueltos por nombre
+    └── flows/            ← flow JSON files, resolved by name
 
-`custom_nodes/` se distribuye a los workers Ray vía runtime_env (py_modules),
-así los nodos custom funcionan aunque Ray ejecute en varias máquinas.
+`custom_nodes/` is distributed to Ray workers via runtime_env (py_modules),
+so custom nodes work even when Ray runs across multiple machines.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ FLOWS_DIR = "flows"
 
 
 def workspace_root() -> Path:
-    """Raíz del workspace = directorio de trabajo actual."""
+    """Workspace root = the current working directory."""
     return Path.cwd()
 
 
@@ -32,10 +33,10 @@ def flows_path() -> Path:
 
 
 def ensure_workspace() -> None:
-    """Crea custom_nodes/ (con __init__.py) y flows/ si no existen.
+    """Creates custom_nodes/ (with __init__.py) and flows/ if they don't exist.
 
-    Convención sin fricción: un proyecto nuevo queda listo para usar nodos
-    custom y flows sin configuración manual.
+    Zero-friction convention: a new project is ready to use custom nodes and
+    flows with no manual configuration.
     """
     cn = custom_nodes_path()
     if not cn.exists():
@@ -50,15 +51,15 @@ def ensure_workspace() -> None:
 
 
 def runtime_env() -> dict | None:
-    """runtime_env para ray.init: distribuye custom_nodes/ como py_module.
+    """runtime_env for ray.init: distributes custom_nodes/ as a py_module.
 
-    Devuelve None si no hay nodos custom (solo el __init__.py o vacío), para no
-    arrancar Ray con un runtime_env innecesario.
+    Returns None if there are no custom nodes (just __init__.py or empty),
+    to avoid starting Ray with an unnecessary runtime_env.
     """
     cn = custom_nodes_path()
     if not cn.exists():
         return None
-    # ¿Hay algún .py de nodo además del __init__.py?
+    # Is there any node .py file besides __init__.py?
     has_nodes = any(
         p.suffix == ".py" and p.name != "__init__.py"
         for p in cn.iterdir()
@@ -69,10 +70,10 @@ def runtime_env() -> dict | None:
 
 
 def resolve_flow(name_or_path: str) -> str:
-    """Resuelve un flow por nombre o ruta.
+    """Resolves a flow by name or path.
 
-    - Si es una ruta existente (.json), la devuelve tal cual.
-    - Si es un nombre simple, busca flows/<name>.json en el workspace.
+    - If it's an existing path (.json), returns it as-is.
+    - If it's a plain name, looks up flows/<name>.json in the workspace.
     """
     p = Path(name_or_path)
     if p.exists():
@@ -82,5 +83,5 @@ def resolve_flow(name_or_path: str) -> str:
     if candidate.exists():
         return str(candidate)
     raise FileNotFoundError(
-        f"Flow '{name_or_path}' no encontrado (ni como ruta ni en {flows_path()})"
+        f"Flow '{name_or_path}' not found (neither as a path nor in {flows_path()})"
     )

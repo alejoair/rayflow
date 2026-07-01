@@ -1,0 +1,1203 @@
+{
+  "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
+  "root": "rayflow — visual workflow orchestration on Ray",
+  "file_count": 142,
+  "files": {
+    ".claude/hooks/_file_map.py": {
+      "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json and resolves an absolute file_path to a repo-relative path.",
+      "depends_on": [],
+      "dependents": [
+        ".claude/hooks/dependents_reminder.py",
+        ".claude/hooks/file_map_context.py",
+        ".claude/hooks/prompt_file_hints.py",
+        ".claude/hooks/session_orientation.py",
+        ".claude/hooks/staleness_guard.py"
+      ]
+    },
+    ".claude/hooks/dependents_reminder.py": {
+      "description": "PostToolUse hook (Edit|Write): after editing a mapped file, reminds Claude which other files list it as a dependent, so knock-on effects (like an outdated test) aren't forgotten.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/file_map_context.py": {
+      "description": "PreToolUse hook (Read|Edit|Write): before Claude touches a mapped file, surfaces its description plus depends_on/dependents from rayflow_file_map.json as additionalContext.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/prompt_file_hints.py": {
+      "description": "UserPromptSubmit hook: if the user's prompt names something matching a mapped file's basename (e.g. \"validator\", \"NodeCard\"), surfaces that file's description as additionalContext.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/session_orientation.py": {
+      "description": "SessionStart hook: injects a one-line pointer to rayflow_file_map.json's existence (file count, root description) so a fresh session knows to consult it.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/staleness_guard.py": {
+      "description": "PostToolUse hook (Write|Bash): heuristically flags when rayflow_file_map.json may be out of date — a new file was written that isn't in the map, or a shell command looks like it deletes a file that is.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/settings.json": {
+      "description": "Project-level Claude Code settings (shared via git) — permissions and harness configuration for this repo.",
+      "depends_on": [],
+      "dependents": []
+    },
+    ".claude/settings.local.json": {
+      "description": "Machine-local Claude Code settings override, not meant to be shared/committed conventions aside.",
+      "depends_on": [],
+      "dependents": []
+    },
+    ".github/workflows/cla.yml": {
+      "description": "CLA Assistant workflow: asks external contributors to sign the CLA before a PR can merge; skips the check entirely for PRs opened by the maintainer.",
+      "depends_on": [],
+      "dependents": []
+    },
+    ".github/workflows/pypi.yaml": {
+      "description": "CI workflow that builds and publishes the package to PyPI on release.",
+      "depends_on": [],
+      "dependents": []
+    },
+    ".github/workflows/test.yml": {
+      "description": "CI workflow that runs the pytest suite on pushes/PRs.",
+      "depends_on": [],
+      "dependents": []
+    },
+    ".gitignore": {
+      "description": "Patterns for files/directories git should not track (build artifacts, virtualenvs, caches, etc.).",
+      "depends_on": [],
+      "dependents": []
+    },
+    ".mcp.json": {
+      "description": "Registers Rayflow's own MCP server (served at /mcp by a running `rayflow serve`) so Claude Code can use its tools directly.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "CLA.md": {
+      "description": "Contributor License Agreement: contributors keep copyright but grant the maintainer the right to relicense their contributions, including commercially.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "CLAUDE.md": {
+      "description": "Architecture and conventions guide for Claude Code (or any LLM agent) working in this repo: node system, engine internals, REST/MCP API tables, flow JSON schema.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "COMMERCIAL-LICENSE.md": {
+      "description": "Explains Rayflow's dual-license model (AGPL-3.0-or-later free for non-commercial use; a separate commercial license is required otherwise) and how to obtain one.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "CONTRIBUTING.md": {
+      "description": "Contributor guide: dev setup, how the CLA bot signing flow works, PR guidelines.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "LICENSE": {
+      "description": "Full text of the GNU Affero General Public License v3.0, Rayflow's open-source license.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "MANIFEST.in": {
+      "description": "setuptools sdist manifest: excludes CLAUDE.md, docs/, and examples/ from the published PyPI package.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "README.md": {
+      "description": "Project overview, installation, quickstart, and license summary shown on GitHub and PyPI.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "docs/analisis-conceptual.md": {
+      "description": "Long-form conceptual analysis (in Spanish) of Rayflow's execution model: the two superimposed planes (control/exec and data) and the core mental model behind the engine.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "docs/frontend.md": {
+      "description": "Quick-reference (in Spanish) inventory of the editor frontend's tech stack and component responsibilities.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "docs/propuesta-runcontext.md": {
+      "description": "Design proposal (in Spanish) that motivated reifying a flow execution as a `RunContext` object to isolate concurrent runs.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "docs/rayflow.md": {
+      "description": "Historical v1 design document (in Spanish, explicitly marked obsolete) describing the original workflow-orchestration model, kept as an intent record.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "examples/branch_demo.json": {
+      "description": "Example flow demonstrating conditional branching with the Branch node.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "examples/cast_demo.json": {
+      "description": "Example flow demonstrating explicit type casting nodes (ToInt/ToFloat/ToStr/ToBool).",
+      "depends_on": [],
+      "dependents": []
+    },
+    "examples/foreach_demo.json": {
+      "description": "Example flow demonstrating iteration over a list with the ForEach node.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "examples/sequence_demo.json": {
+      "description": "Example flow demonstrating ordered sequential execution with the Sequence node.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "examples/showcase.json": {
+      "description": "Larger example flow combining multiple node types to showcase Rayflow's model end-to-end.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "examples/suma.json": {
+      "description": "Minimal example flow: adds two integers (OnStart -> Add -> FlowOutput).",
+      "depends_on": [],
+      "dependents": []
+    },
+    "pyproject.toml": {
+      "description": "Python package metadata: dependencies, build system, author/license info, pytest config, and package-data inclusion rules.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/__init__.py": {
+      "description": "Package entry point: re-exports the public Python API (run/load/unload/execute/serve_events/stop) and exposes rayflow.__version__ resolved from installed package metadata.",
+      "depends_on": [
+        "rayflow/api.py"
+      ],
+      "dependents": [
+        "rayflow/cli/main.py",
+        "rayflow/server.py",
+        "tests/test_callflow.py",
+        "tests/test_custom_nodes.py",
+        "tests/test_editor.py",
+        "tests/test_events.py",
+        "tests/test_executor.py"
+      ]
+    },
+    "rayflow/__main__.py": {
+      "description": "Lets the package run as `python -m rayflow`, delegating to the CLI.",
+      "depends_on": [
+        "rayflow/cli/main.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/api.py": {
+      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/run/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray.",
+      "depends_on": [
+        "rayflow/build/validator.py",
+        "rayflow/engine/executor.py",
+        "rayflow/events/bus.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/schema/loader.py",
+        "rayflow/workspace.py"
+      ],
+      "dependents": [
+        "rayflow/__init__.py",
+        "rayflow/editor/routes.py",
+        "rayflow/events/bus.py",
+        "rayflow/mcp/server.py",
+        "rayflow/server.py",
+        "tests/test_editor.py",
+        "tests/test_events.py"
+      ]
+    },
+    "rayflow/build/__init__.py": {
+      "description": "Re-exports build() as the package's public symbol.",
+      "depends_on": [
+        "rayflow/build/validator.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/build/validator.py": {
+      "description": "Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one graph, checks types/wiring/cycles, and either raises on the first error (build()) or collects every error in one pass (validate_all()) for editor/MCP clients.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/loader.py",
+        "rayflow/schema/loader.py",
+        "rayflow/schema/models.py",
+        "rayflow/types.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/build/__init__.py",
+        "rayflow/editor/routes.py",
+        "rayflow/engine/executor.py",
+        "rayflow/mcp/server.py",
+        "rayflow/server.py",
+        "tests/test_build.py"
+      ]
+    },
+    "rayflow/cli/__init__.py": {
+      "description": "Re-exports the click CLI group as `main`.",
+      "depends_on": [
+        "rayflow/cli/main.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/cli/main.py": {
+      "description": "Click-based CLI: defines `rayflow serve`, which initializes Ray and starts the REST/editor/MCP server.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/events/bus.py",
+        "rayflow/server.py",
+        "rayflow/workspace.py"
+      ],
+      "dependents": [
+        "rayflow/__main__.py",
+        "rayflow/cli/__init__.py"
+      ]
+    },
+    "rayflow/editor/__init__.py": {
+      "description": "Empty package marker for the editor subpackage.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/custom_nodes_routes.py": {
+      "description": "FastAPI router for CRUD on custom node .py files (create/read/update/delete) plus hot-reloading the node catalog from disk without restarting the server.",
+      "depends_on": [
+        "rayflow/nodes/registry.py",
+        "rayflow/workspace.py"
+      ],
+      "dependents": [
+        "rayflow/server.py"
+      ]
+    },
+    "rayflow/editor/examples/__init__.py": {
+      "description": "Marks examples/ as a Python package so its *.json files can be included as package-data and shipped with the pip install.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/examples/branch_demo.json": {
+      "description": "Packaged copy of examples/branch_demo.json, served via GET /editor/examples and the MCP get_example tool.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/examples/cast_demo.json": {
+      "description": "Packaged copy of examples/cast_demo.json, served via GET /editor/examples and the MCP get_example tool.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/examples/foreach_demo.json": {
+      "description": "Packaged copy of examples/foreach_demo.json, served via GET /editor/examples and the MCP get_example tool.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/examples/sequence_demo.json": {
+      "description": "Packaged copy of examples/sequence_demo.json, served via GET /editor/examples and the MCP get_example tool.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/examples/showcase.json": {
+      "description": "Packaged copy of examples/showcase.json, served via GET /editor/examples and the MCP get_example tool.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/examples/suma.json": {
+      "description": "Packaged copy of examples/suma.json, served via GET /editor/examples and the MCP get_example tool.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/.gitignore": {
+      "description": "Standard Git ignore for Node.js projects, excludes build artifacts, node_modules, and editor temp files.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/README.md": {
+      "description": "Project documentation describing the React + TypeScript + Vite template setup and ESLint configuration guidance.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/components.json": {
+      "description": "shadcn/ui configuration file specifying component paths, aliases, and Tailwind CSS settings.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/eslint.config.js": {
+      "description": "ESLint configuration enforcing TypeScript, React best practices, and React hooks linting rules.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/index.html": {
+      "description": "HTML entry point that bootstraps the React app with root div and main.tsx script.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/package-lock.json": {
+      "description": "Generated npm lockfile pinning exact frontend dependency versions; not hand-edited.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/package.json": {
+      "description": "Dependency manifest with React, xyflow, shadcn/ui, CodeMirror, Tailwind CSS, and build/lint scripts.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/public/favicon.svg": {
+      "description": "Browser tab icon in SVG format for the Rayflow editor application.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/public/icons.svg": {
+      "description": "SVG sprite sheet containing reusable icon definitions for the UI.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/App.css": {
+      "description": "Global and template styles for the main app layout and hero section (legacy/boilerplate).",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/App.tsx": {
+      "description": "Main application component orchestrating the flow editor UI with header, sidebars, canvas, properties panel, and runs panel.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/CodeEditor.tsx",
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/components/FlowCanvas.tsx",
+        "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx",
+        "rayflow/editor/frontend/src/components/NodePalette.tsx",
+        "rayflow/editor/frontend/src/components/PropertiesPanel.tsx",
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx",
+        "rayflow/editor/frontend/src/components/VariablesPanel.tsx",
+        "rayflow/editor/frontend/src/components/ui/button.tsx",
+        "rayflow/editor/frontend/src/components/ui/dialog.tsx",
+        "rayflow/editor/frontend/src/components/ui/input.tsx",
+        "rayflow/editor/frontend/src/components/ui/select.tsx",
+        "rayflow/editor/frontend/src/hooks/useResizable.ts",
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/lib/translator.ts",
+        "rayflow/editor/frontend/src/store/flowStore.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/main.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/assets/hero.png": {
+      "description": "Promotional/hero image asset for the editor UI.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/assets/react.svg": {
+      "description": "React logo asset used in template/demo content.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/assets/vite.svg": {
+      "description": "Vite logo asset used in template/demo content.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/CodeEditor.tsx": {
+      "description": "Full-screen code editor for editing Python custom node source with CodeMirror, syntax highlighting, and save functionality.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/button.tsx",
+        "rayflow/editor/frontend/src/lib/rayflowHighlight.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx": {
+      "description": "Collapsible sidebar panel for managing custom Python node files with create, edit, and delete operations.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/button.tsx",
+        "rayflow/editor/frontend/src/components/ui/dialog.tsx",
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/store/flowStore.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/FlowCanvas.tsx": {
+      "description": "Visual flow graph editor using React Flow library, supporting node drag-drop, edge connections, live run visualization, and animation timing controls.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/NodeCard.tsx",
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/store/flowStore.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx": {
+      "description": "Modal dialog for editing flow input/output pins with type selection and duplicate name validation.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/button.tsx",
+        "rayflow/editor/frontend/src/components/ui/dialog.tsx",
+        "rayflow/editor/frontend/src/components/ui/input.tsx",
+        "rayflow/editor/frontend/src/components/ui/select.tsx"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/NodeCard.tsx": {
+      "description": "React Flow node component displaying node metadata, exec/data pins with type colors, runtime badges, and run status indicators.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/lib/translator.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/components/FlowCanvas.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/NodePalette.tsx": {
+      "description": "Categorized sidebar panel for dragging built-in and custom nodes onto the canvas with search filtering.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/input.tsx",
+        "rayflow/editor/frontend/src/lib/api.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/PropertiesPanel.tsx": {
+      "description": "Right sidebar showing selected node details, editable literal inputs, connected pins, validation errors, and output specs.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/input.tsx",
+        "rayflow/editor/frontend/src/components/ui/select.tsx",
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/lib/translator.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/RunsPanel.tsx": {
+      "description": "Bottom panel for flow execution with input parameter entry, run history, and live output/error display during execution.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/button.tsx",
+        "rayflow/editor/frontend/src/components/ui/input.tsx",
+        "rayflow/editor/frontend/src/hooks/useRunStream.ts",
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/lib/translator.ts",
+        "rayflow/editor/frontend/src/store/flowStore.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/VariablesPanel.tsx": {
+      "description": "Left sidebar section for managing flow variables (name, type, default value) with inline editing.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/components/ui/select.tsx",
+        "rayflow/editor/frontend/src/lib/api.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/ui/accordion.tsx": {
+      "description": "shadcn/ui Accordion primitive: expandable/collapsible sections using Radix UI.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/ui/badge.tsx": {
+      "description": "shadcn/ui Badge primitive: small colored label/chip component with variant support.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/ui/button.tsx": {
+      "description": "shadcn/ui Button primitive: clickable button with variant and size options (default, outline, ghost, destructive).",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/CodeEditor.tsx",
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx",
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/ui/dialog.tsx": {
+      "description": "shadcn/ui Dialog primitive: modal popup with header, content, and footer sections from Radix UI.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/ui/input.tsx": {
+      "description": "shadcn/ui Input primitive: text input field component with native HTML integration.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx",
+        "rayflow/editor/frontend/src/components/NodePalette.tsx",
+        "rayflow/editor/frontend/src/components/PropertiesPanel.tsx",
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/ui/scroll-area.tsx": {
+      "description": "shadcn/ui ScrollArea primitive: custom scrollbar styling wrapper using Radix UI.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/ui/select.tsx": {
+      "description": "shadcn/ui Select primitive: dropdown menu component with trigger, content, and option items.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx",
+        "rayflow/editor/frontend/src/components/PropertiesPanel.tsx",
+        "rayflow/editor/frontend/src/components/VariablesPanel.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/components/ui/separator.tsx": {
+      "description": "shadcn/ui Separator primitive: horizontal or vertical divider line.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/ui/tabs.tsx": {
+      "description": "shadcn/ui Tabs primitive: tabbed interface with list and content panels from Radix UI.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/ui/textarea.tsx": {
+      "description": "shadcn/ui Textarea primitive: multi-line text input field.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/components/ui/tooltip.tsx": {
+      "description": "shadcn/ui Tooltip primitive: hover-activated floating label from Radix UI.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/utils.ts"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/hooks/useResizable.ts": {
+      "description": "Custom hook for draggable sidebar/panel resizing with localStorage persistence and min/max constraints.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/hooks/useRunStream.ts": {
+      "description": "Custom hook managing flow execution via SSE streaming, event batching for animation, and run reconnection on disconnect.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/frontend/src/store/flowStore.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/index.css": {
+      "description": "Global styles defining dark theme color tokens, React Flow overrides, node card styling, and type color mapping.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/lib/api.ts": {
+      "description": "API client layer defining TypeScript types and fetch wrappers for backend endpoints (flows, nodes, runs, custom nodes).",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/components/FlowCanvas.tsx",
+        "rayflow/editor/frontend/src/components/NodeCard.tsx",
+        "rayflow/editor/frontend/src/components/NodePalette.tsx",
+        "rayflow/editor/frontend/src/components/PropertiesPanel.tsx",
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx",
+        "rayflow/editor/frontend/src/components/VariablesPanel.tsx",
+        "rayflow/editor/frontend/src/hooks/useRunStream.ts",
+        "rayflow/editor/frontend/src/lib/translator.ts",
+        "rayflow/editor/frontend/src/store/flowStore.ts"
+      ]
+    },
+    "rayflow/editor/frontend/src/lib/rayflowHighlight.ts": {
+      "description": "CodeMirror syntax highlighting and hover tooltips for Rayflow Python node decorators, pin declarations, and context methods.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/frontend/src/components/CodeEditor.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/lib/translator.ts": {
+      "description": "Bidirectional converters between React Flow graph format and Rayflow FlowDef JSON, with exec pin logic and type color mapping.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/api.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/NodeCard.tsx",
+        "rayflow/editor/frontend/src/components/PropertiesPanel.tsx",
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/lib/utils.ts": {
+      "description": "Utility functions exporting a className composition helper (cn) combining clsx and Tailwind merge.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/frontend/src/components/ui/accordion.tsx",
+        "rayflow/editor/frontend/src/components/ui/badge.tsx",
+        "rayflow/editor/frontend/src/components/ui/button.tsx",
+        "rayflow/editor/frontend/src/components/ui/dialog.tsx",
+        "rayflow/editor/frontend/src/components/ui/scroll-area.tsx",
+        "rayflow/editor/frontend/src/components/ui/separator.tsx",
+        "rayflow/editor/frontend/src/components/ui/tabs.tsx",
+        "rayflow/editor/frontend/src/components/ui/textarea.tsx",
+        "rayflow/editor/frontend/src/components/ui/tooltip.tsx"
+      ]
+    },
+    "rayflow/editor/frontend/src/main.tsx": {
+      "description": "React app entry point that renders the root App component into the DOM.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/App.tsx"
+      ],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/src/store/flowStore.ts": {
+      "description": "Zustand store managing editor state including flow tabs, node/edge graph, runs, validation errors, and localStorage persistence.",
+      "depends_on": [
+        "rayflow/editor/frontend/src/lib/api.ts"
+      ],
+      "dependents": [
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/components/FlowCanvas.tsx",
+        "rayflow/editor/frontend/src/components/RunsPanel.tsx",
+        "rayflow/editor/frontend/src/hooks/useRunStream.ts"
+      ]
+    },
+    "rayflow/editor/frontend/tsconfig.app.json": {
+      "description": "TypeScript compiler config for the application source code with path aliases and strict type checking.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/tsconfig.json": {
+      "description": "Root TypeScript config referencing app and node build configs.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/tsconfig.node.json": {
+      "description": "TypeScript config for build tools and Vite configuration files.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/frontend/vite.config.ts": {
+      "description": "Vite build configuration with React plugin, path aliases, API proxying, and build output to ../static/dist.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/guide.py": {
+      "description": "Curated markdown guide to Rayflow's flow model, served by GET /editor/guide and the MCP get_guide tool as the semantic contract an LLM agent needs to build flows.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py"
+      ]
+    },
+    "rayflow/editor/routes.py": {
+      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/run/test execution endpoints, guide/examples, and event subscription — the same logic the MCP tools reuse.",
+      "depends_on": [
+        "rayflow/api.py",
+        "rayflow/build/validator.py",
+        "rayflow/editor/guide.py",
+        "rayflow/editor/storage.py",
+        "rayflow/engine/executor.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/schema/loader.py",
+        "rayflow/types.py"
+      ],
+      "dependents": [
+        "rayflow/mcp/server.py",
+        "rayflow/server.py"
+      ]
+    },
+    "rayflow/editor/static/dist/assets/index-Bm5bdrF_.css": {
+      "description": "Generated build artifact (hashed bundle output of `npm run build`); not hand-edited.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/static/dist/assets/index-CZ4DCm3O.js": {
+      "description": "Generated build artifact (hashed bundle output of `npm run build`); not hand-edited.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/static/dist/favicon.svg": {
+      "description": "Generated build asset, copied from the frontend's public/ directory.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/static/dist/icons.svg": {
+      "description": "Generated build asset, copied from the frontend's public/ directory.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/static/dist/index.html": {
+      "description": "Generated production build output of the editor frontend (run `npm run build`); not meant to be edited by hand.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "rayflow/editor/storage.py": {
+      "description": "Flow persistence: reads/writes flow JSON files under the workspace's flows/ directory and serializes a FlowDef back to a JSON-safe dict.",
+      "depends_on": [
+        "rayflow/schema/models.py",
+        "rayflow/workspace.py"
+      ],
+      "dependents": [
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py",
+        "tests/test_editor.py",
+        "tests/test_mcp.py"
+      ]
+    },
+    "rayflow/engine/__init__.py": {
+      "description": "Re-exports the engine's public symbols: LoadedFlow and the load/unload/get/is-loaded helpers.",
+      "depends_on": [
+        "rayflow/engine/executor.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/engine/executor.py": {
+      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (the lifecycle of a flow's actors in Ray).",
+      "depends_on": [
+        "rayflow/build/validator.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/state/actor.py",
+        "rayflow/state/queue.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/editor/routes.py",
+        "rayflow/engine/__init__.py"
+      ]
+    },
+    "rayflow/events/__init__.py": {
+      "description": "Re-exports EventBroker and get_event_broker.",
+      "depends_on": [
+        "rayflow/events/bus.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/events/bus.py": {
+      "description": "The global EventBroker Ray actor: namespaced fire-and-forget pub/sub that lets one flow's EmitEvent trigger another flow's OnEvent/OnVariableChange.",
+      "depends_on": [
+        "rayflow/api.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/cli/main.py",
+        "rayflow/events/__init__.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/state/actor.py",
+        "tests/test_events.py"
+      ]
+    },
+    "rayflow/mcp/__init__.py": {
+      "description": "Re-exports create_mcp, the entry point for Rayflow's MCP layer.",
+      "depends_on": [
+        "rayflow/mcp/server.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/mcp/server.py": {
+      "description": "Builds the FastMCP server exposing a curated set of tools (get_guide, list_nodes, validate_flow, create_flow, run_flow, test_flow, etc.) that reuse the editor's REST logic, so an LLM agent can build/validate/run flows autonomously.",
+      "depends_on": [
+        "rayflow/api.py",
+        "rayflow/build/validator.py",
+        "rayflow/editor/guide.py",
+        "rayflow/editor/routes.py",
+        "rayflow/editor/storage.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/schema/loader.py",
+        "rayflow/types.py"
+      ],
+      "dependents": [
+        "rayflow/mcp/__init__.py",
+        "rayflow/server.py",
+        "tests/test_mcp.py"
+      ]
+    },
+    "rayflow/nodes/__init__.py": {
+      "description": "Re-exports the node-authoring API: decorators, pin descriptors, ExecContext, and NodeCatalog.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/loader.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/nodes/builtin/__init__.py": {
+      "description": "Imports CallFlow so it's registered as part of the builtin module set.",
+      "depends_on": [
+        "rayflow/nodes/builtin/flow.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/cast.py": {
+      "description": "Builtin explicit type-casting nodes: ToInt, ToFloat, ToStr, ToBool.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/compare.py": {
+      "description": "Builtin pure comparison/boolean-logic nodes (no exec pins): GreaterThan, LessThan, Equal, NotEqual, Not, And, Or, etc.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/control.py": {
+      "description": "Builtin control-flow nodes: OnStart, FlowOutput, Branch, Sequence, Parallel (fork/join), ForEach, While, and Map.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/events.py": {
+      "description": "Builtin event nodes: OnEvent (entry point triggered by the event bus), OnVariableChange (entry point triggered by a watched variable), and EmitEvent.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/flow.py": {
+      "description": "The CallFlow builtin node: declares the pins for running a subflow, orchestrated directly by the engine rather than via its own run().",
+      "depends_on": [
+        "rayflow/nodes/decorators.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/builtin/__init__.py",
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/math.py": {
+      "description": "The builtin Add node (integer addition).",
+      "depends_on": [
+        "rayflow/nodes/decorators.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/builtin/variables.py": {
+      "description": "Builtin state nodes: Get (reads a GraphState variable) and Set (writes one).",
+      "depends_on": [
+        "rayflow/nodes/decorators.py"
+      ],
+      "dependents": [
+        "rayflow/nodes/registry.py"
+      ]
+    },
+    "rayflow/nodes/decorators.py": {
+      "description": "Defines the node-authoring contract: the Input/Output/ExecInput/ExecOutput pin descriptors, the @ray_node/@engine_node/@parallel_node decorators, NodeMeta/PinSpec metadata, and the unified ExecContext used by every node's run().",
+      "depends_on": [
+        "rayflow/events/bus.py",
+        "rayflow/types.py"
+      ],
+      "dependents": [
+        "rayflow/build/validator.py",
+        "rayflow/editor/routes.py",
+        "rayflow/engine/executor.py",
+        "rayflow/nodes/__init__.py",
+        "rayflow/nodes/builtin/cast.py",
+        "rayflow/nodes/builtin/compare.py",
+        "rayflow/nodes/builtin/control.py",
+        "rayflow/nodes/builtin/events.py",
+        "rayflow/nodes/builtin/flow.py",
+        "rayflow/nodes/builtin/math.py",
+        "rayflow/nodes/builtin/variables.py",
+        "rayflow/nodes/loader.py",
+        "rayflow/nodes/registry.py",
+        "tests/test_build.py",
+        "tests/test_executor.py",
+        "tests/test_nodes.py"
+      ]
+    },
+    "rayflow/nodes/loader.py": {
+      "description": "NodeCatalog: discovers and registers node classes from a directory or from the workspace's custom_nodes/ package, handling pickling concerns for Ray worker distribution.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/workspace.py"
+      ],
+      "dependents": [
+        "rayflow/build/validator.py",
+        "rayflow/nodes/__init__.py",
+        "rayflow/nodes/registry.py",
+        "tests/test_nodes.py"
+      ]
+    },
+    "rayflow/nodes/registry.py": {
+      "description": "Builds and caches the process-wide singleton NodeCatalog from the builtin node modules plus the workspace's custom nodes; reset_catalog() forces a rebuild for tests/hot-reload.",
+      "depends_on": [
+        "rayflow/nodes/builtin/__init__.py",
+        "rayflow/nodes/builtin/cast.py",
+        "rayflow/nodes/builtin/compare.py",
+        "rayflow/nodes/builtin/control.py",
+        "rayflow/nodes/builtin/events.py",
+        "rayflow/nodes/builtin/flow.py",
+        "rayflow/nodes/builtin/math.py",
+        "rayflow/nodes/builtin/variables.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/loader.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/editor/custom_nodes_routes.py",
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py",
+        "rayflow/nodes/builtin/control.py",
+        "rayflow/server.py",
+        "tests/test_build.py",
+        "tests/test_callflow.py",
+        "tests/test_custom_nodes.py",
+        "tests/test_editor.py",
+        "tests/test_events.py",
+        "tests/test_executor.py",
+        "tests/test_mcp.py",
+        "tests/test_nodes.py",
+        "tests/test_server.py"
+      ]
+    },
+    "rayflow/schema/__init__.py": {
+      "description": "Re-exports the schema dataclasses (PinKind, PinDef, NodeDef, FlowDef, VariableDef) and load_flow.",
+      "depends_on": [
+        "rayflow/schema/loader.py",
+        "rayflow/schema/models.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/schema/loader.py": {
+      "description": "Parses a flow JSON (file, path, or dict) into a FlowDef, and detects unknown/typo'd schema keys to surface as validation warnings.",
+      "depends_on": [
+        "rayflow/schema/models.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/build/validator.py",
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py",
+        "rayflow/schema/__init__.py",
+        "rayflow/server.py",
+        "tests/test_build.py",
+        "tests/test_schema.py"
+      ]
+    },
+    "rayflow/schema/models.py": {
+      "description": "The flow JSON schema's dataclasses: NodeDef, FlowDef, VariableDef, PinDef/PinKind, including the internal fields flatten() uses to track CallFlow splicing.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/build/validator.py",
+        "rayflow/editor/storage.py",
+        "rayflow/schema/__init__.py",
+        "rayflow/schema/loader.py",
+        "rayflow/server.py",
+        "tests/test_schema.py"
+      ]
+    },
+    "rayflow/server.py": {
+      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/api.py",
+        "rayflow/build/validator.py",
+        "rayflow/editor/custom_nodes_routes.py",
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/schema/loader.py",
+        "rayflow/schema/models.py"
+      ],
+      "dependents": [
+        "rayflow/cli/main.py",
+        "tests/test_editor.py",
+        "tests/test_server.py"
+      ]
+    },
+    "rayflow/state/__init__.py": {
+      "description": "Re-exports the GraphState actor class.",
+      "depends_on": [
+        "rayflow/state/actor.py"
+      ],
+      "dependents": []
+    },
+    "rayflow/state/actor.py": {
+      "description": "The GraphState Ray actor: a loaded flow's persistent named-variable memory across runs, plus variable-watch registration that publishes change events.",
+      "depends_on": [
+        "rayflow/events/bus.py"
+      ],
+      "dependents": [
+        "rayflow/engine/executor.py",
+        "rayflow/state/__init__.py"
+      ]
+    },
+    "rayflow/state/queue.py": {
+      "description": "The RunQueue Ray actor: a per-flow FIFO event queue (one sub-queue per run_id) that the engine pushes to and FastAPI drains via blocking get() to stream SSE.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/engine/executor.py"
+      ]
+    },
+    "rayflow/types.py": {
+      "description": "The data-pin type system: closed registry of primitives (int/float/str/bool/list/dict/Any), generics (list[T], dict[str,V]), and strict compatibility checking with no implicit coercion.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/build/validator.py",
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py",
+        "rayflow/nodes/decorators.py"
+      ]
+    },
+    "rayflow/workspace.py": {
+      "description": "Working-directory conventions: locates/creates custom_nodes/ and flows/, builds the Ray runtime_env that distributes custom_nodes/ to workers, and resolves a flow name or path.",
+      "depends_on": [],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/cli/main.py",
+        "rayflow/editor/custom_nodes_routes.py",
+        "rayflow/editor/storage.py",
+        "rayflow/nodes/loader.py",
+        "tests/test_custom_nodes.py"
+      ]
+    },
+    "rayflow_file_map.json": {
+      "description": "Generated flat map of every tracked repo file to a short English description plus depends_on/dependents edges (computed from real imports). Not shipped in the PyPI package. Consumed by the .claude/hooks/*.py scripts to give Claude Code per-file context automatically.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "signatures/cla.json": {
+      "description": "Generated file (written by the CLA Assistant GitHub Action) recording which external contributors have signed the CLA.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "tests/__init__.py": {
+      "description": "Empty package marker for the test suite.",
+      "depends_on": [],
+      "dependents": []
+    },
+    "tests/test_build.py": {
+      "description": "Tests for the build/validation layer: BuildError cases for unknown node types, missing entry nodes, missing exec inputs, type mismatches, and data cycles.",
+      "depends_on": [
+        "rayflow/build/validator.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/schema/loader.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_callflow.py": {
+      "description": "Tests for the CallFlow node: isolated vs. shared subflow state, meta['flow'] attribution, CallFlow inside a Parallel branch, and nested CallFlows.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_custom_nodes.py": {
+      "description": "Tests for convention-based custom node discovery (custom_nodes/ + flows/ in the cwd) and the runtime_env it produces for Ray workers.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/workspace.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_editor.py": {
+      "description": "Tests for the /editor/* FastAPI routes: node catalog, types, validation (including multi-error collection and warnings), flow CRUD, execution, custom nodes, concurrency isolation, events, guide/examples, and the self-verification /test endpoint.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/api.py",
+        "rayflow/editor/storage.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/server.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_events.py": {
+      "description": "Tests for the EventBroker: cross-flow EmitEvent/OnEvent pub/sub, OnVariableChange triggering on variable writes, and namespace isolation.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/api.py",
+        "rayflow/events/bus.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_executor.py": {
+      "description": "End-to-end execution tests with Ray: fan-out, Parallel fork/join (including nested), AND/OR exec_in join semantics, While/Map nodes, pure comparisons, and per-run output isolation (the RunContext regression test).",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_mcp.py": {
+      "description": "Tests for the curated MCP tool layer (rayflow/mcp/server.py), exercised through FastMCP's in-memory client.",
+      "depends_on": [
+        "rayflow/editor/storage.py",
+        "rayflow/mcp/server.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_nodes.py": {
+      "description": "Tests for the node definition and discovery system: decorators, pin descriptors, and NodeCatalog registration.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/loader.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_schema.py": {
+      "description": "Tests for flow JSON schema deserialization (load_flow / FlowDef parsing).",
+      "depends_on": [
+        "rayflow/schema/loader.py",
+        "rayflow/schema/models.py"
+      ],
+      "dependents": []
+    },
+    "tests/test_server.py": {
+      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, and duplicate-name validation.",
+      "depends_on": [
+        "rayflow/nodes/registry.py",
+        "rayflow/server.py"
+      ],
+      "dependents": []
+    }
+  }
+}

@@ -1,4 +1,4 @@
-"""Nodos de estado (Get/Set)."""
+"""State nodes (Get/Set)."""
 from rayflow.nodes.decorators import (
     ExecContext,
     ExecInput,
@@ -12,11 +12,11 @@ from rayflow.nodes.decorators import (
 
 @ray_node
 class Get:
-    """Lee una variable del estado del grafo.
+    """Reads a variable from the graph's state.
 
-    Nodo pure (sin exec pins): se evalúa bajo demanda cuando otro nodo
-    necesita su output. No requiere conexión exec — el engine lo llama
-    implícitamente al resolver los inputs del nodo consumidor.
+    Pure node (no exec pins): evaluated on demand whenever another node
+    needs its output. Requires no exec wiring — the engine calls it
+    implicitly while resolving the consuming node's inputs.
     """
     variable_name = Input("str", default="")
     value = Output("Any")
@@ -27,7 +27,7 @@ class Get:
 
 @engine_node
 class Set:
-    """Escribe una variable en el estado del grafo."""
+    """Writes a variable into the graph's state."""
     exec_in = ExecInput()
     variable_name = Input("str", default="")
     value = Input("Any", default=None)

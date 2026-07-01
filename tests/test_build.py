@@ -1,4 +1,4 @@
-"""Tests de la capa de build/validación."""
+"""Tests for the build/validation layer."""
 import pytest
 from rayflow.schema.loader import load_flow
 from rayflow.nodes.registry import get_catalog, reset_catalog
@@ -11,7 +11,7 @@ def _make_catalog():
 
 
 def _minimal_flow():
-    """Flow mínimo: OnStart → FlowOutput."""
+    """Minimal flow: OnStart → FlowOutput."""
     return {
         "name": "minimal",
         "nodes": [
@@ -36,7 +36,7 @@ def test_build_unknown_node_type():
         "nodes": [{"id": "x", "type": "NonExistentNode"}],
     })
     catalog = _make_catalog()
-    with pytest.raises(BuildError, match="catálogo"):
+    with pytest.raises(BuildError, match="catalog"):
         build(flow, catalog)
 
 
@@ -53,12 +53,12 @@ def test_build_missing_entry_node():
 
 
 def test_build_exec_input_missing():
-    """FlowOutput requiere exec_in pero no lo tiene."""
+    """FlowOutput requires exec_in but doesn't have it."""
     flow = load_flow({
         "name": "bad_exec",
         "nodes": [
             {"id": "start", "type": "OnStart"},
-            {"id": "out", "type": "FlowOutput"},  # sin exec_in
+            {"id": "out", "type": "FlowOutput"},  # no exec_in
         ],
     })
     catalog = _make_catalog()
@@ -67,7 +67,7 @@ def test_build_exec_input_missing():
 
 
 def test_build_type_mismatch():
-    """Conexión de datos con tipos incompatibles."""
+    """Data connection with incompatible types."""
     from rayflow.nodes.decorators import ray_node, ExecContext, Input, Output, ExecInput, ExecOutput
 
     @ray_node
@@ -113,7 +113,7 @@ def test_build_type_mismatch():
 
 
 def test_build_data_cycle_detected():
-    """Ciclo en el subgrafo de datos."""
+    """Cycle in the data subgraph."""
     from rayflow.nodes.decorators import ray_node, Input, Output
 
     @ray_node
@@ -146,5 +146,5 @@ def test_build_data_cycle_detected():
             {"id": "out", "type": "FlowOutput", "exec_in": "start"},
         ],
     })
-    with pytest.raises(BuildError, match="[Cc]iclo"):
+    with pytest.raises(BuildError, match="[Cc]ycle"):
         build(flow, catalog)

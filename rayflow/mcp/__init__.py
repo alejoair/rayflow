@@ -1,5 +1,5 @@
-"""Capa MCP de Rayflow: expone un set curado de tools sobre el editor para que
-un agente LLM construya, valide, pruebe y ejecute flows de forma autónoma."""
+"""Rayflow's MCP layer: exposes a curated set of tools over the editor so an
+LLM agent can build, validate, test, and run flows autonomously."""
 
 from rayflow.mcp.server import create_mcp
 

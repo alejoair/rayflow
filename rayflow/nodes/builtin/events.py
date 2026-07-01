@@ -1,4 +1,4 @@
-"""Nodos de eventos (OnEvent/EmitEvent). Se ejecutan en el engine (@engine_node)."""
+"""Event nodes (OnEvent/EmitEvent). Run inside the engine (@engine_node)."""
 from typing import Any
 
 from rayflow.nodes.decorators import (
@@ -13,12 +13,12 @@ from rayflow.nodes.decorators import (
 
 @engine_node
 class OnEvent:
-    """Punto de entrada disparado por un evento externo. Sin exec input.
+    """Entry point triggered by an external event. No exec input.
 
-    `event_name` es configuración estática (a qué evento, con namespace, se
-    suscribe el flow). El `payload` del evento lo inyecta el engine como output
-    de este nodo (los flow_inputs del entry node se escriben como sus outputs),
-    así el subgrafo lo consume como "<id>.payload".
+    `event_name` is static config (which namespaced event the flow
+    subscribes to). The event's `payload` is injected by the engine as this
+    node's output (the entry node's flow_inputs are written as its
+    outputs), so the subgraph consumes it as "<id>.payload".
     """
     event_name = Input("str", default="")
     exec_out = ExecOutput()
@@ -26,22 +26,22 @@ class OnEvent:
 
 @engine_node
 class OnVariableChange:
-    """Punto de entrada disparado cuando una variable del estado cambia.
+    """Entry point triggered when a state variable changes.
 
-    Configuración estática:
-    - `variable`: nombre de la variable a vigilar.
-    - `source`: nombre del flow dueño de la variable; vacío = este mismo flow.
+    Static config:
+    - `variable`: name of the variable to watch.
+    - `source`: name of the flow that owns the variable; empty = this same flow.
 
-    Cuando un nodo `Set` escribe esa variable con un valor distinto, el GraphState
-    del flow fuente publica el evento `var:{source}/{variable}` y este flow se
-    ejecuta. El engine inyecta el valor nuevo (`value`) y el anterior (`old`) como
-    outputs de este nodo.
+    When a `Set` node writes that variable with a different value, the
+    source flow's GraphState publishes the event `var:{source}/{variable}`
+    and this flow runs. The engine injects the new value (`value`) and the
+    previous one (`old`) as this node's outputs.
 
-    El flow fuente debe estar cargado (servido) antes que el flow que lo vigila,
-    para que su GraphState exista al registrar la vigilancia. La entrega es
-    fire-and-forget y sin garantía de orden (igual que el resto del bus).
+    The source flow must be loaded (served) before the watching flow, so its
+    GraphState exists when the watch is registered. Delivery is
+    fire-and-forget with no order guarantee (same as the rest of the bus).
     """
-    category = "Eventos"
+    category = "Events"
     variable = Input("str", default="")
     source   = Input("str", default="")
     value    = Output("Any")
@@ -51,10 +51,10 @@ class OnVariableChange:
 
 @engine_node
 class EmitEvent:
-    """Emite un evento al bus global. Fire-and-forget.
+    """Emits an event to the global bus. Fire-and-forget.
 
-    Despacha al bus vía ctx.emit_event: cada flow suscrito a `event_name`
-    (registrado con serve_events) se dispara con el `payload`.
+    Dispatches to the bus via ctx.emit_event: every flow subscribed to
+    `event_name` (registered with serve_events) fires with the `payload`.
     """
     exec_in = ExecInput()
     event_name = Input("str", default="")

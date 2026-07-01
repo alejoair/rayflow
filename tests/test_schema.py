@@ -1,4 +1,4 @@
-"""Tests de deserialización del schema."""
+"""Tests for schema deserialization."""
 import pytest
 from rayflow.schema.loader import load_flow
 from rayflow.schema.models import FlowDef, NodeDef

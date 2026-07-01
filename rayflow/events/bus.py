@@ -9,27 +9,27 @@ _BROKER_NAME = "rayflow_event_broker"
 
 @ray.remote
 class EventBroker:
-    """Actor Ray global que enruta eventos entre flows (pub/sub fire-and-forget).
+    """Global Ray actor that routes events between flows (fire-and-forget pub/sub).
 
-    Es el análogo del GraphState para eventos: un único actor detached para todo
-    el cluster. El aislamiento se logra por NAMESPACE en el nombre del evento,
-    estilo clave de S3 — los `/` son solo parte del nombre, no contenedores:
+    The events analogue of GraphState: a single detached actor for the
+    whole cluster. Isolation comes from NAMESPACING the event name, S3-key
+    style — the `/` characters are just part of the name, not containers:
 
-        "ventas/order_created"   ← un namespace
-        "inventario/stock_low"   ← otro
-        "tick"                   ← namespace global (sin prefijo)
+        "sales/order_created"     ← one namespace
+        "inventory/stock_low"     ← another
+        "tick"                    ← global namespace (no prefix)
 
-    El broker hace matching EXACTO por el nombre completo del evento: emisor y
-    receptor deben usar el mismo string. No persiste mensajes — `publish`
-    despacha a los suscriptores actuales y olvida (fire-and-forget). Si nadie
-    escucha, el evento se pierde.
+    The broker matches EXACTLY on the full event name: publisher and
+    subscriber must use the same string. It doesn't persist messages —
+    `publish` dispatches to current subscribers and forgets (fire-and-forget).
+    If nobody is listening, the event is lost.
     """
 
     def __init__(self):
-        # event_name (con namespace) → lista de (flow_source, graph_id)
+        # event_name (with namespace) → list of (flow_source, graph_id)
         self._subscriptions: dict[str, list[tuple[Any, str]]] = {}
-        # event_name → nº de veces publicado (introspección/debug; no retiene
-        # mensajes — el broker sigue siendo fire-and-forget).
+        # event_name → number of times published (introspection/debug; does
+        # not retain messages — the broker stays fire-and-forget).
         self._publish_count: dict[str, int] = {}
 
     def subscribe(self, event_name: str, flow_source: Any, graph_id: str) -> None:
@@ -42,10 +42,10 @@ class EventBroker:
         ]
 
     def publish(self, event_name: str, payload: Any) -> int:
-        """Fire-and-forget: lanza una ejecución por cada suscriptor al evento.
+        """Fire-and-forget: launches one execution per subscriber to the event.
 
-        Devuelve el número de suscriptores despachados (0 si nadie escucha).
-        El matching es exacto por el nombre completo (namespace incluido).
+        Returns the number of subscribers dispatched to (0 if nobody is listening).
+        Matching is exact on the full name (namespace included).
         """
         self._publish_count[event_name] = self._publish_count.get(event_name, 0) + 1
         subs = self._subscriptions.get(event_name, [])
@@ -58,16 +58,16 @@ class EventBroker:
         return dict(self._subscriptions)
 
     def publish_count(self, event_name: str) -> int:
-        """Cuántas veces se publicó un evento (introspección)."""
+        """How many times an event was published (introspection)."""
         return self._publish_count.get(event_name, 0)
 
 
 # ---------------------------------------------------------------------------
-# Singleton de acceso al broker
+# Singleton accessor for the broker
 # ---------------------------------------------------------------------------
 
 def get_event_broker() -> EventBroker:
-    """Obtiene (o crea) el actor global del broker de eventos."""
+    """Gets (or creates) the global event broker actor."""
     try:
         return ray.get_actor(_BROKER_NAME)
     except ValueError:

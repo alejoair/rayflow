@@ -1,9 +1,9 @@
-"""Definición de nodos: decoradores y descriptores de pin.
+"""Node definition: decorators and pin descriptors.
 
-UNA sola forma de declarar pines: descriptores asignados como atributos de clase.
-El tipo de un data pin es SIEMPRE un string canónico de rayflow.types
-("int", "list[str]", "dict[str, Any]", "Any"). No se usan anotaciones de tipo,
-ni clases Python como tipo, ni `from __future__ import annotations`.
+ONE single way to declare pins: descriptors assigned as class attributes.
+A data pin's type is ALWAYS a canonical string from rayflow.types
+("int", "list[str]", "dict[str, Any]", "Any"). No type annotations, no
+Python classes used as types, and no `from __future__ import annotations`.
 
     @node
     class Add:
@@ -17,9 +17,10 @@ ni clases Python como tipo, ni `from __future__ import annotations`.
             ctx.set_output("result", a + b)
             await ctx.fire("exec_out")
 
-Todos los nodos usan el mismo ExecContext: localiza el FlowEngine por nombre de
-actor Ray ("engine_{graph_id}") y puede hacer ctx.fire() bloqueante desde
-cualquier proceso del cluster — no hay distinción entre engine_node y ray_node.
+Every node uses the same ExecContext: it locates the FlowEngine by Ray
+actor name ("engine_{graph_id}") and can make a blocking ctx.fire() from
+any process in the cluster — there is no distinction between engine_node
+and ray_node at this level.
 """
 from dataclasses import dataclass, field
 from typing import Any
@@ -28,56 +29,57 @@ import ray
 
 from rayflow.types import parse_type, TypeError_
 
-# Sentinel para detectar que un data input no tiene default declarado.
+# Sentinel to detect that a data input has no declared default.
 _MISSING = object()
 
-# Atributo donde se almacena la metadata del nodo.
+# Attribute under which node metadata is stored.
 _NODE_META_ATTR = "__rayflow_node__"
 
 
 # ---------------------------------------------------------------------------
-# Descriptores de pin — la única forma de declarar un pin
+# Pin descriptors — the only way to declare a pin
 # ---------------------------------------------------------------------------
 
 class Input:
-    """Data input pin. Uso: x = Input("int", default=5)."""
+    """Data input pin. Usage: x = Input("int", default=5)."""
     def __init__(self, type_str: str = "Any", default: Any = _MISSING):
         self.type_str = type_str
         self.default = default
 
 
 class Output:
-    """Data output pin. Uso: result = Output("float")."""
+    """Data output pin. Usage: result = Output("float")."""
     def __init__(self, type_str: str = "Any"):
         self.type_str = type_str
 
 
 class ExecInput:
-    """Execution input pin. Uso: exec_in = ExecInput()."""
+    """Execution input pin. Usage: exec_in = ExecInput()."""
 
 
 class ExecOutput:
-    """Execution output pin. Uso: exec_out = ExecOutput()."""
+    """Execution output pin. Usage: exec_out = ExecOutput()."""
 
 
 # ---------------------------------------------------------------------------
-# ExecContext — único, unificado, serializable
+# ExecContext — single, unified, serializable
 # ---------------------------------------------------------------------------
 
 class ExecContext:
-    """Contexto de ejecución unificado para todos los nodos.
+    """Unified execution context for every node type.
 
-    Localiza el FlowEngine y el GraphState por nombre de actor Ray usando
-    graph_id — funciona tanto en el proceso del engine como en actores
-    @ray_node remotos. No contiene handles no-serializables en su estado
-    persistente; los adquiere bajo demanda y los cachea localmente.
+    Locates the FlowEngine and the GraphState by Ray actor name using
+    graph_id — works both inside the engine's own process and inside remote
+    @ray_node actors. Holds no non-serializable handles in its persistent
+    state; it acquires them on demand and caches them locally.
 
-    Métodos sync: set_output, get_variable, set_variable, emit_event.
-    Métodos async: fire, exec_outputs_except.
+    Sync methods: set_output, get_variable, set_variable, emit_event.
+    Async methods: fire, exec_outputs_except.
 
-    _output_writer: callable opcional para engine_nodes — evita la llamada
-    remota bloqueante al engine (self-call que deadlockearía el event loop
-    del actor). No se serializa; queda None cuando el ctx viaja a un worker.
+    _output_writer: optional callable for engine_nodes — avoids a blocking
+    remote call back to the engine (a self-call that would deadlock the
+    engine actor's event loop). Not serialized; stays None when ctx travels
+    to a worker.
     """
 
     def __init__(
@@ -91,17 +93,17 @@ class ExecContext:
         self._node_id = node_id
         self._graph_id = graph_id
         self._state_path = state_path
-        self._run_id: str | None = None  # run al que pertenece esta ejecución
+        self._run_id: str | None = None  # run this execution belongs to
         self._engine_handle = None
         self._state_handle = None
-        self._output_writer = _output_writer  # solo válido localmente
-        self._fire_handler = _fire_handler    # solo válido localmente
-        self._pending_outputs: dict[str, Any] = {}  # buffer local para engine_nodes
+        self._output_writer = _output_writer  # only valid locally
+        self._fire_handler = _fire_handler    # only valid locally
+        self._pending_outputs: dict[str, Any] = {}  # local in-memory buffer for engine_nodes
 
     def __getstate__(self):
-        # Excluir handles, callbacks y buffer local — se reacquieren bajo demanda.
-        # _run_id SÍ viaja: un @ray_node lo necesita para scopear sus RPC de
-        # vuelta al engine (fire/set_output) al run correcto.
+        # Exclude handles, callbacks, and the local buffer — reacquired on demand.
+        # _run_id DOES travel: a @ray_node needs it to scope its return RPCs
+        # to the engine (fire/set_output) to the correct run.
         return {
             "_node_id": self._node_id,
             "_graph_id": self._graph_id,
@@ -117,7 +119,7 @@ class ExecContext:
     def __setstate__(self, state):
         self.__dict__.update(state)
 
-    # Acceso al graph_id para que el engine pueda leerlo si es necesario.
+    # Exposes graph_id so the engine can read it if needed.
     @property
     def graph_id(self) -> str:
         return self._graph_id
@@ -137,18 +139,18 @@ class ExecContext:
         return self._state_handle
 
     async def fire(self, pin_name: str) -> None:
-        """Dispara el exec output indicado (bloqueante: ejecuta el subgrafo completo)."""
+        """Fires the given exec output pin (blocking: runs the whole downstream subgraph)."""
         if self._fire_handler is not None:
             await self._fire_handler(pin_name)
         else:
             await self._engine().fire.remote(self._run_id, self._node_id, pin_name)
 
     def set_output(self, pin_name: str, value: Any) -> None:
-        """Escribe un data output del nodo actual en el GraphState.
+        """Writes a data output of the current node into the GraphState.
 
-        Para engine_nodes: acumula en buffer local (_pending_outputs) y el
-        engine flushea async antes de continuar. Para ray_nodes: escribe
-        directamente en el actor remoto (sin self-call).
+        For engine_nodes: accumulates into a local buffer (_pending_outputs)
+        and the engine flushes it asynchronously before continuing. For
+        ray_nodes: writes directly to the remote actor (no self-call).
         """
         if self._output_writer is not None:
             self._pending_outputs[pin_name] = value
@@ -156,7 +158,7 @@ class ExecContext:
             ray.get(self._engine().set_output.remote(self._run_id, self._node_id, pin_name, value))
 
     def get_variable(self, name: str) -> Any:
-        """Lee una variable del GraphState (con prefijo state_path si aplica)."""
+        """Reads a variable from the GraphState (prefixed by state_path if applicable)."""
         key = f"{self._state_path}/{name}" if self._state_path else name
         value = ray.get(self._state_actor().get_variable.remote(key))
         if isinstance(value, ray.ObjectRef):
@@ -164,12 +166,12 @@ class ExecContext:
         return value
 
     def set_variable(self, name: str, value: Any) -> None:
-        """Escribe una variable en el GraphState (con prefijo state_path si aplica)."""
+        """Writes a variable into the GraphState (prefixed by state_path if applicable)."""
         key = f"{self._state_path}/{name}" if self._state_path else name
         ray.get(self._state_actor().set_variable.remote(key, value))
 
     def emit_event(self, event_name: str, payload: Any = None) -> None:
-        """Emite un evento al bus global (fire-and-forget)."""
+        """Emits an event to the global bus (fire-and-forget)."""
         try:
             from rayflow.events.bus import get_event_broker
             broker = get_event_broker()
@@ -178,14 +180,14 @@ class ExecContext:
             pass
 
     async def exec_outputs_except(self, *exclude: str) -> list[str]:
-        """Devuelve los exec output pins del nodo actual excepto los excluidos."""
+        """Returns the current node's exec output pins, excluding the given ones."""
         return await self._engine().get_exec_outputs.remote(
             self._node_id, list(exclude)
         )
 
 
 # ---------------------------------------------------------------------------
-# Metadata extraída
+# Extracted metadata
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -214,10 +216,10 @@ class NodeMeta:
     is_exec_node: bool = False
     is_engine_node: bool = False
     is_parallel: bool = False
-    # Nuevos campos:
-    is_builtin: bool = False           # True si viene de rayflow/nodes/builtin/, False si custom
-    category: str = "General"          # Categoría de usuario: "Control", "Matemáticas", etc.
-    description: str | None = None     # Docstring de la clase
+    # Newer fields:
+    is_builtin: bool = False           # True for a builtin node, False for custom
+    category: str = "General"          # User-facing category: "Control", "Math", etc.
+    description: str | None = None     # Class docstring
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -235,15 +237,15 @@ class NodeMeta:
 
 
 # ---------------------------------------------------------------------------
-# Decoradores
+# Decorators
 # ---------------------------------------------------------------------------
 
 def ray_node(cls: type) -> type:
-    """Registra una clase como nodo Ray (actor o task distribuido).
+    """Registers a class as a Ray node (a distributed actor or task).
 
-    Con exec pins → actor de Ray. run_with_ctx(ctx, **inputs) invoca run() y
-    el nodo controla su propio flujo via ctx.set_output() + await ctx.fire().
-    Sin exec pins → task de Ray (función pura evaluada bajo demanda).
+    With exec pins → a Ray actor. run_with_ctx(ctx, **inputs) calls run(),
+    and the node drives its own flow via ctx.set_output() + await ctx.fire().
+    Without exec pins → a Ray task (a pure function evaluated on demand).
     """
     meta = _extract_meta(cls)
     meta.is_engine_node = False
@@ -267,11 +269,11 @@ def ray_node(cls: type) -> type:
 
 
 def engine_node(cls: type) -> type:
-    """Registra una clase como nodo de engine (ejecutado localmente, sin Ray).
+    """Registers a class as an engine node (runs locally, no Ray involved).
 
-    Mismo contrato que @ray_node: ctx.fire() bloqueante, ctx.set_output() para
-    data outputs. La distinción engine_node/ray_node es solo sobre dónde corre
-    el nodo, no sobre sus capacidades.
+    Same contract as @ray_node: blocking ctx.fire(), ctx.set_output() for
+    data outputs. The engine_node/ray_node distinction is only about where
+    the node runs, not about what it can do.
     """
     meta = _extract_meta(cls)
     meta.is_engine_node = True
@@ -281,10 +283,11 @@ def engine_node(cls: type) -> type:
 
 
 def parallel_node(cls: type) -> type:
-    """Registra un nodo de fork/join paralelo.
+    """Registers a parallel fork/join node.
 
-    El nodo declara su propio run() que usa ctx.exec_outputs_except("joined")
-    para descubrir sus ramas dinámicas y asyncio.gather para lanzarlas en paralelo.
+    The node declares its own run() that uses
+    ctx.exec_outputs_except("joined") to discover its dynamic branches and
+    asyncio.gather to launch them in parallel.
     """
     meta = _extract_meta(cls)
     meta.is_engine_node = True
@@ -299,7 +302,7 @@ def get_node_meta(cls: type) -> NodeMeta | None:
 
 
 # ---------------------------------------------------------------------------
-# Extracción de metadata
+# Metadata extraction
 # ---------------------------------------------------------------------------
 
 def _extract_meta(cls: type) -> NodeMeta:
@@ -344,13 +347,13 @@ def _extract_meta(cls: type) -> NodeMeta:
 
     is_exec_node = has_exec_in or has_exec_out
 
-    # Extraer docstring como descripción
+    # Extract the docstring as the description.
     description = None
     if cls.__doc__:
         description = cls.__doc__.strip()
 
-    # Extraer categoría del atributo de clase (si existe)
-    category = getattr(cls, 'category', 'General')  # Default a "General"
+    # Extract the category from the class attribute (if present).
+    category = getattr(cls, 'category', 'General')  # Defaults to "General"
 
     return NodeMeta(
         name=cls.__name__,
@@ -361,8 +364,8 @@ def _extract_meta(cls: type) -> NodeMeta:
         has_exec_in=has_exec_in,
         has_exec_out=has_exec_out,
         is_exec_node=is_exec_node,
-        description=description,  # ← Docstring extraído
-        category=category,        # ← Categoría de la clase
+        description=description,  # ← extracted docstring
+        category=category,        # ← class category
     )
 
 
@@ -374,7 +377,7 @@ def _validate_type(cls: type, pin_name: str, type_str: str) -> None:
 
 
 def _strip_pin_descriptors(cls: type, meta: NodeMeta) -> None:
-    """Quita los descriptores de pin de la clase para que no estorben en run()."""
+    """Removes pin descriptors from the class so they don't get in the way inside run()."""
     for name, value in list(vars(cls).items()):
         if isinstance(value, (Input, Output, ExecInput, ExecOutput)):
             try:
@@ -384,7 +387,7 @@ def _strip_pin_descriptors(cls: type, meta: NodeMeta) -> None:
 
 
 def _make_data_task(cls: type):
-    """Función plana (task de Ray) que instancia el nodo de datos y llama run."""
+    """Plain function (a Ray task) that instantiates a data node and calls run."""
     def _data_task(ctx, **inputs: Any) -> dict:
         return cls().run(ctx, **inputs)
     _data_task.__name__ = f"{cls.__name__}_task"

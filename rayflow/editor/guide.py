@@ -1,25 +1,25 @@
-"""Guía curada del modelo de Rayflow, servida por `GET /editor/guide`.
+"""Curated guide to Rayflow's model, served by `GET /editor/guide`.
 
-Es el "contrato semántico" que un agente LLM necesita para construir flows y que
-hoy solo vivía en CLAUDE.md / docstrings del código. Texto plano en markdown.
+This is the "semantic contract" an LLM agent needs to build flows, which
+used to live only in CLAUDE.md / code docstrings. Plain markdown text.
 """
 
 GUIDE = """\
-# Guía para construir flows de Rayflow
+# Guide to building Rayflow flows
 
-Un flow es un grafo de nodos conectados por dos tipos de cable:
-- **exec** (orden de ejecución): secuencial.
-- **data** (valores): se evalúan en paralelo bajo demanda.
+A flow is a graph of nodes connected by two kinds of wire:
+- **exec** (order of execution): sequential.
+- **data** (values): evaluated in parallel on demand.
 
-## Estructura de un flow (JSON)
+## Structure of a flow (JSON)
 
 ```json
 {
-  "name": "mi_flow",
+  "name": "my_flow",
   "version": "1",
   "inputs":  { "x": "int" },
   "outputs": { "result": "int" },
-  "variables": [{ "name": "contador", "type": "int", "default": 0 }],
+  "variables": [{ "name": "counter", "type": "int", "default": 0 }],
   "events": [],
   "nodes": [
     { "id": "entry", "type": "OnStart" },
@@ -29,46 +29,47 @@ Un flow es un grafo de nodos conectados por dos tipos de cable:
 }
 ```
 
-## Reglas de cableado
+## Wiring rules
 
-- **Cada flow necesita un nodo de entrada**: `OnStart` (ejecución directa),
-  `OnEvent` (disparado por evento) u `OnVariableChange` (cambio de variable).
-- **Aristas exec**: se declaran DESDE el consumidor con `exec_in`:
-  - `"exec_in": "node_id"` -> el exec output por defecto del nodo fuente.
-  - `"exec_in": "node_id.pin"` -> un exec output concreto (`branch.true`, `seq.then_0`).
-  - `"exec_in": ["a", "b"]` -> espera a ambos (join "and").
-  - `"exec_in": {"or": ["a", "b"]}` -> el primero que llegue (join "or").
-- **Aristas data**: en `inputs`, el valor es:
-  - un literal del tipo correcto: `"b": 10`, `"flag": true`, `"name": "hola"`.
-  - una referencia `"node_id.pin"`: `"a": "entry.x"`, `"result": "add.result"`.
+- **Every flow needs an entry node**: `OnStart` (direct execution),
+  `OnEvent` (event-triggered), or `OnVariableChange` (variable change).
+- **Exec edges**: declared FROM the consumer with `exec_in`:
+  - `"exec_in": "node_id"` -> the source node's default exec output.
+  - `"exec_in": "node_id.pin"` -> a specific exec output (`branch.true`, `seq.then_0`).
+  - `"exec_in": ["a", "b"]` -> waits for both (an "and" join).
+  - `"exec_in": {"or": ["a", "b"]}` -> the first one to arrive (an "or" join).
+- **Data edges**: in `inputs`, the value is either:
+  - a literal of the correct type: `"b": 10`, `"flag": true`, `"name": "hello"`.
+  - a reference `"node_id.pin"`: `"a": "entry.x"`, `"result": "add.result"`.
 
-## Pins dinámicos (no aparecen en /editor/nodes estático)
+## Dynamic pins (don't appear in the static /editor/nodes)
 
-- `OnStart`/`FlowInput`/`OnEvent`: exponen un **data output por cada input del
-  flow**. Si el flow declara `inputs: {x: int}`, puedes leer `entry.x`.
-- `FlowOutput`: tiene un **data input requerido por cada output del flow**.
-- `Parallel`: sus ramas `branch_0`, `branch_1`, … se descubren del wiring
-  (nodos cuyo `exec_in` es `parallel_id.branch_N`); `joined` dispara al unir.
-- `CallFlow`: acepta inputs arbitrarios mapeados al subflow.
+- `OnStart`/`FlowInput`/`OnEvent`: expose **one data output per input of the
+  flow**. If the flow declares `inputs: {x: int}`, you can read `entry.x`.
+- `FlowOutput`: has **one required data input per output of the flow**.
+- `Parallel`: its branches `branch_0`, `branch_1`, … are discovered from the
+  wiring (nodes whose `exec_in` is `parallel_id.branch_N`); `joined` fires
+  once they're all done.
+- `CallFlow`: accepts arbitrary inputs mapped to the subflow.
 
-Consulta `GET /editor/flows/{name}/catalog` para ver los pins ya resueltos de un
-flow concreto.
+Check `GET /editor/flows/{name}/catalog` to see the already-resolved pins
+of a specific flow.
 
-## Sistema de tipos
+## Type system
 
-Tipos canónicos (strings): `int`, `float`, `str`, `bool`, `list`, `dict`, `Any`,
-más genéricos `list[T]` y `dict[str, V]`. Compatibilidad ESTRICTA: mismo tipo o
-uno es `Any`. **int y float son incompatibles**: castea con `ToInt`/`ToFloat`/
-`ToStr`/`ToBool`. Consulta `GET /editor/types`.
+Canonical types (strings): `int`, `float`, `str`, `bool`, `list`, `dict`,
+`Any`, plus generics `list[T]` and `dict[str, V]`. STRICT compatibility:
+same type, or one is `Any`. **int and float are incompatible**: cast with
+`ToInt`/`ToFloat`/`ToStr`/`ToBool`. Check `GET /editor/types`.
 
-## Flujo de trabajo recomendado para un agente
+## Recommended workflow for an agent
 
-1. `GET /editor/guide` y `GET /editor/nodes` para conocer el catálogo.
-2. (Opcional) `GET /editor/examples/{name}` como plantilla.
-3. Construir el flow JSON.
-4. `POST /editor/validate` -> devuelve TODOS los errores y warnings de una vez.
-5. Corregir hasta `valid: true`.
-6. `POST /editor/flows` (crear) o `PUT /editor/flows/{name}` (actualizar).
-7. `POST /editor/flows/{name}/test` con `{inputs, expected_outputs}` para
-   verificar que hace lo esperado, o `POST /editor/flows/{name}/run` para ejecutar.
+1. `GET /editor/guide` and `GET /editor/nodes` to learn the catalog.
+2. (Optional) `GET /editor/examples/{name}` as a template.
+3. Build the flow JSON.
+4. `POST /editor/validate` -> returns ALL errors and warnings at once.
+5. Fix until `valid: true`.
+6. `POST /editor/flows` (create) or `PUT /editor/flows/{name}` (update).
+7. `POST /editor/flows/{name}/test` with `{inputs, expected_outputs}` to
+   verify it does what's expected, or `POST /editor/flows/{name}/run` to run it.
 """

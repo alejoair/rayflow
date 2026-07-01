@@ -13,36 +13,37 @@ _VAR_KEYS = {"name", "type", "default"}
 
 
 def unknown_keys(data: dict) -> list[str]:
-    """Detecta claves no reconocidas en un FlowDef ya parseado a dict.
+    """Detects unrecognized keys in a FlowDef already parsed into a dict.
 
-    El parser (`_parse_flow`) es tolerante y descarta en silencio cualquier
-    clave que no entienda. Eso oculta erratas típicas de un LLM ('input' por
-    'inputs', 'exec' por 'exec_in'): el campo se ignora y el error aflora más
-    tarde como un confuso 'pin requerido sin valor'. Esta función las reporta
-    como warnings para cerrar ese hueco sin romper la tolerancia del parser.
+    The parser (`_parse_flow`) is tolerant and silently drops any key it
+    doesn't understand. That hides typos typical of an LLM ('input' instead
+    of 'inputs', 'exec' instead of 'exec_in'): the field gets ignored and
+    the error later surfaces as a confusing 'pin required but has no
+    value'. This function reports them as warnings to close that gap
+    without breaking the parser's tolerance.
     """
     warnings: list[str] = []
     if not isinstance(data, dict):
         return warnings
     for k in data:
         if k not in _FLOW_KEYS:
-            warnings.append(f"flow: clave desconocida '{k}' (ignorada)")
+            warnings.append(f"flow: unknown key '{k}' (ignored)")
     for v in data.get("variables", []) or []:
         if isinstance(v, dict):
             for k in v:
                 if k not in _VAR_KEYS:
-                    warnings.append(f"variable '{v.get('name', '?')}': clave desconocida '{k}' (ignorada)")
+                    warnings.append(f"variable '{v.get('name', '?')}': unknown key '{k}' (ignored)")
     for n in data.get("nodes", []) or []:
         if isinstance(n, dict):
             nid = n.get("id", "?")
             for k in n:
                 if k not in _NODE_KEYS:
-                    warnings.append(f"nodo '{nid}': clave desconocida '{k}' (ignorada)")
+                    warnings.append(f"node '{nid}': unknown key '{k}' (ignored)")
     return warnings
 
 
 def load_flow(source: str | Path | dict) -> FlowDef:
-    """Carga un FlowDef desde un archivo JSON, path o dict ya parseado."""
+    """Loads a FlowDef from a JSON file, a path, or an already-parsed dict."""
     if isinstance(source, dict):
         data = source
     else:

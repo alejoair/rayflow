@@ -1,5 +1,5 @@
-"""Endpoints CRUD para nodos custom: leer/crear/editar/eliminar archivos .py
-y recargar el catálogo en caliente sin reiniciar el servidor."""
+"""CRUD endpoints for custom nodes: read/create/edit/delete .py files
+and hot-reload the catalog without restarting the server."""
 from __future__ import annotations
 
 import ast
@@ -45,7 +45,7 @@ def _node_file(name: str) -> Path:
 
 
 def _ensure_package() -> None:
-    """Garantiza que custom_nodes/ existe como paquete Python."""
+    """Ensures custom_nodes/ exists as a Python package."""
     cn = custom_nodes_path()
     cn.mkdir(parents=True, exist_ok=True)
     init = cn / "__init__.py"
@@ -54,17 +54,17 @@ def _ensure_package() -> None:
 
 
 def _validate_syntax(code: str) -> str | None:
-    """Devuelve mensaje de error o None si la sintaxis es válida."""
+    """Returns an error message, or None if the syntax is valid."""
     try:
         ast.parse(code)
         return None
     except SyntaxError as e:
-        return f"SyntaxError en línea {e.lineno}: {e.msg}"
+        return f"SyntaxError on line {e.lineno}: {e.msg}"
 
 
 def _reload_catalog() -> dict[str, Any]:
-    """Descarta el catálogo singleton y lo reconstruye desde disco."""
-    # Eliminar módulos custom_nodes.* cacheados para forzar reimportación
+    """Discards the singleton catalog and rebuilds it from disk."""
+    # Remove cached custom_nodes.* modules to force re-import.
     to_remove = [k for k in sys.modules if k.startswith("custom_nodes")]
     for k in to_remove:
         del sys.modules[k]
@@ -85,7 +85,7 @@ def _reload_catalog() -> dict[str, Any]:
 
 @router.get("")
 async def list_custom_nodes() -> list[dict[str, Any]]:
-    """Lista los archivos .py de custom_nodes/ con nombre y tamaño."""
+    """Lists the .py files in custom_nodes/ with name and size."""
     cn = custom_nodes_path()
     if not cn.exists():
         return []
@@ -103,30 +103,30 @@ async def list_custom_nodes() -> list[dict[str, Any]]:
 
 @router.get("/{name}/source")
 async def get_custom_node_source(name: str) -> dict[str, Any]:
-    """Devuelve el código fuente de un nodo custom."""
+    """Returns the source code of a custom node."""
     path = _node_file(name)
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Nodo custom '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Custom node '{name}' not found")
     return {"name": name, "source": path.read_text(encoding="utf-8")}
 
 
 @router.post("", status_code=201)
 async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
-    """Crea un nuevo archivo de nodo custom.
+    """Creates a new custom node file.
 
-    Body: { "name": "MiNodo", "source": "..." (opcional) }
-    Si no se provee source, se usa la plantilla por defecto.
+    Body: { "name": "MyNode", "source": "..." (optional) }
+    If source isn't provided, the default template is used.
     """
     name: str = body.get("name", "").strip()
     if not name:
-        raise HTTPException(status_code=422, detail="El campo 'name' es requerido")
+        raise HTTPException(status_code=422, detail="The 'name' field is required")
     if not name.isidentifier():
-        raise HTTPException(status_code=422, detail=f"'{name}' no es un identificador Python válido")
+        raise HTTPException(status_code=422, detail=f"'{name}' is not a valid Python identifier")
 
     _ensure_package()
     path = _node_file(name)
     if path.exists():
-        raise HTTPException(status_code=409, detail=f"Ya existe un nodo custom llamado '{name}'")
+        raise HTTPException(status_code=409, detail=f"A custom node named '{name}' already exists")
 
     source: str = body.get("source") or NODE_TEMPLATE.format(name=name)
 
@@ -141,14 +141,14 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
 
 @router.put("/{name}/source")
 async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[str, Any]:
-    """Guarda el código fuente editado y recarga el catálogo."""
+    """Saves the edited source code and reloads the catalog."""
     path = _node_file(name)
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Nodo custom '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Custom node '{name}' not found")
 
     source: str = body.get("source", "")
     if not source.strip():
-        raise HTTPException(status_code=422, detail="El campo 'source' no puede estar vacío")
+        raise HTTPException(status_code=422, detail="The 'source' field cannot be empty")
 
     err = _validate_syntax(source)
     if err:
@@ -161,10 +161,10 @@ async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[s
 
 @router.delete("/{name}", status_code=204)
 async def delete_custom_node(name: str) -> Response:
-    """Elimina el archivo .py y recarga el catálogo."""
+    """Deletes the .py file and reloads the catalog."""
     path = _node_file(name)
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Nodo custom '{name}' no encontrado")
+        raise HTTPException(status_code=404, detail=f"Custom node '{name}' not found")
     path.unlink()
     _reload_catalog()
     return Response(status_code=204)
@@ -172,5 +172,5 @@ async def delete_custom_node(name: str) -> Response:
 
 @router.post("/reload")
 async def reload_custom_nodes() -> dict[str, Any]:
-    """Recarga todos los nodos custom desde disco sin reiniciar el servidor."""
+    """Reloads every custom node from disk without restarting the server."""
     return _reload_catalog()

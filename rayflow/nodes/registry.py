@@ -1,4 +1,4 @@
-"""Catálogo global de nodos. Se construye una vez por proceso."""
+"""Global node catalog. Built once per process."""
 from __future__ import annotations
 
 import dataclasses
@@ -7,20 +7,20 @@ from pathlib import Path
 from rayflow.nodes.loader import NodeCatalog
 from rayflow.nodes.builtin import control, variables, events, cast, math as math_nodes, flow as flow_nodes, compare as compare_nodes
 
-# Clases built-in ya decoradas (evita re-importarlas con importlib).
+# Already-decorated builtin classes (avoids re-importing them with importlib).
 _BUILTIN_MODULES = (control, variables, events, cast, math_nodes, flow_nodes, compare_nodes)
 
-# Catálogo singleton — cargado una vez.
+# Singleton catalog — loaded once.
 _catalog: NodeCatalog | None = None
 
 
 def get_catalog(extra_dirs: list[str | Path] | None = None) -> NodeCatalog:
-    """Devuelve el catálogo global, registrando built-in + nodos de usuario.
+    """Returns the global catalog, registering builtin + user nodes.
 
-    Por convención, descubre los nodos custom del paquete ./custom_nodes/ del
-    working directory (importado como módulo real para que sus clases sean
-    picklables/reconstruibles en los workers Ray vía runtime_env). `extra_dirs`
-    añade directorios adicionales.
+    By convention, discovers custom nodes from the working directory's
+    ./custom_nodes/ package (imported as a real module so its classes are
+    picklable/reconstructible in Ray workers via runtime_env). `extra_dirs`
+    adds extra directories.
     """
     global _catalog
     if _catalog is None:
@@ -28,15 +28,15 @@ def get_catalog(extra_dirs: list[str | Path] | None = None) -> NodeCatalog:
         for module in _BUILTIN_MODULES:
             _register_module(_catalog, module)
 
-        # Marcar nodos builtin como is_builtin=True después del registro
+        # Mark builtin nodes as is_builtin=True after registration.
         for name in _catalog.all_names():
             cls, meta = _catalog.get(name)
-            # Actualizamos la meta del nodo builtin
+            # Update the builtin node's metadata.
             _catalog._registry[name] = (cls, dataclasses.replace(meta, is_builtin=True))
 
-        # FlowInput es alias histórico de OnStart — mantener por compatibilidad con tests y flows guardados
+        # FlowInput is a historical alias of OnStart — kept for compatibility with tests and saved flows.
         _catalog.register_alias("FlowInput", "OnStart")
-        _catalog.load_custom_nodes_package()  # Los custom se marcan como is_builtin=False automáticamente
+        _catalog.load_custom_nodes_package()  # custom nodes are automatically marked is_builtin=False
 
     if extra_dirs:
         for d in extra_dirs:
@@ -52,6 +52,6 @@ def _register_module(catalog: NodeCatalog, module) -> None:
 
 
 def reset_catalog() -> None:
-    """Solo para tests: fuerza la reconstrucción del catálogo."""
+    """For tests only: forces the catalog to be rebuilt."""
     global _catalog
     _catalog = None

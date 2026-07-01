@@ -1,4 +1,4 @@
-"""Tests del sistema de definición y descubrimiento de nodos."""
+"""Tests for the node definition and discovery system."""
 import pytest
 from rayflow.nodes.decorators import ray_node, engine_node, ExecContext, Input, Output, ExecInput, ExecOutput, get_node_meta
 from rayflow.nodes.loader import NodeCatalog
