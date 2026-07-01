@@ -148,7 +148,7 @@ def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
         unload(name)
 
 
-def serve_events(source: str | Path, extra_node_dirs: list[str | Path] | None = None) -> str:
+def serve_events(source: str | Path | dict, extra_node_dirs: list[str | Path] | None = None) -> str:
     """Loads a flow into Ray and subscribes it to the event bus.
 
     The flow stays resident: every time one of its declared events is

@@ -35,7 +35,17 @@ rayflow serve --port 8000 --debug
 # Ejecutar tests
 pip install -e ".[dev]"
 pytest tests/
+
+# Type-check el backend (ty, de Astral — muy rápido, ~0.3s para todo rayflow/)
+ty check rayflow/
 ```
+
+`ty` marca falsos positivos conocidos en archivos con actores Ray (`@ray.remote`
+inyecta `.remote()` en tiempo de ejecución, invisible para el analizador estático) —
+son ruido esperado, no bugs reales. Los hooks `ty_diff_pre.py`/`ty_diff_post.py`
+en `.claude/hooks/` ya filtran ese ruido automáticamente comparando diagnósticos
+antes/después de cada edit; correr `ty check` a mano es útil para una revisión
+manual amplia del estado actual de tipos.
 
 El servidor sirve:
 - Editor visual en `http://localhost:8000/editor`
@@ -255,11 +265,31 @@ El endpoint de guardar/crear valida sintaxis Python con `ast.parse()` antes de e
 
 `rayflow/mcp/server.py` expone un set **curado** de tools MCP construido con FastMCP, montado en `/mcp` (streamable-http) por `create_app`. Reusa la misma lógica que la API REST del editor — no la reimplementa. Su lifespan se pasa a FastAPI al construir la app para que el gestor de sesiones arranque.
 
-Tools: `get_guide`, `list_nodes`, `get_node`, `list_types`, `type_check`, `validate_flow`, `list_flows`, `get_flow`, `create_flow`, `update_flow`, `delete_flow`, `flow_catalog`, `run_flow`, `test_flow`, `list_examples`, `get_example`.
+Tools:
+- **Discovery**: `get_guide`, `list_nodes`, `get_node`, `list_types`, `type_check`
+- **Validation**: `validate_flow`
+- **Flow CRUD**: `list_flows`, `get_flow`, `create_flow`, `update_flow`, `delete_flow`, `flow_catalog`
+- **Custom nodes**: `list_custom_nodes`, `get_custom_node_source`, `create_custom_node`, `update_custom_node_source`, `delete_custom_node`, `reload_custom_nodes`
+- **Events**: `serve_flow_events`, `stop_flow_events`
+- **Execution**: `run_flow`, `test_flow`, `unload_flow`
+- **Examples**: `list_examples`, `get_example`
 
 Loop típico de un agente: `get_guide` → `list_nodes` → (`get_example`) → `validate_flow` (itera hasta `valid:true`) → `create_flow`/`update_flow` → `test_flow`/`run_flow`. `validate_flow` devuelve **todos** los errores de una pasada (ver `validate_all` en `build/validator.py`), cerrando el loop de feedback con pocos round-trips.
 
+`update_flow`/`delete_flow` descargan el flow de Ray si ya estaba cargado (p.ej. por un `run_flow`/`test_flow` previo) — si no, la siguiente ejecución reusaría en silencio el grafo viejo, porque `run_flow`/`test_flow` evitan recargar un flow ya cargado como optimización. `unload_flow` expone esa descarga explícitamente. `create_custom_node`/`update_custom_node_source`/`delete_custom_node` hacen hot-reload del catálogo automáticamente (mismo mecanismo que el endpoint REST), así que `list_nodes`/`validate_flow` ven el nodo custom sin reiniciar el servidor. `run_flow`/`test_flow` aceptan `trace=True` para devolver los eventos `node_start`/`node_done`/`edge_fire` en orden — útil para localizar qué nodo produjo un valor inesperado, ya que el resultado final por sí solo no lo indica.
+
 `fastmcp` es dependencia core. Los flows de ejemplo se empaquetan en `rayflow/editor/examples/*.json` (package-data) para que estén disponibles aunque se instale por pip.
+
+### `rayflow install claude-tools` (para usuarios finales de `pip install rayflow`)
+
+Copia plantillas empaquetadas en `rayflow/claude_tools/` (package-data) al directorio de trabajo del usuario — **no** es tooling para desarrollar rayflow mismo, es para que alguien que instaló rayflow por pip y usa Claude Code para construir sus propios flows/nodos tenga contexto automático:
+
+- `.claude/skills/rayflow-node/SKILL.md` — cómo crear/editar un nodo custom.
+- `.claude/skills/rayflow-flow/SKILL.md` — el loop de construir/validar/probar un flow vía MCP.
+- `.claude/agents/rayflow-debugger.md` — subagente restringido a tools de solo lectura/diagnóstico (sin `create_flow`/`update_flow`/`Write`), para diagnosticar sin poder modificar el flow que está investigando.
+- `.mcp.json` — registra el server MCP local (`http://localhost:8000/mcp/`); solo se escribe si el usuario no tiene uno ya (nunca se sobreescribe, ni con `--force`, para no pisar otros servers MCP configurados).
+
+`--force` sobreescribe skills/agente existentes; nunca `.mcp.json`. Sin `--force`, la instalación es idempotente (archivos existentes se saltean).
 
 ## Schema de un flow (JSON)
 

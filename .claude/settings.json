@@ -22,6 +22,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/ty_diff_pre.py 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -32,6 +42,11 @@
             "type": "command",
             "command": "python3 .claude/hooks/dependents_reminder.py 2>/dev/null || true",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/ty_diff_post.py 2>/dev/null || true",
+            "timeout": 5
           }
         ]
       },
@@ -41,6 +56,17 @@
           {
             "type": "command",
             "command": "python3 .claude/hooks/staleness_guard.py 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/stale_reminder.py 2>/dev/null || true",
             "timeout": 5
           }
         ]
@@ -63,6 +89,11 @@
           {
             "type": "command",
             "command": "python3 .claude/hooks/prompt_file_hints.py 2>/dev/null || true",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/workflow_hints.py 2>/dev/null || true",
             "timeout": 5
           }
         ]

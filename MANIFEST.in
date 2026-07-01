@@ -4,5 +4,8 @@ exclude CLAUDE.md
 prune docs
 prune examples
 
-# Generated LLM-orientation file map — internal tooling artifact, not user docs.
+# Generated LLM-orientation file map, workflow checklists, and scenario
+# narratives — internal tooling artifacts, not user docs.
 exclude rayflow_file_map.json
+exclude rayflow_workflows.json
+exclude rayflow_scenarios.json

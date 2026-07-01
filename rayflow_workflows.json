@@ -1,0 +1,98 @@
+{
+  "$schema_note": "Task-shaped checklists for recurring multi-file changes in this repo. Surfaced by .claude/hooks/workflow_hints.py (UserPromptSubmit) when the user's prompt matches a workflow's trigger phrases, so the checklist arrives BEFORE the first edit instead of being discovered file-by-file via the per-file hooks. Complements rayflow_file_map.json's 'systems' layer (which answers 'what does this file belong to'); this answers 'what does this KIND OF CHANGE usually touch'.",
+  "workflows": [
+    {
+      "id": "add-node-type",
+      "title": "Adding a new node type",
+      "triggers": ["nuevo nodo", "nueva node", "add a node", "add node type", "new node type", "crear nodo", "create a node"],
+      "systems": ["nodes", "tests", "editor-api"],
+      "checklist": [
+        "Implement the node class in rayflow/nodes/builtin/<file>.py (or a sandbox custom_nodes/ file for a one-off), decorated with @ray_node, @engine_node, or @parallel_node.",
+        "Give it an English `category`, consistent with existing ones (Math, Control, Loops, Events, ...) — don't introduce a new Spanish or inconsistent category.",
+        "Confirm rayflow/nodes/loader.py's auto-discovery picks it up (built-in dir is scanned automatically; no manual registration needed for built-ins).",
+        "Add coverage in tests/test_nodes.py.",
+        "If it introduces a genuinely new pattern (not just another instance of an existing one), consider whether rayflow/editor/guide.py's GUIDE text needs updating — it's what LLM agents read via get_guide/get_guide MCP tool."
+      ]
+    },
+    {
+      "id": "change-sse-event-schema",
+      "title": "Changing the SSE run-event schema (run_start/node_start/edge_fire/node_done/flow_done/flow_error)",
+      "triggers": ["sse", "server-sent event", "evento de ejecución", "run event", "eventos del run", "node_start", "node_done", "flow_done"],
+      "systems": ["engine", "frontend-state"],
+      "checklist": [
+        "Event emission lives in rayflow/engine/executor.py (FlowEngine) — node_start/node_done/edge_fire are fire-and-forget (no await); flow_done/flow_error use await so they arrive before the sub-queue closes.",
+        "The consumer is rayflow/editor/frontend/src/hooks/useRunStream.ts — it drives the animation/state machine and has its own reconnect logic keyed on run_id.",
+        "Update the event table in CLAUDE.md if you add/rename/remove an event or its fields.",
+        "Check tests/test_executor.py and tests/test_editor.py for assertions on event shape/ordering.",
+        "Remember the RunQueue actor (rayflow/state/queue.py) is a strict per-run FIFO — event ordering guarantees come from the actor's sequential event loop, not from awaiting each push."
+      ]
+    },
+    {
+      "id": "add-editor-api-endpoint",
+      "title": "Adding a REST endpoint to the editor API",
+      "triggers": ["nuevo endpoint", "add an endpoint", "add a route", "nueva ruta", "editor api", "rest endpoint"],
+      "systems": ["editor-api", "mcp", "tests"],
+      "checklist": [
+        "Add the route in rayflow/editor/routes.py (or custom_nodes_routes.py if it's about custom-node CRUD).",
+        "Decide whether it also needs an MCP tool — the MCP layer is a CURATED subset (rayflow/mcp/server.py), not auto-generated from the REST API, so exposing it to LLM agents is a deliberate extra step, not automatic.",
+        "Reuse existing storage/build/validator logic rather than duplicating it — both the REST route and any paired MCP tool should call the same underlying functions.",
+        "Add coverage in tests/test_editor.py (and tests/test_mcp.py if you added a tool).",
+        "Update the REST API table in CLAUDE.md."
+      ]
+    },
+    {
+      "id": "add-mcp-tool",
+      "title": "Adding a new MCP tool",
+      "triggers": ["nueva tool mcp", "add an mcp tool", "mcp tool", "herramienta mcp", "fastmcp tool"],
+      "systems": ["mcp", "editor-api", "tests"],
+      "checklist": [
+        "Add the tool function in rayflow/mcp/server.py with an English docstring — the docstring IS the tool description LLM clients see.",
+        "Call into existing editor/routes.py or storage.py logic rather than reimplementing it — the MCP layer is meant to reuse the REST API's logic, not duplicate it.",
+        "Error returns should be plain '{\"error\": \"...\"}' dicts in English, matching the existing 17 call sites' convention.",
+        "Add coverage in tests/test_mcp.py.",
+        "Update the MCP tool list in CLAUDE.md (the 'Capa MCP' section)."
+      ]
+    },
+    {
+      "id": "change-flow-json-schema",
+      "title": "Changing the flow JSON schema (FlowDef/NodeDef shape)",
+      "triggers": ["flow json", "schema del flow", "flowdef", "nodedef", "cambiar el schema", "change the schema"],
+      "systems": ["schema", "build", "frontend-state", "examples", "tests"],
+      "checklist": [
+        "Model changes go in rayflow/schema/models.py (Pydantic) and rayflow/schema/loader.py (unknown-key warnings).",
+        "If the change affects validation/wiring semantics, rayflow/build/validator.py likely needs updating too (flatten/validate_all).",
+        "The frontend translator (rayflow/editor/frontend/src/lib/translator.ts) converts flowDef JSON <-> React Flow nodes/edges — check both directions still round-trip.",
+        "Existing example flows (examples/*.json and rayflow/editor/examples/*.json, the packaged few-shot examples) may need migrating to the new shape.",
+        "Update the flow JSON schema example in CLAUDE.md.",
+        "Add coverage in tests/test_schema.py and tests/test_build.py."
+      ]
+    },
+    {
+      "id": "change-variable-semantics",
+      "title": "Changing GraphState variable / OnVariableChange trigger semantics",
+      "triggers": ["graphstate", "watch_variable", "onvariablechange", "variables persistentes", "cambio de variable"],
+      "systems": ["state", "events", "nodes", "frontend-panels"],
+      "checklist": [
+        "Variable storage and watch_variable() live in rayflow/state/actor.py (GraphState) — set_variable only publishes to the event bus if the value actually changed.",
+        "Trigger wiring (var:{source}/{var} synthetic events) goes through rayflow/events/bus.py's EventBroker — matching is exact-string, including namespace.",
+        "The Set/Get node semantics live in rayflow/nodes/builtin/variables.py; the OnVariableChange entry point is in rayflow/nodes/builtin/events.py.",
+        "Frontend variable UI is rayflow/editor/frontend/src/components/VariablesPanel.tsx.",
+        "Watch for the known re-trigger-loop risk documented in CLAUDE.md if a flow watches and rewrites its own variable.",
+        "Add coverage in tests/test_events.py and tests/test_executor.py."
+      ]
+    },
+    {
+      "id": "add-claude-code-hook",
+      "title": "Adding or modifying a Claude Code hook in this repo",
+      "triggers": ["nuevo hook", "add a hook", "claude code hook", "crear un hook"],
+      "systems": ["hooks-infra"],
+      "checklist": [
+        "Shared logic goes in .claude/hooks/_file_map.py (or a new _*.py helper module) — hooks themselves should stay thin.",
+        "Register in .claude/settings.json under the right event; multiple entries with different matchers (or the same matcher) can coexist under one event.",
+        "Pipe-test with synthetic stdin before wiring it in, then prove it fires live (sentinel-prefix technique for Pre/PostToolUse; Stop/UserPromptSubmit/SessionStart can't be proven within the same turn).",
+        "If the hook is a new source file, add its entry to rayflow_file_map.json (staleness_guard.py will flag it as unmapped otherwise) — including its `system` (hooks-infra) so it shows up in the systems layer too.",
+        "Keep it silent-by-default and non-blocking unless the whole point is to block (like stale_reminder.py's decision:block) — hooks that error loudly on every tool call are worse than no hook."
+      ]
+    }
+  ]
+}
