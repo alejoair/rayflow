@@ -3,6 +3,7 @@ import pytest
 import ray
 import rayflow
 from rayflow.nodes.registry import reset_catalog
+from tests.helpers import run_once
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +43,7 @@ SUBFLOW_SET_VAR = {
 
 def test_callflow_isolated_inputs_outputs():
     """An isolated CallFlow receives inputs and returns outputs under 'result'."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parent",
         "inputs": {"x": "int", "y": "int"},
         "outputs": {"answer": "dict"},
@@ -66,7 +67,7 @@ def test_callflow_meta_flow_is_the_declaring_subflow():
     A node from the subflow reports the subflow's name; one from the root
     reports the root's. meta['id'] is the flat path ("sub/add").
     """
-    result = rayflow.run({
+    result = run_once({
         "name": "my_parent",
         "inputs": {"x": "int"},
         "outputs": {"sub_meta": "dict", "root_meta": "dict"},
@@ -91,7 +92,7 @@ def test_callflow_meta_flow_is_the_declaring_subflow():
 
 def test_callflow_isolated_does_not_pollute_parent_state():
     """An isolated CallFlow can't see or modify the parent's variables."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parent",
         "variables": [{"name": "val", "type": "int", "default": 99}],
         "outputs": {"parent_val": "Any"},
@@ -113,7 +114,7 @@ def test_callflow_isolated_does_not_pollute_parent_state():
 
 def test_callflow_shared_modifies_parent_variable():
     """A shared CallFlow can write to the parent's variables."""
-    result = rayflow.run({
+    result = run_once({
         "name": "parent",
         "variables": [{"name": "counter", "type": "int", "default": 0}],
         "outputs": {"final": "Any"},
@@ -152,7 +153,7 @@ def test_callflow_inside_parallel_branch():
              "inputs": {"t": "add.result"}},
         ],
     }
-    result = rayflow.run({
+    result = run_once({
         "name": "p",
         "inputs": {"n": "int"},
         "outputs": {"r": "dict"},
@@ -186,7 +187,7 @@ def test_callflow_isolated_same_variable_does_not_collide():
             {"id": "x", "type": "FlowOutput", "exec_in": "s", "inputs": {}},
         ],
     }
-    result = rayflow.run({
+    result = run_once({
         "name": "parent",
         "variables": [{"name": "counter", "type": "int", "default": 99}],
         "outputs": {"val": "Any"},
@@ -215,7 +216,7 @@ def test_callflow_shared_same_variable_does_collide():
             {"id": "x", "type": "FlowOutput", "exec_in": "s", "inputs": {}},
         ],
     }
-    result = rayflow.run({
+    result = run_once({
         "name": "parent",
         "variables": [{"name": "counter", "type": "int", "default": 99}],
         "outputs": {"val": "Any"},
@@ -246,7 +247,7 @@ def test_callflow_nested():
         ],
     }
 
-    result = rayflow.run({
+    result = run_once({
         "name": "parent",
         "inputs": {"x": "int"},
         "outputs": {"r1": "dict", "r2": "dict"},

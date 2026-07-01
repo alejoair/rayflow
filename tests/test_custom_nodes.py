@@ -8,6 +8,7 @@ import ray
 import rayflow
 from rayflow.nodes.registry import get_catalog, reset_catalog
 from rayflow import workspace
+from tests.helpers import run_once
 
 
 CUSTOM_NODE_SRC = textwrap.dedent('''
@@ -112,7 +113,7 @@ def test_runtime_env_with_nodes(workspace_dir):
 
 def test_custom_engine_node_runs(workspace_dir):
     """A custom @engine_node (runs on the driver) works."""
-    out = rayflow.run({
+    out = run_once({
         "name": "shout_flow",
         "inputs": {"msg": "str"},
         "outputs": {"out": "str"},

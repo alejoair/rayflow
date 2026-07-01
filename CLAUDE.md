@@ -470,6 +470,6 @@ Set escribe variable vigilada → GraphState.set_variable
 | `rayflow/nodes/registry.py` | Singleton del catálogo, `reset_catalog()` para hot reload |
 | `rayflow/state/actor.py` | `GraphState` — variables persistentes y su vigilancia (`watch_variable`). Los outputs de nodos viven en el `RunContext` del engine, no aquí |
 | `rayflow/events/bus.py` | `EventBroker` — pub/sub fire-and-forget entre flows |
-| `rayflow/api.py` | API pública: `run()`, `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
+| `rayflow/api.py` | API pública: `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
 | `rayflow/workspace.py` | Convenciones de directorio: `custom_nodes/`, `flows/` |

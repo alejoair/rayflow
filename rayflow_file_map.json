@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 155,
+  "file_count": 156,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -209,7 +209,7 @@
       "system": "packaging"
     },
     "rayflow/__init__.py": {
-      "description": "Package entry point: re-exports the public Python API (run/load/unload/execute/serve_events/stop) and exposes rayflow.__version__ resolved from installed package metadata.",
+      "description": "Package entry point: re-exports the public Python API (load/unload/execute/serve_events/stop) and exposes rayflow.__version__ resolved from installed package metadata. run() was removed from both api.py and this export.",
       "depends_on": [
         "rayflow/api.py"
       ],
@@ -233,7 +233,7 @@
       "system": "server"
     },
     "rayflow/api.py": {
-      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/run/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray.",
+      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray. The one-shot run() wrapper (load+execute+unload every call) was removed: rayflow/server.py was using it to serve HTTP requests, silently destroying and recreating a served flow's actors (losing GraphState) on every single request instead of reusing the persistent graph the engine already supports sharing across concurrent runs.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/engine/executor.py",
@@ -1156,7 +1156,7 @@
       "system": "schema"
     },
     "rayflow/server.py": {
-      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend.",
+      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Loads every served flow into Ray once at startup (create_app) and /flows/{name}/run reuses that persistent graph via execute_async on every request, instead of the removed one-shot run() which destroyed and recreated actors (and lost GraphState) on every single call.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
@@ -1259,7 +1259,8 @@
       "description": "Tests for the CallFlow node: isolated vs. shared subflow state, meta['flow'] attribution, CallFlow inside a Parallel branch, and nested CallFlows.",
       "depends_on": [
         "rayflow/__init__.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1269,7 +1270,8 @@
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/nodes/registry.py",
-        "rayflow/workspace.py"
+        "rayflow/workspace.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1292,7 +1294,8 @@
         "rayflow/__init__.py",
         "rayflow/api.py",
         "rayflow/events/bus.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1302,7 +1305,8 @@
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/nodes/decorators.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/helpers.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1337,7 +1341,7 @@
       "system": "tests"
     },
     "tests/test_server.py": {
-      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, and duplicate-name validation.",
+      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, duplicate-name validation, and a regression test that a GraphState variable persists across separate HTTP requests to the same served flow (catches the removed one-shot run() bug that reset it every request).",
       "depends_on": [
         "rayflow/nodes/registry.py",
         "rayflow/server.py"
@@ -1441,6 +1445,19 @@
         "rayflow/cli/main.py"
       ],
       "dependents": [],
+      "system": "tests"
+    },
+    "tests/helpers.py": {
+      "description": "Test-only helper (run_once) replacing the removed rayflow.api.run(): loads, executes, and unconditionally unloads a flow — the always-fresh-reload behavior many tests rely on (reusing generic throwaway flow names like \"parent\"/\"counter\" across unrelated test functions), scoped to test code now that it's no longer part of the public API.",
+      "depends_on": [
+        "rayflow/__init__.py"
+      ],
+      "dependents": [
+        "tests/test_executor.py",
+        "tests/test_callflow.py",
+        "tests/test_events.py",
+        "tests/test_custom_nodes.py"
+      ],
       "system": "tests"
     }
   },
@@ -1851,6 +1868,7 @@
       "description": "The pytest suite covering build/validation, the engine/executor, the editor REST API, custom nodes, events, CallFlow subflows, MCP tools, node behavior, and schema parsing.",
       "files": [
         "tests/__init__.py",
+        "tests/helpers.py",
         "tests/test_build.py",
         "tests/test_callflow.py",
         "tests/test_cli.py",

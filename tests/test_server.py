@@ -81,3 +81,32 @@ def test_run_flow_body_is_not_an_object(client):
 def test_duplicate_names_fail_to_load():
     with pytest.raises(ValueError, match="share the name"):
         load_served_flows([SUMA, dict(SUMA)])
+
+
+COUNTER = {
+    "name": "counter",
+    "outputs": {"count": "int"},
+    "variables": [{"name": "n", "type": "int", "default": 0}],
+    "nodes": [
+        {"id": "entry", "type": "OnStart"},
+        {"id": "get_n", "type": "Get", "inputs": {"variable_name": "n"}},
+        {"id": "add", "type": "Add", "exec_in": "entry", "inputs": {"a": "get_n.value", "b": 1}},
+        {"id": "set_n", "type": "Set", "exec_in": "add", "inputs": {"variable_name": "n", "value": "add.result"}},
+        {"id": "exit", "type": "FlowOutput", "exec_in": "set_n", "inputs": {"count": "add.result"}},
+    ],
+}
+
+
+def test_graphstate_persists_across_requests():
+    """Regression test: /flows/{name}/run used to route through the one-shot
+    rayflow.api.run() (load -> execute -> unload on every single request),
+    destroying the flow's GraphState after each call. A variable this flow
+    increments would silently reset to its default every request instead of
+    accumulating. The fix loads once (in create_app) and reuses that same
+    graph across requests, isolated per-request only by run_id/RunContext."""
+    served = load_served_flows([COUNTER])
+    client = TestClient(create_app(served))
+
+    assert client.post("/flows/counter/run", json={}).json() == {"count": 1}
+    assert client.post("/flows/counter/run", json={}).json() == {"count": 2}
+    assert client.post("/flows/counter/run", json={}).json() == {"count": 3}

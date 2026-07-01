@@ -128,26 +128,6 @@ async def reconnect_async(name: str, run_id: str) -> AsyncGenerator[dict, None]:
         yield {"event": "flow_error", "error": str(e), "ts": 0}
 
 
-def run(source: str | Path | dict, **inputs: Any) -> dict[str, Any]:
-    """Loads, executes, and unloads a flow. One-shot compatibility wrapper.
-
-    For stateful flows use load() + execute() + unload().
-    """
-    flow_def = load_flow(source)
-    name = flow_def.name
-    load(source)
-    try:
-        result: dict[str, Any] = {}
-        for evt in execute(name, inputs):
-            if evt.get("event") == "flow_done":
-                result = evt.get("result", {})
-            elif evt.get("event") == "flow_error":
-                raise RuntimeError(evt.get("error", "Unknown error"))
-        return result
-    finally:
-        unload(name)
-
-
 def serve_events(source: str | Path | dict, extra_node_dirs: list[str | Path] | None = None) -> str:
     """Loads a flow into Ray and subscribes it to the event bus.
 
