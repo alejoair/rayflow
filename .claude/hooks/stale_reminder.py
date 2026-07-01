@@ -85,6 +85,17 @@ def main() -> None:
         return
 
     offset = _read_offset(session_id)
+    if offset is None:
+        # First Stop fire this session: nothing to compare against yet, so
+        # just record a baseline instead of scanning from line 0 (which
+        # would dump the whole session's history as "this turn's edits").
+        try:
+            total_lines = len(Path(transcript_path).read_text(encoding="utf-8").splitlines())
+        except Exception:
+            return
+        _write_offset(session_id, total_lines)
+        return
+
     try:
         raw_paths, new_offset = _edited_paths_since(transcript_path, offset)
     except Exception:
