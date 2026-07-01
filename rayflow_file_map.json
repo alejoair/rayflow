@@ -1,16 +1,17 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 142,
+  "file_count": 143,
   "files": {
     ".claude/hooks/_file_map.py": {
-      "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json and resolves an absolute file_path to a repo-relative path.",
+      "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
       "depends_on": [],
       "dependents": [
         ".claude/hooks/dependents_reminder.py",
         ".claude/hooks/file_map_context.py",
         ".claude/hooks/prompt_file_hints.py",
         ".claude/hooks/session_orientation.py",
+        ".claude/hooks/stale_reminder.py",
         ".claude/hooks/staleness_guard.py"
       ]
     },
@@ -22,7 +23,7 @@
       "dependents": []
     },
     ".claude/hooks/file_map_context.py": {
-      "description": "PreToolUse hook (Read|Edit|Write): before Claude touches a mapped file, surfaces its description plus depends_on/dependents from rayflow_file_map.json as additionalContext.",
+      "description": "PreToolUse hook (Read|Edit|Write): before Claude touches a mapped file, surfaces its description plus depends_on/dependents from rayflow_file_map.json, and for .py files also lists real function/class signatures extracted live via ast — always accurate regardless of whether the JSON description itself is stale.",
       "depends_on": [
         ".claude/hooks/_file_map.py"
       ],
@@ -1196,6 +1197,13 @@
       "depends_on": [
         "rayflow/nodes/registry.py",
         "rayflow/server.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/stale_reminder.py": {
+      "description": "Stop hook: scans the session transcript for Edit/Write calls made since the last check; if any touched a mapped file, blocks once (decision:block, guarded by stop_hook_active to avoid looping) to remind the model to verify/update that file's description in rayflow_file_map.json before ending the turn.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
       ],
       "dependents": []
     }
