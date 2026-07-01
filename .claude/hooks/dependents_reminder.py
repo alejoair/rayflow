@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (Read|Edit|Write): looks up the file about to be
-touched in rayflow_file_map.json and surfaces its description plus
-depends_on/dependents edges as additionalContext, so the model knows
-upfront what the file does and what else might need checking.
+"""PostToolUse hook (Edit|Write): after a mapped file is edited, reminds
+the model which other files list it as a dependent, so it doesn't forget
+knock-on effects (e.g. editing validator.py affects its test file).
 
-Silent no-op if the file isn't in the map, the map is missing, or the
-input is malformed — never blocks a tool call.
+Silent no-op if the file isn't in the map or has no dependents.
 """
 import json
 import sys
@@ -37,18 +35,19 @@ def main() -> None:
     if entry is None:
         return
 
-    lines = [f"[rayflow_file_map] {rel}", entry.get("description", "")]
-    depends_on = entry.get("depends_on") or []
     dependents = entry.get("dependents") or []
-    if depends_on:
-        lines.append("Depends on: " + ", ".join(depends_on))
-    if dependents:
-        lines.append("Used by (review these after editing): " + ", ".join(dependents))
+    if not dependents:
+        return
 
+    context = (
+        f"[rayflow_file_map] You just edited {rel}, which is used by: "
+        + ", ".join(dependents)
+        + ". Consider whether any of those need updating too."
+    )
     print(json.dumps({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "additionalContext": "\n".join(lines),
+            "hookEventName": "PostToolUse",
+            "additionalContext": context,
         }
     }))
 

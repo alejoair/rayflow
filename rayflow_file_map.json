@@ -1,8 +1,54 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 135,
+  "file_count": 142,
   "files": {
+    ".claude/hooks/_file_map.py": {
+      "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json and resolves an absolute file_path to a repo-relative path.",
+      "depends_on": [],
+      "dependents": [
+        ".claude/hooks/dependents_reminder.py",
+        ".claude/hooks/file_map_context.py",
+        ".claude/hooks/prompt_file_hints.py",
+        ".claude/hooks/session_orientation.py",
+        ".claude/hooks/staleness_guard.py"
+      ]
+    },
+    ".claude/hooks/dependents_reminder.py": {
+      "description": "PostToolUse hook (Edit|Write): after editing a mapped file, reminds Claude which other files list it as a dependent, so knock-on effects (like an outdated test) aren't forgotten.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/file_map_context.py": {
+      "description": "PreToolUse hook (Read|Edit|Write): before Claude touches a mapped file, surfaces its description plus depends_on/dependents from rayflow_file_map.json as additionalContext.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/prompt_file_hints.py": {
+      "description": "UserPromptSubmit hook: if the user's prompt names something matching a mapped file's basename (e.g. \"validator\", \"NodeCard\"), surfaces that file's description as additionalContext.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/session_orientation.py": {
+      "description": "SessionStart hook: injects a one-line pointer to rayflow_file_map.json's existence (file count, root description) so a fresh session knows to consult it.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/staleness_guard.py": {
+      "description": "PostToolUse hook (Write|Bash): heuristically flags when rayflow_file_map.json may be out of date — a new file was written that isn't in the map, or a shell command looks like it deletes a file that is.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
     ".claude/settings.json": {
       "description": "Project-level Claude Code settings (shared via git) — permissions and harness configuration for this repo.",
       "depends_on": [],
@@ -1046,6 +1092,11 @@
         "rayflow/nodes/loader.py",
         "tests/test_custom_nodes.py"
       ]
+    },
+    "rayflow_file_map.json": {
+      "description": "Generated flat map of every tracked repo file to a short English description plus depends_on/dependents edges (computed from real imports). Not shipped in the PyPI package. Consumed by the .claude/hooks/*.py scripts to give Claude Code per-file context automatically.",
+      "depends_on": [],
+      "dependents": []
     },
     "signatures/cla.json": {
       "description": "Generated file (written by the CLA Assistant GitHub Action) recording which external contributors have signed the CLA.",
