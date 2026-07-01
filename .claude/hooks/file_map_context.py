@@ -5,7 +5,11 @@ depends_on/dependents edges as additionalContext, so the model knows
 upfront what the file does and what else might need checking. For .py
 files, also lists real function/class signatures extracted live via
 `ast` — unlike the hand-written description, this can never go stale
-since it's recomputed from the actual file on disk every time.
+since it's recomputed from the actual file on disk every time. Also
+surfaces the file's architectural "system" (a coarser grouping than
+individual files, e.g. "engine", "editor-api") and which other systems
+depend on it — the file-level graph answers "which files import this,"
+this answers "which parts of the architecture care about this."
 
 Silent no-op if the file isn't in the map, the map is missing, or the
 input is malformed — never blocks a tool call.
@@ -15,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _file_map import extract_python_symbols, load_map, repo_relative  # noqa: E402
+from _file_map import extract_python_symbols, load_map, repo_relative, system_context  # noqa: E402
 
 
 def main() -> None:
@@ -47,6 +51,10 @@ def main() -> None:
         lines.append("Depends on: " + ", ".join(depends_on))
     if dependents:
         lines.append("Used by (review these after editing): " + ", ".join(dependents))
+
+    sys_ctx = system_context(rel, file_map)
+    if sys_ctx:
+        lines.append(sys_ctx)
 
     symbols = extract_python_symbols(file_path)
     if symbols:

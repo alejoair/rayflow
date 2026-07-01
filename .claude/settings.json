@@ -90,6 +90,11 @@
             "type": "command",
             "command": "python3 .claude/hooks/prompt_file_hints.py 2>/dev/null || true",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/workflow_hints.py 2>/dev/null || true",
+            "timeout": 5
           }
         ]
       }

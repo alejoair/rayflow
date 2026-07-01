@@ -75,3 +75,31 @@ def extract_python_symbols(file_path: str, max_symbols: int = _MAX_SYMBOLS) -> l
             symbols.append(f"... ({len(tree.body)} top-level definitions total, truncated)")
             break
     return symbols
+
+
+def system_context(rel_path: str, file_map: dict) -> str | None:
+    """Architecture-level context for the file: which named system it
+    belongs to (a hand-assigned grouping of related files, e.g. "engine",
+    "editor-api", "mcp") plus which OTHER systems that system depends on
+    or is depended on by. The system-to-system edges are aggregated
+    mechanically from the file-level depends_on/dependents graph, not
+    hand-maintained. Returns None if the file or its system isn't found."""
+    entry = file_map.get("files", {}).get(rel_path)
+    if entry is None:
+        return None
+    sysname = entry.get("system")
+    sys_entry = (file_map.get("systems") or {}).get(sysname)
+    if sys_entry is None:
+        return None
+
+    lines = [f"System: {sysname} — {sys_entry.get('description', '')}"]
+    depends_on_systems = sys_entry.get("depends_on_systems") or []
+    dependents_systems = sys_entry.get("dependents_systems") or []
+    if depends_on_systems:
+        lines.append("Depends on systems: " + ", ".join(depends_on_systems))
+    if dependents_systems:
+        lines.append(
+            "Systems that depend on this one (consider their contracts before "
+            "changing public behavior here): " + ", ".join(dependents_systems)
+        )
+    return "\n".join(lines)
