@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 143,
+  "file_count": 146,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -12,7 +12,9 @@
         ".claude/hooks/prompt_file_hints.py",
         ".claude/hooks/session_orientation.py",
         ".claude/hooks/stale_reminder.py",
-        ".claude/hooks/staleness_guard.py"
+        ".claude/hooks/staleness_guard.py",
+        ".claude/hooks/ty_diff_post.py",
+        ".claude/hooks/ty_diff_pre.py"
       ]
     },
     ".claude/hooks/dependents_reminder.py": {
@@ -1204,6 +1206,30 @@
       "description": "Stop hook: scans the session transcript for Edit/Write calls made since the last check; if any touched a mapped file, blocks once (decision:block, guarded by stop_hook_active to avoid looping) to remind the model to verify/update that file's description in rayflow_file_map.json before ending the turn.",
       "depends_on": [
         ".claude/hooks/_file_map.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/_ty_check.py": {
+      "description": "Shared helper (not a hook itself) for the ty_diff_pre.py/ty_diff_post.py pair: runs `ty check` (Astral's Rust type checker) on a single .py file via subprocess, parses its concise-format output into diagnostic dicts, and provides a line/col-independent key for diffing diagnostics across an edit.",
+      "depends_on": [],
+      "dependents": [
+        ".claude/hooks/ty_diff_post.py",
+        ".claude/hooks/ty_diff_pre.py"
+      ]
+    },
+    ".claude/hooks/ty_diff_pre.py": {
+      "description": "PreToolUse hook (Edit|Write, .py files): snapshots ty's type diagnostics for a file before it's touched, storing them in a per-session temp file so the paired PostToolUse hook can report only diagnostics newly introduced by the edit. Advisory only; no-ops if ty isn't installed.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py",
+        ".claude/hooks/_ty_check.py"
+      ],
+      "dependents": []
+    },
+    ".claude/hooks/ty_diff_post.py": {
+      "description": "PostToolUse hook (Edit|Write, .py files): re-runs ty on the file just edited and diffs it against the pre-edit snapshot from ty_diff_pre.py, surfacing only newly introduced diagnostics as additionalContext. Diffing cancels out ty's known false positives on Ray's @ray.remote-decorated code (present in both snapshots), leaving genuine regressions. Advisory only, never blocks.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py",
+        ".claude/hooks/_ty_check.py"
       ],
       "dependents": []
     }

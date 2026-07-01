@@ -35,7 +35,17 @@ rayflow serve --port 8000 --debug
 # Ejecutar tests
 pip install -e ".[dev]"
 pytest tests/
+
+# Type-check el backend (ty, de Astral — muy rápido, ~0.3s para todo rayflow/)
+ty check rayflow/
 ```
+
+`ty` marca falsos positivos conocidos en archivos con actores Ray (`@ray.remote`
+inyecta `.remote()` en tiempo de ejecución, invisible para el analizador estático) —
+son ruido esperado, no bugs reales. Los hooks `ty_diff_pre.py`/`ty_diff_post.py`
+en `.claude/hooks/` ya filtran ese ruido automáticamente comparando diagnósticos
+antes/después de cada edit; correr `ty check` a mano es útil para una revisión
+manual amplia del estado actual de tipos.
 
 El servidor sirve:
 - Editor visual en `http://localhost:8000/editor`
