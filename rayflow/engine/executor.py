@@ -136,7 +136,11 @@ class FlowEngine:
     async def _local_fire(self, run: RunContext, source_node_id: str, rnode: Any, pin_name: str) -> None:
         targets = rnode.exec_targets.get(pin_name, [])
         if targets:
-            run.queue.push.remote(run.run_id, {
+            # Awaited (not fire-and-forget): otherwise execute() can return
+            # (its flow_done push IS awaited) before this event reaches the
+            # RunQueue mailbox, so a driver draining the queue sees flow_done
+            # first and closes the run — the trace ends up empty or mis-ordered.
+            await run.queue.push.remote(run.run_id, {
                 "event": "edge_fire",
                 "from": source_node_id,
                 "to": targets[0],
@@ -336,11 +340,11 @@ class FlowEngine:
     async def _emit_node_start(self, run: RunContext, node_id: str, rnode: ResolvedNode) -> None:
         if run.queue is None:
             return
-        # Fire-and-forget: the push is trivial and the driver drains the
-        # queue via blocking get(). Awaiting the ObjectRef here would add Ray
-        # RPC latency with no benefit — FIFO order is already guaranteed by
-        # the RunQueue actor's sequential event loop.
-        run.queue.push.remote(run.run_id, {
+        # Awaited (not fire-and-forget): see _local_fire. Awaiting guarantees
+        # the event is in the RunQueue mailbox before the next one is pushed,
+        # so a driver draining the queue sees node_start before node_done and
+        # both before flow_done.
+        await run.queue.push.remote(run.run_id, {
             "event": "node_start",
             "node_id": node_id,
             "node_type": rnode.meta.name,
@@ -350,7 +354,7 @@ class FlowEngine:
     async def _emit_node_done(self, run: RunContext, node_id: str, rnode: ResolvedNode, duration_ms: float) -> None:
         if run.queue is None:
             return
-        run.queue.push.remote(run.run_id, {
+        await run.queue.push.remote(run.run_id, {
             "event": "node_done",
             "node_id": node_id,
             "node_type": rnode.meta.name,
