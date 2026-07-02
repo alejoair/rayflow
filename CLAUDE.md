@@ -141,6 +141,24 @@ class MiPure:
         return {"result": x * 2}
 ```
 
+### Nodos de entrada (`is_entry`)
+
+Un flow necesita **exactamente un** nodo de entrada — el punto donde el engine arranca la ejecución. Cualquier nodo, built-in o custom, puede declararse como tal con atributos de clase (misma convención que `category`, extraídos en `_extract_meta`, sin decorador nuevo):
+
+```python
+@engine_node
+class MiTrigger:
+    is_entry = True              # puede ser el entry point de un flow
+    exposes_flow_inputs = True   # opcional: inyecta flow.inputs + headers/query/body/method como outputs dinámicos
+    exec_out = ExecOutput()
+```
+
+- **`is_entry`**: lo reconoce `_find_entry` (`build/validator.py`) al buildear — si el flow declara cero o más de un nodo con `is_entry = True`, `build()` falla ("no entry node" / "more than one entry node"). En runtime, `_fire_engine_node` (`engine/executor.py`) trata a un nodo de entrada como puro passthrough: sus `flow_inputs` se escriben como sus outputs y dispara `exec_out` — **nunca llama a `run()`**. Cualquier lógica sobre el payload recibido va en un nodo normal wireado después de su `exec_out`.
+- **`exposes_flow_inputs`**: más angosto que `is_entry` — inyecta dinámicamente los `inputs` declarados del flow más los 4 pines fijos `headers`/`query`/`body`/`method` como outputs (ver "Un solo endpoint de ejecución" más abajo). `OnVariableChange` es un nodo de entrada que NO lo declara, porque sus outputs (`value`/`old`) son pines estáticos propios.
+- **Restricciones validadas al decorar/registrar** (`ValueError` inmediato): un nodo `is_entry = True` no puede declarar `exec_in` (nada dentro del grafo debe poder dispararlo), ni estar decorado con `@ray_node` (el short-circuit de entrada vive en `_fire_engine_node`, que nunca llama a `run()` — un `@ray_node` sí lo llamaría, silenciosamente nunca ejecutándose). Usar `@engine_node`/`@parallel_node`.
+- `OnStart`, `OnEvent`, y `OnVariableChange` son los tres tipos built-in con `is_entry = True` — no una lista cerrada del engine.
+- **Excepción deliberada**: los subflows (`CallFlow`) siguen reconociendo su nodo de entrada spliceado por nombre literal (`OnStart`/`OnEvent`) en `_splice_subflow`, no por `is_entry` — un subflow se invoca inline por su padre (`CallFlow`), no se dispara desde afuera, así que generalizar ese camino no aplicaba.
+
 ### Estado en nodos
 
 | | Entre iteraciones del mismo `run()` | Entre ejecuciones del flow |
@@ -461,7 +479,7 @@ stop(graph_id, event_names)
 - El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
-- Un flow tiene **exactamente un** nodo de entrada — cualquier nodo con `meta.is_entry = True` (`OnStart`, `OnEvent`, y `OnVariableChange` son los tres tipos built-in; un nodo custom puede declarar el mismo flag). Si un flow declara más de uno (p.ej. `OnStart` y `OnEvent` a la vez), `build()` falla con "more than one entry node" — antes de generalizar esta detección, `OnStart` ganaba silenciosamente sobre `OnEvent` si ambos estaban presentes (dejando `OnEvent` como código muerto); ahora es un error de build explícito.
+- Un flow tiene **exactamente un** nodo de entrada (`is_entry = True`, ver "Nodos de entrada" en Sistema de nodos) — declarar `OnStart` y `OnEvent` a la vez es un error de build, no una coexistencia silenciosa.
 
 ### Triggers por cambio de variable (`OnVariableChange`)
 
