@@ -31,7 +31,7 @@ export function useRunStream(tabName: string) {
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
         body: JSON.stringify(inputs),
         signal: controller.signal,
       })

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException
-from fastapi.responses import Response
+from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from rayflow.build.validator import validate_all
 from rayflow.nodes.registry import get_catalog
@@ -382,17 +382,73 @@ async def flow_loaded_status(name: str) -> dict[str, Any]:
     return {"flow": name, "loaded": is_flow_loaded(name)}
 
 
-@router.post("/flows/{name}/run")
-async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
-    """Runs a flow (loading it if needed) with SSE streaming.
+def wants_stream(request: Request) -> bool:
+    """True if the caller asked for SSE via `Accept: text/event-stream`.
 
-    Returns a stream of events: node_start, node_done, edge_fire, flow_done, flow_error.
+    Same header a plain `curl`/`fetch` caller would set to opt into
+    streaming — no bespoke header or body flag, and no different code path
+    for the editor frontend vs. any other API consumer.
+    """
+    return "text/event-stream" in request.headers.get("accept", "")
+
+
+async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: bool) -> Response:
+    """Runs a flow and renders the result as SSE or a single JSON response.
+
+    Shared by `/editor/flows/{name}/run` (editor flows, loads on demand) and
+    `/flows/{name}/run` in server.py (pre-loaded served flows) — the only
+    difference between those two callers is how `flow_inputs` is assembled
+    and whether the flow needs loading first; the execute-and-render logic
+    lives here once.
+    """
+    import json
+    from rayflow.api import execute_async
+
+    if stream:
+        async def event_generator():
+            try:
+                async for evt in execute_async(name, flow_inputs):
+                    yield f"data: {json.dumps(evt)}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    result: dict[str, Any] = {}
+    response_status = 200
+    response_headers: dict[str, str] = {}
+    try:
+        async for evt in execute_async(name, flow_inputs):
+            if evt.get("event") == "flow_done":
+                result = evt.get("result", {}) or {}
+                response_status = evt.get("response_status", 200)
+                response_headers = evt.get("response_headers", {}) or {}
+            elif evt.get("event") == "flow_error":
+                raise HTTPException(
+                    status_code=500, detail=f"Error running the flow: {evt.get('error')}"
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error running the flow: {e}")
+    return JSONResponse(content=result, status_code=response_status, headers=response_headers)
+
+
+@router.post("/flows/{name}/run")
+async def run_editor_flow(request: Request, name: str, inputs: Any = Body(default=None)):
+    """Runs a flow (loading it if needed).
+
+    Set `Accept: text/event-stream` to get a stream of events (node_start,
+    node_done, edge_fire, flow_done, flow_error); otherwise returns a single
+    JSON response with the flow's outputs once it finishes.
     """
     import asyncio
-    import json
     from functools import partial
-    from fastapi.responses import StreamingResponse
-    from rayflow.api import execute_async, load as load_flow_api, is_flow_loaded  # noqa: F401
+    from rayflow.api import load as load_flow_api, is_flow_loaded
 
     if inputs is None:
         inputs = {}
@@ -411,19 +467,7 @@ async def run_editor_flow(name: str, inputs: Any = Body(default=None)):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 
-    async def event_generator():
-        try:
-            async for evt in execute_async(name, inputs):
-                yield f"data: {json.dumps(evt)}\n\n"
-        except Exception as e:
-            import json as _json
-            yield f"data: {_json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return await run_flow_response(name, inputs, stream=wants_stream(request))
 
 
 @router.post("/flows/{name}/test")

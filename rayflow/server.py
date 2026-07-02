@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
 
 from rayflow.schema.loader import load_flow
 from rayflow.schema.models import FlowDef
@@ -89,8 +88,8 @@ def create_app(served: dict[str, ServedFlow]):
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.staticfiles import StaticFiles
     from rayflow import __version__
-    from rayflow.api import execute_async, load as load_api
-    from rayflow.editor.routes import router as editor_router
+    from rayflow.api import load as load_api
+    from rayflow.editor.routes import router as editor_router, run_flow_response, wants_stream
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
 
     # Load every served flow into Ray once, up front. load() always
@@ -144,7 +143,7 @@ def create_app(served: dict[str, ServedFlow]):
         return sf.interface
 
     @app.post("/flows/{name}/run")
-    async def run_flow(request: Request, name: str, inputs: Any = Body(default=None)) -> JSONResponse:
+    async def run_flow(request: Request, name: str, inputs: Any = Body(default=None)):
         sf = served.get(name)
         if sf is None:
             raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
@@ -168,26 +167,12 @@ def create_app(served: dict[str, ServedFlow]):
             "method": request.method,
         }
 
-        # execute_async reuses the persistent graph loaded once at startup
-        # (see create_app above) instead of reloading per request.
-        result: dict[str, Any] = {}
-        response_status = 200
-        response_headers: dict[str, str] = {}
-        try:
-            async for evt in execute_async(name, flow_inputs):
-                if evt.get("event") == "flow_done":
-                    result = evt.get("result", {}) or {}
-                    response_status = evt.get("response_status", 200)
-                    response_headers = evt.get("response_headers", {}) or {}
-                elif evt.get("event") == "flow_error":
-                    raise HTTPException(
-                        status_code=500, detail=f"Error running the flow: {evt.get('error')}"
-                    )
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error running the flow: {e}")
-        return JSONResponse(content=result, status_code=response_status, headers=response_headers)
+        # execute_async (inside run_flow_response) reuses the persistent
+        # graph loaded once at startup (see create_app above) instead of
+        # reloading per request. Set `Accept: text/event-stream` to get the
+        # same SSE event stream the editor frontend receives; otherwise this
+        # returns a single JSON response once the flow finishes.
+        return await run_flow_response(name, flow_inputs, stream=wants_stream(request))
 
     return app
 
