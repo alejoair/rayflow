@@ -31,8 +31,11 @@ A flow is a graph of nodes connected by two kinds of wire:
 
 ## Wiring rules
 
-- **Every flow needs an entry node**: `OnStart` (direct execution),
-  `OnEvent` (event-triggered), or `OnVariableChange` (variable change).
+- **Every flow needs exactly one entry node** — a node type declaring
+  `is_entry = True`. The three built-ins are `OnStart` (direct execution),
+  `OnEvent` (event-triggered), and `OnVariableChange` (variable change); a
+  custom node can declare the same flag. Declaring more than one entry node
+  in the same flow is a build error.
 - **Exec edges**: declared FROM the consumer with `exec_in`:
   - `"exec_in": "node_id"` -> the source node's default exec output.
   - `"exec_in": "node_id.pin"` -> a specific exec output (`branch.true`, `seq.then_0`).
@@ -44,7 +47,8 @@ A flow is a graph of nodes connected by two kinds of wire:
 
 ## Dynamic pins (don't appear in the static /editor/nodes)
 
-- `OnStart`/`FlowInput`/`OnEvent`: expose **one data output per input of the
+- Any entry node with `exposes_flow_inputs = True` (built-in: `OnStart`/
+  `FlowInput`, `OnEvent`) expose **one data output per input of the
   flow**. If the flow declares `inputs: {x: int}`, you can read `entry.x`.
   They ALSO always expose 4 fixed outputs — `headers`/`query` (`dict[str, str]`),
   `body` (`Any`), `method` (`str`) — since a served flow's trigger is an HTTP

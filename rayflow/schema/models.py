@@ -27,7 +27,7 @@ class NodeDef:
     type: str  # node name in the catalog
     # data inputs: name → literal value or "node_id.pin_name"
     inputs: dict[str, Any] = field(default_factory=dict)
-    # exec input: None for OnStart/OnEvent, or "node_id" if it comes from another node
+    # exec input: None for entry nodes (is_entry=True), or "node_id" if it comes from another node
     exec_in: str | list[str] | dict | None = None
     # GraphState path this node belongs to. None = the root flow's.
     # Assigned by flatten() when expanding an isolated CallFlow: nodes in the

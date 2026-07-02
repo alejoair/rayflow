@@ -63,6 +63,7 @@ def _node_spec(node_type: str, meta) -> dict[str, Any]:
         "has_exec_out": meta.has_exec_out,
         "is_exec_node": meta.is_exec_node,
         "is_parallel": meta.is_parallel,
+        "is_entry": meta.is_entry,
         "inputs": [_pin_spec(p) for p in meta.inputs],
         "outputs": [{"name": p.name, "kind": p.kind, "type": p.type or "Any"} for p in meta.outputs],
         "exec_outputs": meta.exec_outputs,

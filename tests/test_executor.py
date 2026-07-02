@@ -577,6 +577,78 @@ def test_onstart_request_pins_default_when_not_triggered_over_http():
         rayflow.unload("no_http_context")
 
 
+def test_custom_entry_node_runs_like_onstart():
+    """Any node with is_entry=True works as a flow's entry point: flow_inputs
+    are written as its outputs and exec_out fires, exactly like OnStart."""
+    from rayflow.nodes.decorators import engine_node, ExecOutput, Output
+    from rayflow.nodes.registry import get_catalog
+
+    @engine_node
+    class MyTrigger:
+        is_entry = True
+        exec_out = ExecOutput()
+        value = Output("int")
+
+    get_catalog().register(MyTrigger)
+
+    result = run_once({
+        "name": "custom_entry_run",
+        "outputs": {"result": "int"},
+        "nodes": [
+            {"id": "trig", "type": "MyTrigger"},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "trig",
+             "inputs": {"result": "trig.value"}},
+        ],
+    }, value=42)
+    assert result["result"] == 42
+
+
+def test_custom_entry_node_with_exposes_flow_inputs():
+    """exposes_flow_inputs=True injects flow.inputs + the fixed request pins
+    as dynamic outputs, exactly like OnStart/OnEvent do."""
+    from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput, Input, Output
+    from rayflow.nodes.registry import get_catalog
+
+    @engine_node
+    class MyHttpTrigger:
+        is_entry = True
+        exposes_flow_inputs = True
+        exec_out = ExecOutput()
+
+    @engine_node
+    class EchoHeaders:
+        exec_in = ExecInput()
+        headers = Input("dict[str, str]", default={})
+        out = Output("dict")
+        exec_out = ExecOutput()
+
+        async def run(self, ctx: ExecContext, headers: dict) -> None:
+            ctx.set_output("out", headers)
+            await ctx.fire("exec_out")
+
+    get_catalog().register(MyHttpTrigger)
+    get_catalog().register(EchoHeaders)
+
+    flow = {
+        "name": "custom_http_trigger",
+        "inputs": {"x": "int"},
+        "outputs": {"x": "int", "headers": "dict"},
+        "nodes": [
+            {"id": "entry", "type": "MyHttpTrigger"},
+            {"id": "echo", "type": "EchoHeaders", "exec_in": "entry", "inputs": {"headers": "entry.headers"}},
+            {"id": "exit", "type": "FlowOutput", "exec_in": "echo",
+             "inputs": {"x": "entry.x", "headers": "echo.out"}},
+        ],
+    }
+    rayflow.load(flow)
+    try:
+        result = _execute_collect("custom_http_trigger", {"x": 7})
+        assert result["x"] == 7
+        assert result["headers"] == {}
+    finally:
+        rayflow.unload("custom_http_trigger")
+
+
 def test_set_response_status_and_header_engine_node():
     """ctx.set_response_status()/set_response_header() land in the
     flow_done event via the engine_node local-closure path (no RPC)."""

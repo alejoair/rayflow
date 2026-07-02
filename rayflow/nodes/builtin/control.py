@@ -54,6 +54,8 @@ class OnStart:
     `inputs`. The engine injects their values before calling run().
     """
     category = "Control"
+    is_entry = True
+    exposes_flow_inputs = True
     exec_out = ExecOutput()
 
 @engine_node
