@@ -8,6 +8,11 @@ concurrent/repeated requests are isolated by their own run_id/RunContext,
 not by recreating the graph, which is how the engine is designed to work
 (see CLAUDE.md's concurrency notes on FlowEngine.execute()).
 
+`/flows/{name}/run` is also the single execution endpoint for flows managed
+by the editor (in `flows/`, not passed via `--file`) — it loads them into
+Ray on demand the first time they're run instead of requiring a separate
+editor-only endpoint. The editor frontend calls this same route.
+
 This is distinct from `rayflow.serve_events()` (api.py), which registers a
 flow on the internal event bus.
 """
@@ -88,9 +93,10 @@ def create_app(served: dict[str, ServedFlow]):
     from fastapi import Body, FastAPI, HTTPException
     from fastapi.staticfiles import StaticFiles
     from rayflow import __version__
-    from rayflow.api import load as load_api
+    from rayflow.api import load as load_api, is_flow_loaded, reconnect_async
     from rayflow.editor.routes import router as editor_router, run_flow_response, wants_stream
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
+    from rayflow.editor.storage import get_flow_dict
 
     # Load every served flow into Ray once, up front. load() always
     # destroys and recreates (safe to call unconditionally, even if a test
@@ -144,10 +150,12 @@ def create_app(served: dict[str, ServedFlow]):
 
     @app.post("/flows/{name}/run")
     async def run_flow(request: Request, name: str, inputs: Any = Body(default=None)):
-        sf = served.get(name)
-        if sf is None:
-            raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
-
+        """The single run endpoint for any flow — pre-loaded served flows
+        (from `rayflow serve --file`) and editor-managed flows in `flows/`
+        alike. Set `Accept: text/event-stream` for the SSE event stream
+        (same one the editor frontend consumes); otherwise this returns a
+        single JSON response once the flow finishes.
+        """
         if inputs is None:
             inputs = {}
         if not isinstance(inputs, dict):
@@ -155,8 +163,24 @@ def create_app(served: dict[str, ServedFlow]):
                 status_code=400, detail="Body must be a JSON object of inputs"
             )
 
-        # Every served flow's trigger IS this HTTP request — OnStart always
-        # exposes headers/query/body/method (see _with_dynamic_pins in
+        # A served flow (loaded once at startup, see create_app above) reuses
+        # that persistent graph. Otherwise fall back to an editor-managed
+        # flow (flows/ directory), loading it into Ray on demand if needed.
+        if served.get(name) is None:
+            data = get_flow_dict(name)
+            if data is None:
+                raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
+            if not is_flow_loaded(name):
+                import asyncio
+                from functools import partial
+                loop = asyncio.get_event_loop()
+                try:
+                    await loop.run_in_executor(None, partial(load_api, data))
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
+
+        # Every flow's trigger IS this HTTP request — OnStart always exposes
+        # headers/query/body/method (see _with_dynamic_pins in
         # build/validator.py), alongside whatever named inputs the flow
         # declares from the body. Reserved names win on collision.
         flow_inputs = {
@@ -166,13 +190,33 @@ def create_app(served: dict[str, ServedFlow]):
             "body": inputs,
             "method": request.method,
         }
-
-        # execute_async (inside run_flow_response) reuses the persistent
-        # graph loaded once at startup (see create_app above) instead of
-        # reloading per request. Set `Accept: text/event-stream` to get the
-        # same SSE event stream the editor frontend receives; otherwise this
-        # returns a single JSON response once the flow finishes.
         return await run_flow_response(name, flow_inputs, stream=wants_stream(request))
+
+    @app.get("/flows/{name}/run/{run_id}/stream")
+    async def reconnect_flow_run(name: str, run_id: str):
+        """Reconnects to an active SSE run without relaunching execution.
+
+        Useful when the client loses connection while the flow is still
+        running. Returns the pending events from the moment of reconnection.
+        """
+        import json
+        from fastapi.responses import StreamingResponse
+
+        if not is_flow_loaded(name):
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' is not loaded")
+
+        async def event_generator():
+            try:
+                async for evt in reconnect_async(name, run_id):
+                    yield f"data: {json.dumps(evt)}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     return app
 

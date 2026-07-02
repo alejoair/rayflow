@@ -85,9 +85,12 @@ export const loadFlow = (name: string) => apiFetch<{ graph_id: string; flow: str
 export const unloadFlow = (name: string) => apiFetch<{ flow: string; loaded: boolean }>(`/editor/flows/${encodeURIComponent(name)}/load`, { method: 'DELETE' })
 export const flowLoadedStatus = (name: string) => apiFetch<{ flow: string; loaded: boolean }>(`/editor/flows/${encodeURIComponent(name)}/loaded`)
 
-// runFlow devuelve un ReadableStream SSE — se consume en useRunStream
-export const runFlowUrl = (name: string) => `/editor/flows/${encodeURIComponent(name)}/run`
-export const reconnectRunUrl = (name: string, runId: string) => `/editor/flows/${encodeURIComponent(name)}/run/${encodeURIComponent(runId)}/stream`
+// El mismo endpoint /flows/{name}/run que usaría cualquier caller de la API
+// (curl, un backend, etc.) — pedimos streaming vía el header Accept en
+// useRunStream, no hay una ruta aparte para el editor. runFlow devuelve un
+// ReadableStream SSE cuando se manda ese header — se consume en useRunStream.
+export const runFlowUrl = (name: string) => `/flows/${encodeURIComponent(name)}/run`
+export const reconnectRunUrl = (name: string, runId: string) => `/flows/${encodeURIComponent(name)}/run/${encodeURIComponent(runId)}/stream`
 
 // Custom nodes
 export interface CustomNodeFile {

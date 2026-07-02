@@ -204,15 +204,15 @@ Antes se empujaban `node_start`/`edge_fire`/`node_done` fire-and-forget (sin `aw
 
 El costo es una RPC bloqueante por evento en el hot path del engine — se prioriza correctitud de la respuesta sobre esa latencia extra.
 
-**Streaming vs JSON en `/run` (content negotiation por header)**: tanto `/editor/flows/{name}/run` como `/flows/{name}/run` (flow servido, `rayflow/server.py`) comparten una única función (`run_flow_response` en `rayflow/editor/routes.py`) que decide el formato de la respuesta según el header `Accept` de la request (`wants_stream()`): `Accept: text/event-stream` devuelve el stream SSE completo, cualquier otro valor (o ausencia del header) drena `execute_async()` internamente y devuelve un solo JSON con los outputs una vez que llega `flow_done`. Así un caller HTTP normal (curl, un backend, etc.) recibe streaming pidiéndolo con el mismo header que usaría para negociar contenido con cualquier otra API — no hay un endpoint o código de ejecución distinto para el editor. El frontend (`useRunStream.ts`) manda explícitamente ese header en cada `POST .../run`.
+**Un solo endpoint de ejecución, con content negotiation por header**: `POST /flows/{name}/run` (`rayflow/server.py`) es el único endpoint de ejecución HTTP — sirve tanto flows servidos (`rayflow serve --file`, pre-cargados al arrancar) como flows del editor (`flows/`, cargados en Ray on-demand la primera vez que se corren). El editor visual no tiene su propia ruta de ejecución: `useRunStream.ts` pega contra el mismo `/flows/{name}/run` que pegaría cualquier caller externo. Dentro, `run_flow` decide si el flow ya está en `served` o si hace falta resolverlo/cargarlo desde el storage del editor, arma `flow_inputs`, y delega el renderizado de la respuesta a `run_flow_response`/`wants_stream` (en `rayflow/editor/routes.py`, reusado desde server.py para no duplicar esa lógica) — que decide el formato según el header `Accept` de la request: `Accept: text/event-stream` devuelve el stream SSE completo, cualquier otro valor (o ausencia del header) drena `execute_async()` internamente y devuelve un solo JSON con los outputs una vez que llega `flow_done`. El frontend manda explícitamente ese header en cada `POST .../run`.
 
 **Reconexión SSE**: si el cliente pierde la conexión mientras el flow corre, puede reconectarse usando el `run_id` recibido en `run_start`:
 
 ```
-GET /editor/flows/{name}/run/{run_id}/stream
+GET /flows/{name}/run/{run_id}/stream
 ```
 
-Este endpoint consume la sub-queue existente sin relanzar la ejecución ni cerrarla. El frontend (`useRunStream.ts`) lo hace automáticamente: hasta 5 reintentos con backoff lineal de 500 ms, solo si no se había recibido un evento terminal (`flow_done`/`flow_error`) antes de que el stream cayera.
+Este endpoint (también en `rayflow/server.py`, junto a `run_flow`) consume la sub-queue existente sin relanzar la ejecución ni cerrarla — funciona igual para un flow servido o uno del editor, ya que solo depende de que el flow esté cargado en Ray (`is_flow_loaded`). El frontend (`useRunStream.ts`) lo hace automáticamente: hasta 5 reintentos con backoff lineal de 500 ms, solo si no se había recibido un evento terminal (`flow_done`/`flow_error`) antes de que el stream cayera.
 
 ### Descubrimiento de nodos
 El servidor carga nodos desde:
@@ -245,10 +245,10 @@ El servidor carga nodos desde:
 | `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
 | `GET` | `/editor/flows/loaded` | Lista todos los flows cargados en Ray con su interfaz (inputs/outputs) |
 | `GET` | `/editor/flows/{name}/loaded` | Estado de carga de un flow concreto |
-| `POST` | `/editor/flows/{name}/run` | Ejecutar flow. Con header `Accept: text/event-stream` devuelve el stream SSE (primer evento `run_start` con `run_id`); sin ese header devuelve un único JSON con los outputs al terminar |
-| `GET` | `/editor/flows/{name}/run/{run_id}/stream` | Reconectar a un run activo (SSE stream sin relanzar ejecución) |
 | `POST` | `/editor/flows/{name}/serve-events` | Suscribir al event bus |
 | `DELETE` | `/editor/flows/{name}/serve-events/{graph_id}` | Desuscribir |
+
+Ejecutar un flow (`POST /flows/{name}/run`) y reconectarse a un run activo (`GET /flows/{name}/run/{run_id}/stream`) **no** viven acá — son endpoints de `rayflow/server.py`, compartidos entre flows servidos y flows del editor. Ver la sección "Un solo endpoint de ejecución" más arriba.
 
 ### Nodos custom (`rayflow/editor/custom_nodes_routes.py`)
 
@@ -315,9 +315,9 @@ Copia plantillas empaquetadas en `rayflow/claude_tools/` (package-data) al direc
 
 Los flows se guardan en `flows/` dentro del directorio de trabajo.
 
-### Request/response HTTP en flows servidos (`rayflow serve --file`)
+### Request/response HTTP en `POST /flows/{name}/run`
 
-Todo flow servido se dispara por una request HTTP a `/flows/{name}/run` — por eso `OnStart` (y `OnEvent`) exponen siempre 4 outputs fijos además de los que genera desde `inputs`: `headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`, el JSON del body ya parseado), `method` (`str`). No hace falta declararlos ni un nodo especial — cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos).
+Todo flow disparado vía `POST /flows/{name}/run` — sea un flow servido (`rayflow serve --file`, pre-cargado) o un flow del editor (`flows/`, cargado on-demand en esa misma request) — se dispara por una request HTTP real, así que `OnStart` (y `OnEvent`) exponen siempre 4 outputs fijos además de los que genera desde `inputs`: `headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`, el JSON del body ya parseado), `method` (`str`). No hace falta declararlos ni un nodo especial — cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos).
 
 Para la respuesta, `ctx.set_response_status(code)` / `ctx.set_response_header(name, value)` (en `ExecContext`) fijan el status/headers HTTP reales de la respuesta — viven en el `RunContext` de la ejecución (no en `flow.outputs`), así que **no aparecen** en el resultado que ve un caller no-HTTP (`run_flow`/`test_flow` de MCP, `execute()` directo). Sin llamarlos, el default es 200 sin headers extra. Cuidado con `Parallel`: si dos ramas verdaderamente paralelas llaman `set_response_status` a la vez, gana la última escritura — solo una rama de un fork debería fijarlos.
 
