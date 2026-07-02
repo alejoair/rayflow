@@ -395,11 +395,11 @@ def wants_stream(request: Request) -> bool:
 async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: bool) -> Response:
     """Runs a flow and renders the result as SSE or a single JSON response.
 
-    Shared by `/editor/flows/{name}/run` (editor flows, loads on demand) and
-    `/flows/{name}/run` in server.py (pre-loaded served flows) — the only
-    difference between those two callers is how `flow_inputs` is assembled
-    and whether the flow needs loading first; the execute-and-render logic
-    lives here once.
+    Used by `POST /flows/{name}/run` in server.py — the single run endpoint
+    for both pre-loaded served flows and editor-managed flows (loaded on
+    demand there). Kept here, not in server.py, so it stays next to
+    `wants_stream` and reusable without server.py depending on anything
+    editor-specific beyond these two helpers.
     """
     import json
     from rayflow.api import execute_async
@@ -436,38 +436,6 @@ async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: b
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error running the flow: {e}")
     return JSONResponse(content=result, status_code=response_status, headers=response_headers)
-
-
-@router.post("/flows/{name}/run")
-async def run_editor_flow(request: Request, name: str, inputs: Any = Body(default=None)):
-    """Runs a flow (loading it if needed).
-
-    Set `Accept: text/event-stream` to get a stream of events (node_start,
-    node_done, edge_fire, flow_done, flow_error); otherwise returns a single
-    JSON response with the flow's outputs once it finishes.
-    """
-    import asyncio
-    from functools import partial
-    from rayflow.api import load as load_flow_api, is_flow_loaded
-
-    if inputs is None:
-        inputs = {}
-    if not isinstance(inputs, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object of inputs")
-
-    data = get_flow_dict(name)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
-
-    # Load if not already loaded.
-    if not is_flow_loaded(name):
-        loop = asyncio.get_event_loop()
-        try:
-            await loop.run_in_executor(None, partial(load_flow_api, data))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
-
-    return await run_flow_response(name, inputs, stream=wants_stream(request))
 
 
 @router.post("/flows/{name}/test")
@@ -529,35 +497,6 @@ async def test_editor_flow(name: str, body: Any = Body(default=None)) -> dict[st
         "expected": expected,
         "mismatches": mismatches,
     }
-
-
-@router.get("/flows/{name}/run/{run_id}/stream")
-async def reconnect_flow_run(name: str, run_id: str):
-    """Reconnects to an active SSE run without relaunching execution.
-
-    Useful when the client loses connection while the flow is still
-    running. Returns the pending events from the moment of reconnection.
-    """
-    import json
-    from fastapi.responses import StreamingResponse
-    from rayflow.api import reconnect_async, is_flow_loaded
-
-    if not is_flow_loaded(name):
-        raise HTTPException(status_code=404, detail=f"Flow '{name}' is not loaded")
-
-    async def event_generator():
-        try:
-            async for evt in reconnect_async(name, run_id):
-                yield f"data: {json.dumps(evt)}\n\n"
-        except Exception as e:
-            import json as _json
-            yield f"data: {_json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 # ---------------------------------------------------------------------------

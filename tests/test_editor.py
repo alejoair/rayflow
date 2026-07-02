@@ -346,7 +346,9 @@ def test_node_without_ui_has_no_field(client):
 
 
 # ---------------------------------------------------------------------------
-# POST /editor/flows/{name}/run — execution from the editor
+# POST /flows/{name}/run — execution of an editor-managed flow (auto-load,
+# no --file). Lives in rayflow/server.py, shared with served flows — see
+# tests/test_server.py for the served-flow side of the same endpoint.
 # ---------------------------------------------------------------------------
 
 def _parse_sse_result(r) -> dict:
@@ -363,7 +365,7 @@ def _parse_sse_result(r) -> dict:
 def test_run_flow_from_editor(client):
     client.post("/editor/flows", json=SUMA)
     r = client.post(
-        "/editor/flows/suma/run",
+        "/flows/suma/run",
         json={"x": 4, "y": 6},
         headers={"Accept": "text/event-stream"},
     )
@@ -373,19 +375,19 @@ def test_run_flow_from_editor(client):
 
 def test_run_flow_from_editor_without_stream_header_returns_json(client):
     client.post("/editor/flows", json=SUMA)
-    r = client.post("/editor/flows/suma/run", json={"x": 4, "y": 6})
+    r = client.post("/flows/suma/run", json={"x": 4, "y": 6})
     assert r.status_code == 200
     assert r.json()["resultado"] == 10
 
 
 def test_run_flow_nonexistent(client):
-    r = client.post("/editor/flows/noexiste/run", json={})
+    r = client.post("/flows/noexiste/run", json={})
     assert r.status_code == 404
 
 
 def test_run_flow_body_is_not_an_object(client):
     client.post("/editor/flows", json=MINIMAL)
-    r = client.post("/editor/flows/minimal/run", json=[1, 2])
+    r = client.post("/flows/minimal/run", json=[1, 2])
     assert r.status_code == 400
 
 
@@ -464,7 +466,7 @@ def test_custom_engine_node_runs(client_with_custom_node):
     """A custom @engine_node runs on the driver — doesn't depend on Ray's runtime_env."""
     client_with_custom_node.post("/editor/flows", json=DUPLICATE_FLOW)
     r = client_with_custom_node.post(
-        "/editor/flows/duplicate_flow/run",
+        "/flows/duplicate_flow/run",
         json={"n": 7},
         headers={"Accept": "text/event-stream"},
     )

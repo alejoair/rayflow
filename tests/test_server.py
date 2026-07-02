@@ -78,6 +78,22 @@ def test_run_flow_body_is_not_an_object(client):
     assert r.status_code == 400
 
 
+def test_run_flow_falls_back_to_an_editor_managed_flow(tmp_path, monkeypatch):
+    """A name not in `served` (not passed via `--file`) falls back to an
+    editor-managed flow in flows/, loading it into Ray on demand. There's no
+    separate editor-only run endpoint — /flows/{name}/run handles both."""
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+
+    served = load_served_flows([])
+    client = TestClient(create_app(served))
+
+    client.post("/editor/flows", json=SUMA)
+    r = client.post("/flows/suma/run", json={"x": 4, "y": 6})
+    assert r.status_code == 200
+    assert r.json() == {"resultado": 10}
+
+
 def test_duplicate_names_fail_to_load():
     with pytest.raises(ValueError, match="share the name"):
         load_served_flows([SUMA, dict(SUMA)])

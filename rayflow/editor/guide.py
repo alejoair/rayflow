@@ -79,5 +79,7 @@ same type, or one is `Any`. **int and float are incompatible**: cast with
 5. Fix until `valid: true`.
 6. `POST /editor/flows` (create) or `PUT /editor/flows/{name}` (update).
 7. `POST /editor/flows/{name}/test` with `{inputs, expected_outputs}` to
-   verify it does what's expected, or `POST /editor/flows/{name}/run` to run it.
+   verify it does what's expected, or `POST /flows/{name}/run` to run it
+   (loads it into Ray on demand if needed; add `Accept: text/event-stream`
+   for the SSE event stream instead of a single JSON response).
 """
