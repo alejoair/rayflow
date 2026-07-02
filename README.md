@@ -65,6 +65,7 @@ The same graph can be started in several ways:
 
 - **One-shot** — `rayflow.run(flow, **inputs)`: load, run, and unload. For a single computation.
 - **Served as an API** — `load()` once and `execute()` many times; exposed over HTTP with event streaming. The system stays resident and is invoked repeatedly.
+- **With a built-in UI** — use the `ChatTrigger` entry node (or any custom entry node declaring `frontend`) and `rayflow serve --file flow.json` mounts a static web UI at `GET /flows/{name}/ui`. The page talks to the flow over the same `/flows/{name}/run` endpoint — no separate transport. Useful for chat-style flows, forms, or any flow that wants a human-facing surface without writing a frontend app.
 - **By event** — `serve_events()` plus an `OnEvent` node: the flow stays resident and is triggered by an event, with no direct call.
 - **As a component of another flow** — the `CallFlow` node runs one flow inside another.
 

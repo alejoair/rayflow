@@ -210,3 +210,51 @@ def test_ctx_set_response_status_reaches_the_real_http_response(check_api_key_cl
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
     assert "x-auth-error" not in r.headers  # isolated per run, no bleed from the denied request
+
+
+# ---------------------------------------------------------------------------
+# /flows/{name}/ui — frontend bundle for entry nodes that declare `frontend`
+# ---------------------------------------------------------------------------
+
+CHAT_FLOW = {
+    "name": "chat",
+    "inputs": {"message": "str"},
+    "outputs": {"reply": "str"},
+    "nodes": [
+        {"id": "entry", "type": "ChatTrigger"},
+        {"id": "exit", "type": "FlowOutput", "exec_in": "entry",
+         "inputs": {"reply": "entry.message"}},
+    ],
+}
+
+
+def test_chat_flow_ui_serves_the_bundle():
+    """A served flow whose entry node declares `frontend` gets its bundle
+    mounted at /flows/{name}/ui."""
+    served = load_served_flows([CHAT_FLOW])
+    client = TestClient(create_app(served))
+
+    r = client.get("/flows/chat/ui/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    # The ChatTrigger bundle's page contains the chat wiring.
+    assert "Rayflow Chat" in r.text
+
+
+def test_flow_without_frontend_returns_404_for_ui(client):
+    """A flow whose entry has no `frontend` (OnStart via the FlowInput alias
+    here) does not mount /ui — requesting it 404s."""
+    r = client.get("/flows/suma/ui/")
+    assert r.status_code == 404
+
+
+def test_chat_trigger_flow_runs_end_to_end():
+    """ChatTrigger is a fully-fledged entry: the flow builds, and a POST to
+    /flows/chat/run with the declared `message` input flows through to the
+    output, just like OnStart."""
+    served = load_served_flows([CHAT_FLOW])
+    client = TestClient(create_app(served))
+
+    r = client.post("/flows/chat/run", json={"message": "hola"})
+    assert r.status_code == 200
+    assert r.json() == {"reply": "hola"}

@@ -18,25 +18,34 @@ flow on the internal event bus.
 """
 from __future__ import annotations
 
+import inspect
+import logging
 from pathlib import Path
 from typing import Any
 
 from fastapi import Request
+from fastapi.staticfiles import StaticFiles
 
 from rayflow.schema.loader import load_flow
 from rayflow.schema.models import FlowDef
 from rayflow.nodes.registry import get_catalog
-from rayflow.build.validator import build
+from rayflow.build.validator import build, BuiltFlow
 
 
 class ServedFlow:
     """A loaded, validated flow, ready to run per request."""
 
-    def __init__(self, source: str | Path | dict, flow_def: FlowDef):
+    def __init__(self, source: str | Path | dict, flow_def: FlowDef,
+                 built: BuiltFlow | None = None):
         # Keeps the original source (path or dict) to re-run the flow per
         # request via run_async — NOT its str(), which would lose an inline dict.
         self.source = source
         self.flow_def = flow_def
+        # The validated BuiltFlow (kept so create_app can read the entry
+        # node's meta — e.g. to discover a declared `frontend` bundle to
+        # mount at /flows/{name}/ui). None when ServedFlow is constructed
+        # without building (some tests).
+        self.built = built
 
     @property
     def source_label(self) -> str:
@@ -77,21 +86,55 @@ def load_served_flows(sources: list[str | Path | dict],
     served: dict[str, ServedFlow] = {}
     for src in sources:
         flow_def = load_flow(src)
-        build(flow_def, catalog)  # early validation — raises BuildError on failure
+        built = build(flow_def, catalog)  # early validation — raises BuildError on failure
         if flow_def.name in served:
             raise ValueError(
                 f"Two flows share the name '{flow_def.name}': "
                 f"'{served[flow_def.name].source_label}' and '{src}'"
             )
-        served[flow_def.name] = ServedFlow(src, flow_def)
+        served[flow_def.name] = ServedFlow(src, flow_def, built)
     return served
+
+
+def _mount_flow_ui(app, sf: "ServedFlow", logger: logging.Logger) -> None:
+    """Mounts the entry node's `frontend` bundle at /flows/{name}/ui, if any.
+
+    No-op when the entry didn't declare `frontend` (the common case: OnStart,
+    OnEvent without a UI) or when the declared bundle directory doesn't exist
+    on disk (logged as a warning so a missing bundle doesn't crash startup).
+    """
+    if sf.built is None:
+        return
+    entry = sf.built.nodes.get(sf.built.entry_node_id)
+    if entry is None:
+        return
+    frontend = entry.meta.frontend
+    if not frontend:
+        return
+    py_class = entry.meta.py_class
+    try:
+        node_dir = Path(inspect.getfile(py_class)).parent
+    except (TypeError, OSError):
+        return
+    bundle_dir = node_dir / frontend
+    if not bundle_dir.is_dir():
+        logger.warning(
+            "Flow '%s': entry node '%s' declared frontend='%s' but the "
+            "bundle directory '%s' does not exist; /flows/%s/ui will not be served.",
+            sf.name, entry.meta.name, frontend, bundle_dir, sf.name,
+        )
+        return
+    app.mount(
+        f"/flows/{sf.name}/ui",
+        StaticFiles(directory=str(bundle_dir), html=True),
+        name=f"ui-{sf.name}",
+    )
 
 
 def create_app(served: dict[str, ServedFlow]):
     """Builds the FastAPI app with the endpoints for the served flows."""
     from pathlib import Path as _Path
     from fastapi import Body, FastAPI, HTTPException
-    from fastapi.staticfiles import StaticFiles
     from rayflow import __version__
     from rayflow.api import load as load_api, is_flow_loaded, reconnect_async
     from rayflow.editor.routes import router as editor_router, run_flow_response, wants_stream
@@ -114,7 +157,6 @@ def create_app(served: dict[str, ServedFlow]):
         from rayflow.mcp.server import create_mcp
         mcp_app = create_mcp(served).http_app(path="/")
     except Exception as e:  # pragma: no cover - graceful degradation if fastmcp fails
-        import logging
         logging.getLogger("rayflow").warning("MCP layer unavailable: %s", e)
 
     app = FastAPI(
@@ -132,6 +174,15 @@ def create_app(served: dict[str, ServedFlow]):
     _dist_dir = _Path(__file__).parent / "editor" / "static" / "dist"
     if _dist_dir.exists():
         app.mount("/editor", StaticFiles(directory=_dist_dir, html=True), name="editor-static")
+
+    # Mount a frontend bundle at /flows/{name}/ui for any served flow whose
+    # entry node declared `frontend`. A flow has exactly one entry node
+    # (_find_entry), so there is at most one bundle per flow — no slug
+    # needed. The bundle is a static directory sibling to the node's source
+    # file; it talks to the flow over the normal /flows/{name}/run endpoint.
+    _logger = logging.getLogger("rayflow")
+    for _sf in served.values():
+        _mount_flow_ui(app, _sf, _logger)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

@@ -106,7 +106,7 @@ Regla mental única: **el orden de los efectos es secuencial; el cómputo de los
 ### Interfaz pública
 - `inputs` y `outputs` declaran la interfaz pública del flow con nombre y tipo.
 - `FlowInput` expone los inputs como data outputs y tiene exec output `then`. `FlowOutput` recibe los outputs como data inputs y tiene exec input.
-- Un flow sin parámetros usa `OnStart` en lugar de `FlowInput`. Un flow disparado por evento usa `OnEvent`.
+- Un flow sin parámetros usa `OnStart` en lugar de `FlowInput`. Un flow disparado por evento usa `OnEvent`. Un flow que quiere una UI web usa `ChatTrigger` (idéntico a `OnStart` pero con `frontend` declarado). Cualquier nodo de entrada puede declarar `frontend = "<dir>"` — un directorio de assets estáticos hermano del `.py` del nodo — y cuando el flow se sirve con `rayflow serve --file`, ese bundle se monta en `GET /flows/{name}/ui`. El JS del bundle habla con el flow por el endpoint `/flows/{name}/run` normal; `frontend` solo selecciona "qué UI servir", no es un transporte nuevo.
 
 ### API de invocación
 - Un flow se ejecuta desde Python con `rayflow.run(path_o_flow, **inputs) → dict`. La función carga, hace build, ejecuta y devuelve los outputs declarados en `FlowOutput` ya materializados (`ray.get` aplicado). Versión asíncrona: `rayflow.run_async(...) → ObjectRef`-like awaitable con los mismos outputs.

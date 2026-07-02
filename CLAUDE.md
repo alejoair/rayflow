@@ -150,13 +150,15 @@ Un flow necesita **exactamente un** nodo de entrada — el punto donde el engine
 class MiTrigger:
     is_entry = True              # puede ser el entry point de un flow
     exposes_flow_inputs = True   # opcional: inyecta flow.inputs + headers/query/body/method como outputs dinámicos
+    frontend = "mi_trigger_ui"   # opcional: nombre del directorio de UI a servir en /flows/{name}/ui
     exec_out = ExecOutput()
 ```
 
 - **`is_entry`**: lo reconoce `_find_entry` (`build/validator.py`) al buildear — si el flow declara cero o más de un nodo con `is_entry = True`, `build()` falla ("no entry node" / "more than one entry node"). En runtime, `_fire_engine_node` (`engine/executor.py`) trata a un nodo de entrada como puro passthrough: sus `flow_inputs` se escriben como sus outputs y dispara `exec_out` — **nunca llama a `run()`**. Cualquier lógica sobre el payload recibido va en un nodo normal wireado después de su `exec_out`.
 - **`exposes_flow_inputs`**: más angosto que `is_entry` — inyecta dinámicamente los `inputs` declarados del flow más los 4 pines fijos `headers`/`query`/`body`/`method` como outputs (ver "Un solo endpoint de ejecución" más abajo). `OnVariableChange` es un nodo de entrada que NO lo declara, porque sus outputs (`value`/`old`) son pines estáticos propios.
+- **`frontend`** (str, opcional): nombre de un directorio de assets estáticos (HTML/JS/CSS) hermano del archivo `.py` del nodo. Si el entry de un flow servido lo declara, `create_app` (`rayflow/server.py`) monta ese directorio en `GET /flows/{name}/ui` con `StaticFiles(html=True)`. El bundle es **neutral al tipo de entry**: el framework no impone cómo la UI habla con el flow — para `OnStart`/`ChatTrigger` el JS típicamente POSTea a `/flows/{name}/run`; otro entry (p.ej. un `OnVariableChange` con UI de dashboard) podría no usar `/run`. Hay a lo sumo un `frontend` por flow (garantizado por exactly-one-entry). El directorio se resuelve vía `inspect.getfile(cls).parent / frontend`, así que para built-ins vive en `rayflow/nodes/builtin/<bundle>/` y para custom en `custom_nodes/<bundle>/` (empaquetado como package-data, no distribuido a workers — lo sirve el proceso FastAPI). Si el directorio declarado no existe, se loguea un warning y la ruta `/ui` no se monta (no rompe el startup). **`ChatTrigger`** es el built-in de referencia: idéntico a `OnStart` pero con `frontend = "chat_trigger_frontend"`, así que cualquier flow con entry `ChatTrigger` expone una UI de chat estilo n8n.
 - **Restricciones validadas al decorar/registrar** (`ValueError` inmediato): un nodo `is_entry = True` no puede declarar `exec_in` (nada dentro del grafo debe poder dispararlo), ni estar decorado con `@ray_node` (el short-circuit de entrada vive en `_fire_engine_node`, que nunca llama a `run()` — un `@ray_node` sí lo llamaría, silenciosamente nunca ejecutándose). Usar `@engine_node`/`@parallel_node`.
-- `OnStart`, `OnEvent`, y `OnVariableChange` son los tres tipos built-in con `is_entry = True` — no una lista cerrada del engine.
+- `OnStart`, `OnEvent`, `OnVariableChange`, y `ChatTrigger` son los cuatro tipos built-in con `is_entry = True` — no una lista cerrada del engine.
 - **Excepción deliberada**: los subflows (`CallFlow`) siguen reconociendo su nodo de entrada spliceado por nombre literal (`OnStart`/`OnEvent`) en `_splice_subflow`, no por `is_entry` — un subflow se invoca inline por su padre (`CallFlow`), no se dispara desde afuera, así que generalizar ese camino no aplicaba.
 
 ### Estado en nodos
@@ -231,6 +233,8 @@ GET /flows/{name}/run/{run_id}/stream
 ```
 
 Este endpoint (también en `rayflow/server.py`, junto a `run_flow`) consume la sub-queue existente sin relanzar la ejecución ni cerrarla — funciona igual para un flow servido o uno del editor, ya que solo depende de que el flow esté cargado en Ray (`is_flow_loaded`). El frontend (`useRunStream.ts`) lo hace automáticamente: hasta 5 reintentos con backoff lineal de 500 ms, solo si no se había recibido un evento terminal (`flow_done`/`flow_error`) antes de que el stream cayera.
+
+**Frontend bundle por flow** (`GET /flows/{name}/ui`): si el entry de un flow servido declaró `frontend` (ver "Nodos de entrada"), `create_app` monta ese bundle de assets estáticos en `/flows/{name}/ui` con `StaticFiles(html=True)`. Solo aplica a flows servidos (`rayflow serve --file`), no a flows del editor cargados on-demand. La UI habla con el flow por el mismo `/flows/{name}/run` de siempre — el atributo `frontend` solo selecciona "qué UI servir", no es un transporte nuevo. `ChatTrigger` (built-in) expone así una UI de chat estilo n8n.
 
 ### Descubrimiento de nodos
 El servidor carga nodos desde:

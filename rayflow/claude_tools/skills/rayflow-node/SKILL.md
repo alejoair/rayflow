@@ -77,6 +77,33 @@ Set `category = "..."` (a plain string English word: `"Math"`, `"Control"`,
 `"Text"`, `"HTTP"`, etc. — match existing categories from `list_nodes`
 rather than inventing new casing/language for the same concept).
 
+## Frontend bundle (optional, entry nodes only)
+
+A node with `is_entry = True` may declare `frontend = "<dir_name>"` — the
+name of a directory of static assets (HTML/JS/CSS) sibling to the node's
+`.py` file. When a **served** flow's entry node declares it (`rayflow serve
+--file`, not editor-managed flows), the server mounts that directory at
+`GET /flows/{flow_name}/ui` so the flow ships with its own UI.
+
+```python
+@engine_node
+class MyTrigger:
+    is_entry = True
+    exposes_flow_inputs = True
+    frontend = "my_trigger_ui"   # → custom_nodes/my_trigger_ui/index.html
+    exec_out = ExecOutput()
+```
+
+The bundle lives next to the source file: for a custom node in
+`custom_nodes/my_trigger.py`, the bundle goes in
+`custom_nodes/my_trigger_ui/` (at minimum an `index.html`). The framework
+serves the files; the bundle's JS is responsible for talking to the flow
+over the normal `POST /flows/{name}/run` endpoint — `frontend` only selects
+*what UI to serve*, it is not a new transport. The built-in `ChatTrigger`
+node is the reference example (a chat page that POSTs `{message: ...}` and
+renders the flow's outputs). Creating the bundle directory is manual — the
+`create_custom_node` tool only writes the `.py` file.
+
 ## Creating it
 
 Use `mcp__rayflow__create_custom_node` with `name` and `source` — it validates

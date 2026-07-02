@@ -80,6 +80,32 @@ def test_engine_node_is_entry_extracted():
     assert meta.exposes_flow_inputs is True
 
 
+def test_frontend_flag_defaults_none_and_is_extracted():
+    # Default: a node without `frontend` exposes None.
+    @engine_node
+    class NoFrontend:
+        exec_in = ExecInput()
+        exec_out = ExecOutput()
+
+        def run(self, ctx: ExecContext) -> dict:
+            ctx.fire("exec_out")
+            return {}
+
+    assert get_node_meta(NoFrontend).frontend is None
+
+    # A node declaring `frontend` (typically an entry node) surfaces the value.
+    @engine_node
+    class UiTrigger:
+        is_entry = True
+        exposes_flow_inputs = True
+        frontend = "ui_bundle"
+        exec_out = ExecOutput()
+
+    meta = get_node_meta(UiTrigger)
+    assert meta is not None
+    assert meta.frontend == "ui_bundle"
+
+
 def test_data_node_has_no_exec():
     @ray_node
     class MultiplyNode:
@@ -127,3 +153,14 @@ def test_catalog_registers_builtin_nodes():
     assert "Set" in catalog
     assert "OnEvent" in catalog
     assert "EmitEvent" in catalog
+
+
+def test_catalog_registers_chat_trigger_with_frontend():
+    reset_catalog()
+    catalog = get_catalog()
+    entry = catalog.get("ChatTrigger")
+    assert entry is not None, "ChatTrigger must be in the builtin catalog"
+    _cls, meta = entry
+    assert meta.is_entry is True
+    assert meta.exposes_flow_inputs is True
+    assert meta.frontend == "chat_trigger_frontend"
