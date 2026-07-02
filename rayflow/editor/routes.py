@@ -266,17 +266,17 @@ async def list_editor_flows() -> dict[str, Any]:
 
 @router.get("/flows/loaded")
 async def list_loaded_flows() -> dict[str, Any]:
-    """Lists every flow currently loaded into Ray, with its public interface."""
-    from rayflow.engine.executor import _loaded_flows
+    """Lists every flow currently served (in the registry), with its public interface."""
+    from rayflow.registry import all_served
     result = []
-    for name, lf in _loaded_flows.items():
-        entry: dict[str, Any] = {"flow": name}
-        if lf.flow_def is not None:
+    for sf in all_served():
+        entry: dict[str, Any] = {"flow": sf.name}
+        if sf.flow_def is not None:
             entry["inputs"] = {
-                k: {"type": v} for k, v in lf.flow_def.inputs.items()
+                k: {"type": v} for k, v in sf.flow_def.inputs.items()
             }
             entry["outputs"] = {
-                k: {"type": v} for k, v in lf.flow_def.outputs.items()
+                k: {"type": v} for k, v in sf.flow_def.outputs.items()
             }
         result.append(entry)
     return {"loaded": result, "count": len(result)}
@@ -349,13 +349,20 @@ async def delete_editor_flow(name: str) -> Response:
 
 @router.post("/flows/{name}/load", status_code=200)
 async def load_editor_flow(name: str) -> dict[str, Any]:
-    """Loads a flow into Ray: initializes actors and persistent GraphState.
+    """Loads a flow into Ray: pre-validates, then initializes actors and
+    persistent GraphState, and registers it as served.
 
     Idempotent — if already loaded, reloads it (resets state).
+
+    Errors:
+    - 404 if the flow isn't in the editor's storage.
+    - 400 if the flow fails pre-validation (build error) — no actors spawned.
+    - 500 on any other runtime error after build succeeded.
     """
     import asyncio
     from functools import partial
     from rayflow.api import load as load_flow_api
+    from rayflow.build.validator import BuildError
 
     data = get_flow_dict(name)
     if data is None:
@@ -364,6 +371,8 @@ async def load_editor_flow(name: str) -> dict[str, Any]:
         loop = asyncio.get_event_loop()
         graph_id = await loop.run_in_executor(None, partial(load_flow_api, data))
         return {"graph_id": graph_id, "flow": name, "loaded": True}
+    except BuildError as e:
+        raise HTTPException(status_code=400, detail=f"Flow '{name}' did not build: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 
@@ -467,9 +476,12 @@ async def test_editor_flow(name: str, body: Any = Body(default=None)) -> dict[st
         raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
 
     if not is_flow_loaded(name):
+        from rayflow.build.validator import BuildError
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, partial(load_flow_api, data))
+        except BuildError as e:
+            raise HTTPException(status_code=400, detail=f"Flow '{name}' did not build: {e}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 

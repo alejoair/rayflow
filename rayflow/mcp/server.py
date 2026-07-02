@@ -20,8 +20,12 @@ from pathlib import Path
 from typing import Any
 
 
-def create_mcp(served: dict | None = None):
-    """Builds the FastMCP server with Rayflow's curated tools."""
+def create_mcp():
+    """Builds the FastMCP server with Rayflow's curated tools.
+
+    The tools operate against rayflow.api (which uses rayflow.registry
+    internally) — no `served` parameter is needed anymore.
+    """
     from fastmcp import FastMCP
 
     from rayflow.nodes.registry import get_catalog

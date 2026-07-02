@@ -9,9 +9,11 @@ not by recreating the graph, which is how the engine is designed to work
 (see CLAUDE.md's concurrency notes on FlowEngine.execute()).
 
 `/flows/{name}/run` is also the single execution endpoint for flows managed
-by the editor (in `flows/`, not passed via `--file`) — it loads them into
-Ray on demand the first time they're run instead of requiring a separate
-editor-only endpoint. The editor frontend calls this same route.
+by the editor (in `flows/`, not passed via `--file`). Loading them into Ray
+is the editor's responsibility: `POST /editor/flows/{name}/load` pre-validates
+and registers them in rayflow.registry, after which `/run`, `/ui`, and the
+rest of the served-flow contract apply uniformly. The editor frontend calls
+this same route.
 
 This is distinct from `rayflow.serve_events()` (api.py), which registers a
 flow on the internal event bus.
@@ -29,133 +31,106 @@ from fastapi.staticfiles import StaticFiles
 from rayflow.schema.loader import load_flow
 from rayflow.schema.models import FlowDef
 from rayflow.nodes.registry import get_catalog
-from rayflow.build.validator import build, BuiltFlow
+from rayflow.build.validator import build, BuiltFlow, BuildError
+from rayflow.engine.executor import LoadedFlow
+from rayflow.registry import (
+    ServedFlow,
+    register_served,
+    get_served,
+    all_served,
+    is_served,
+)
 
 
-class ServedFlow:
-    """A loaded, validated flow, ready to run per request."""
-
-    def __init__(self, source: str | Path | dict, flow_def: FlowDef,
-                 built: BuiltFlow | None = None):
-        # Keeps the original source (path or dict) to re-run the flow per
-        # request via run_async — NOT its str(), which would lose an inline dict.
-        self.source = source
-        self.flow_def = flow_def
-        # The validated BuiltFlow (kept so create_app can read the entry
-        # node's meta — e.g. to discover a declared `frontend` bundle to
-        # mount at /flows/{name}/ui). None when ServedFlow is constructed
-        # without building (some tests).
-        self.built = built
-
-    @property
-    def source_label(self) -> str:
-        """Human-readable origin label (for error messages)."""
-        return self.source if isinstance(self.source, (str, Path)) else f"<dict:{self.name}>"
-
-    @property
-    def name(self) -> str:
-        return self.flow_def.name
-
-    @property
-    def interface(self) -> dict[str, Any]:
-        return {
-            "name": self.flow_def.name,
-            "version": self.flow_def.version,
-            "endpoint": f"/flows/{self.flow_def.name}/run",
-            "method": "POST",
-            "inputs": {
-                name: {"type": type_str, "required": True}
-                for name, type_str in self.flow_def.inputs.items()
-            },
-            "outputs": {
-                name: {"type": type_str}
-                for name, type_str in self.flow_def.outputs.items()
-            },
-        }
-
-
-def load_served_flows(sources: list[str | Path | dict],
+def load_served_flows(sources: "list[str | Path | dict] | list[str | Path]",
                       extra_node_dirs: list[str | Path] | None = None
                       ) -> dict[str, ServedFlow]:
     """Loads and validates every flow at startup; indexes them by `name`.
 
     Fails early (before the server starts) if a flow doesn't build, or if
-    two flows share the same name.
+    two flows share the same name. Each successfully built flow is loaded
+    into Ray (actors spawned) and registered in rayflow.registry.
     """
     catalog = get_catalog(extra_node_dirs)
     served: dict[str, ServedFlow] = {}
     for src in sources:
-        flow_def = load_flow(src)
-        built = build(flow_def, catalog)  # early validation — raises BuildError on failure
-        if flow_def.name in served:
+        sf = _build_and_load(src, catalog)
+        if sf.name in served:
             raise ValueError(
-                f"Two flows share the name '{flow_def.name}': "
-                f"'{served[flow_def.name].source_label}' and '{src}'"
+                f"Two flows share the name '{sf.name}': "
+                f"'{served[sf.name].source_label}' and '{src}'"
             )
-        served[flow_def.name] = ServedFlow(src, flow_def, built)
+        served[sf.name] = sf
+        register_served(sf)
     return served
 
 
-def _mount_flow_ui(app, sf: "ServedFlow", logger: logging.Logger) -> None:
-    """Mounts the entry node's `frontend` bundle at /flows/{name}/ui, if any.
+def _build_and_load(source: str | Path | dict, catalog=None) -> ServedFlow:
+    """Pre-validates (build) and pre-loads (LoadedFlow.load) a flow.
 
-    No-op when the entry didn't declare `frontend` (the common case: OnStart,
-    OnEvent without a UI) or when the declared bundle directory doesn't exist
-    on disk (logged as a warning so a missing bundle doesn't crash startup).
+    `build()` runs BEFORE any actor is spawned — so an invalid source fails
+    loudly (BuildError) without leaking half-built state. On success, spawns
+    actors via `LoadedFlow.load(built)` and returns a ServedFlow with `.loaded`
+    populated. Does NOT register in rayflow.registry; the caller decides
+    (load_served_flows registers in batch, api.load registers individually).
+    """
+    if catalog is None:
+        catalog = get_catalog()
+    flow_def = load_flow(source)
+    built = build(flow_def, catalog)
+    lf = LoadedFlow.load(built)
+    return ServedFlow(source, flow_def, built, loaded=lf)
+
+
+def _resolve_bundle_dir(sf: ServedFlow) -> Path | None:
+    """Returns the entry node's `frontend` bundle directory, or None if the
+    entry doesn't declare `frontend` or the bundle is missing on disk.
+
+    None reasons are distinguishable by the caller via logging: a flow with no
+    `frontend` is the common case (silent skip); a missing bundle directory
+    is logged as a warning.
     """
     if sf.built is None:
-        return
+        return None
     entry = sf.built.nodes.get(sf.built.entry_node_id)
     if entry is None:
-        return
+        return None
     frontend = entry.meta.frontend
     if not frontend:
-        return
+        return None
     py_class = entry.meta.py_class
     try:
         node_dir = Path(inspect.getfile(py_class)).parent
     except (TypeError, OSError):
-        return
+        return None
     bundle_dir = node_dir / frontend
     if not bundle_dir.is_dir():
-        logger.warning(
-            "Flow '%s': entry node '%s' declared frontend='%s' but the "
-            "bundle directory '%s' does not exist; /flows/%s/ui will not be served.",
-            sf.name, entry.meta.name, frontend, bundle_dir, sf.name,
-        )
-        return
-    app.mount(
-        f"/flows/{sf.name}/ui",
-        StaticFiles(directory=str(bundle_dir), html=True),
-        name=f"ui-{sf.name}",
-    )
+        return None
+    return bundle_dir
 
 
-def create_app(served: dict[str, ServedFlow]):
-    """Builds the FastAPI app with the endpoints for the served flows."""
+def create_app(served: dict[str, ServedFlow] | None = None):
+    """Builds the FastAPI app with the endpoints for the served flows.
+
+    `served` is the initial dict (CLI `--file` flows), already registered in
+    rayflow.registry by load_served_flows. Endpoints consult the registry in
+    runtime (not this dict), so flows added later via POST /editor/flows/.../load
+    are visible to /run, /ui, etc. without rebuilding the app.
+    """
     from pathlib import Path as _Path
     from fastapi import Body, FastAPI, HTTPException
+    from fastapi.responses import FileResponse
     from rayflow import __version__
-    from rayflow.api import load as load_api, is_flow_loaded, reconnect_async
+    from rayflow.api import execute_async, reconnect_async
     from rayflow.editor.routes import router as editor_router, run_flow_response, wants_stream
     from rayflow.editor.custom_nodes_routes import router as custom_nodes_router
-    from rayflow.editor.storage import get_flow_dict
-
-    # Load every served flow into Ray once, up front. load() always
-    # destroys and recreates (safe to call unconditionally, even if a test
-    # fixture calls create_app() repeatedly for the same flow name) — the
-    # point is that /flows/{name}/run below does NOT reload per request,
-    # so concurrent/repeated requests reuse this same persistent graph
-    # instead of tearing it down and losing GraphState after every call.
-    for _sf in served.values():
-        load_api(_sf.source)
 
     # Build the MCP server before the app: its lifespan (the streamable-http
     # session manager) must be passed to FastAPI so it starts when mounted.
     mcp_app = None
     try:
         from rayflow.mcp.server import create_mcp
-        mcp_app = create_mcp(served).http_app(path="/")
+        mcp_app = create_mcp().http_app(path="/")
     except Exception as e:  # pragma: no cover - graceful degradation if fastmcp fails
         logging.getLogger("rayflow").warning("MCP layer unavailable: %s", e)
 
@@ -175,60 +150,44 @@ def create_app(served: dict[str, ServedFlow]):
     if _dist_dir.exists():
         app.mount("/editor", StaticFiles(directory=_dist_dir, html=True), name="editor-static")
 
-    # Mount a frontend bundle at /flows/{name}/ui for any served flow whose
-    # entry node declared `frontend`. A flow has exactly one entry node
-    # (_find_entry), so there is at most one bundle per flow — no slug
-    # needed. The bundle is a static directory sibling to the node's source
-    # file; it talks to the flow over the normal /flows/{name}/run endpoint.
-    _logger = logging.getLogger("rayflow")
-    for _sf in served.values():
-        _mount_flow_ui(app, _sf, _logger)
-
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/flows")
     async def list_flows() -> dict[str, Any]:
-        return {"flows": [sf.interface for sf in served.values()]}
+        """Lists every served flow (from any origin: --file or editor /load)."""
+        return {"flows": [sf.interface for sf in all_served()]}
 
     @app.get("/flows/{name}")
     async def flow_detail(name: str) -> dict[str, Any]:
-        sf = served.get(name)
+        sf = get_served(name)
         if sf is None:
             raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
         return sf.interface
 
     @app.post("/flows/{name}/run")
     async def run_flow(request: Request, name: str, inputs: Any = Body(default=None)):
-        """The single run endpoint for any flow — pre-loaded served flows
-        (from `rayflow serve --file`) and editor-managed flows in `flows/`
-        alike. Set `Accept: text/event-stream` for the SSE event stream
-        (same one the editor frontend consumes); otherwise this returns a
-        single JSON response once the flow finishes.
+        """The single run endpoint. Requires the flow to be already served
+        (loaded into Ray via CLI --file or POST /editor/flows/{name}/load).
+
+        Returns 404 if the flow isn't served — there's no implicit on-demand
+        loading. This is consistent with the unified contract: "served" =
+        "explicitly loaded", and the editor's /load does the pre-validation
+        + actor spawn before a request can hit /run.
+
+        Set `Accept: text/event-stream` for the SSE event stream (the same
+        one the editor frontend consumes); otherwise this returns a single
+        JSON response once the flow finishes.
         """
+        if not is_served(name):
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' is not served")
         if inputs is None:
             inputs = {}
         if not isinstance(inputs, dict):
             raise HTTPException(
                 status_code=400, detail="Body must be a JSON object of inputs"
             )
-
-        # A served flow (loaded once at startup, see create_app above) reuses
-        # that persistent graph. Otherwise fall back to an editor-managed
-        # flow (flows/ directory), loading it into Ray on demand if needed.
-        if served.get(name) is None:
-            data = get_flow_dict(name)
-            if data is None:
-                raise HTTPException(status_code=404, detail=f"Flow '{name}' not found")
-            if not is_flow_loaded(name):
-                import asyncio
-                from functools import partial
-                loop = asyncio.get_event_loop()
-                try:
-                    await loop.run_in_executor(None, partial(load_api, data))
-                except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Error loading the flow: {e}")
 
         # Every flow's trigger IS this HTTP request — OnStart always exposes
         # headers/query/body/method (see _with_dynamic_pins in
@@ -245,16 +204,12 @@ def create_app(served: dict[str, ServedFlow]):
 
     @app.get("/flows/{name}/run/{run_id}/stream")
     async def reconnect_flow_run(name: str, run_id: str):
-        """Reconnects to an active SSE run without relaunching execution.
-
-        Useful when the client loses connection while the flow is still
-        running. Returns the pending events from the moment of reconnection.
-        """
+        """Reconnects to an active SSE run without relaunching execution."""
         import json
         from fastapi.responses import StreamingResponse
 
-        if not is_flow_loaded(name):
-            raise HTTPException(status_code=404, detail=f"Flow '{name}' is not loaded")
+        if not is_served(name):
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' is not served")
 
         async def event_generator():
             try:
@@ -268,6 +223,49 @@ def create_app(served: dict[str, ServedFlow]):
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    # Frontend bundle: served dynamically per request. The handler looks up
+    # the flow in the registry, resolves the entry node's `frontend` bundle
+    # directory, and serves files from it via FileResponse. This unifies the
+    # CLI (--file) and editor (/load) paths: any served flow whose entry
+    # declared `frontend` exposes its UI here, and the UI disappears
+    # automatically when the flow is unloaded (no mounts to tear down — the
+    # registry lookup simply 404s).
+    _logger = logging.getLogger("rayflow")
+
+    @app.get("/flows/{name}/ui")
+    @app.get("/flows/{name}/ui/{rest:path}")
+    async def flow_ui(name: str, rest: str = ""):
+        sf = get_served(name)
+        if sf is None:
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' is not served")
+        bundle_dir = _resolve_bundle_dir(sf)
+        if bundle_dir is None:
+            # Distinguish "no frontend declared" (common, silent) from
+            # "bundle missing on disk" (warn).
+            if sf.built is not None:
+                entry = sf.built.nodes.get(sf.built.entry_node_id)
+                if entry is not None and entry.meta.frontend:
+                    _logger.warning(
+                        "Flow '%s': entry node '%s' declared frontend='%s' but the "
+                        "bundle directory does not exist; /flows/%s/ui not served.",
+                        sf.name, entry.meta.name, entry.meta.frontend, sf.name,
+                    )
+            raise HTTPException(status_code=404, detail=f"Flow '{name}' has no UI bundle")
+
+        # Resolve the requested path against the bundle directory. Empty rest
+        # serves index.html (the route's html-root convention).
+        rest = rest.strip("/")
+        if not rest:
+            target = bundle_dir / "index.html"
+        else:
+            target = (bundle_dir / rest).resolve()
+            # Prevent path traversal outside bundle_dir.
+            if not str(target).startswith(str(bundle_dir.resolve())):
+                raise HTTPException(status_code=404, detail="Not found")
+            if not target.is_file():
+                raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(str(target))
 
     return app
 

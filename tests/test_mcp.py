@@ -40,7 +40,7 @@ def custom_nodes_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def mcp():
-    return create_mcp({})
+    return create_mcp()
 
 
 SUMA = {

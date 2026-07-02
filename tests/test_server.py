@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from rayflow.nodes.registry import reset_catalog
 from rayflow.server import load_served_flows, create_app
+from rayflow.registry import clear_served
 
 
 @pytest.fixture(autouse=True)
@@ -12,7 +13,9 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    clear_served()
     yield
+    clear_served()
 
 
 SUMA = {
@@ -78,10 +81,11 @@ def test_run_flow_body_is_not_an_object(client):
     assert r.status_code == 400
 
 
-def test_run_flow_falls_back_to_an_editor_managed_flow(tmp_path, monkeypatch):
-    """A name not in `served` (not passed via `--file`) falls back to an
-    editor-managed flow in flows/, loading it into Ray on demand. There's no
-    separate editor-only run endpoint — /flows/{name}/run handles both."""
+def test_run_404_for_unserved_editor_flow(tmp_path, monkeypatch):
+    """POST /flows/{name}/run on a flow that exists in the editor's storage
+    but has NOT been served (POST /editor/flows/{name}/load) returns 404.
+    There's no implicit on-demand loading from /run anymore — "served" =
+    "explicitly loaded" (via --file or POST /editor/flows/{name}/load)."""
     import rayflow.editor.storage as storage_mod
     monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
 
@@ -90,8 +94,58 @@ def test_run_flow_falls_back_to_an_editor_managed_flow(tmp_path, monkeypatch):
 
     client.post("/editor/flows", json=SUMA)
     r = client.post("/flows/suma/run", json={"x": 4, "y": 6})
-    assert r.status_code == 200
-    assert r.json() == {"resultado": 10}
+    assert r.status_code == 404
+
+
+def test_editor_load_then_run_succeeds(tmp_path, monkeypatch):
+    """After POST /editor/flows/{name}/load, the flow is served: /run works."""
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+
+    served = load_served_flows([])
+    client = TestClient(create_app(served))
+
+    client.post("/editor/flows", json=SUMA)
+    r_load = client.post("/editor/flows/suma/load")
+    assert r_load.status_code == 200
+    r_run = client.post("/flows/suma/run", json={"x": 4, "y": 6})
+    assert r_run.status_code == 200
+    assert r_run.json() == {"resultado": 10}
+
+
+def test_editor_load_serves_ui(tmp_path, monkeypatch):
+    """A flow loaded via POST /editor/flows/{name}/load exposes its /ui
+    bundle (if the entry declares `frontend`). This is the core of the
+    unified contract — UI is no longer --file-only."""
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+
+    served = load_served_flows([])
+    client = TestClient(create_app(served))
+
+    client.post("/editor/flows", json=CHAT_FLOW)
+    r_load = client.post("/editor/flows/chat/load")
+    assert r_load.status_code == 200
+    r_ui = client.get("/flows/chat/ui/")
+    assert r_ui.status_code == 200
+    assert "text/html" in r_ui.headers["content-type"]
+    assert "Rayflow Chat" in r_ui.text
+
+
+def test_unload_removes_ui(tmp_path, monkeypatch):
+    """DELETE /editor/flows/{name}/load removes the flow from the registry,
+    so /flows/{name}/ui 404s afterwards."""
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+
+    served = load_served_flows([])
+    client = TestClient(create_app(served))
+
+    client.post("/editor/flows", json=CHAT_FLOW)
+    client.post("/editor/flows/chat/load")
+    assert client.get("/flows/chat/ui/").status_code == 200
+    client.delete("/editor/flows/chat/load")
+    assert client.get("/flows/chat/ui/").status_code == 404
 
 
 def test_duplicate_names_fail_to_load():
