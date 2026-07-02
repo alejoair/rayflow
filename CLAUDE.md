@@ -204,6 +204,8 @@ Antes se empujaban `node_start`/`edge_fire`/`node_done` fire-and-forget (sin `aw
 
 El costo es una RPC bloqueante por evento en el hot path del engine — se prioriza correctitud de la respuesta sobre esa latencia extra.
 
+**Streaming vs JSON en `/run` (content negotiation por header)**: tanto `/editor/flows/{name}/run` como `/flows/{name}/run` (flow servido, `rayflow/server.py`) comparten una única función (`run_flow_response` en `rayflow/editor/routes.py`) que decide el formato de la respuesta según el header `Accept` de la request (`wants_stream()`): `Accept: text/event-stream` devuelve el stream SSE completo, cualquier otro valor (o ausencia del header) drena `execute_async()` internamente y devuelve un solo JSON con los outputs una vez que llega `flow_done`. Así un caller HTTP normal (curl, un backend, etc.) recibe streaming pidiéndolo con el mismo header que usaría para negociar contenido con cualquier otra API — no hay un endpoint o código de ejecución distinto para el editor. El frontend (`useRunStream.ts`) manda explícitamente ese header en cada `POST .../run`.
+
 **Reconexión SSE**: si el cliente pierde la conexión mientras el flow corre, puede reconectarse usando el `run_id` recibido en `run_start`:
 
 ```
@@ -243,7 +245,7 @@ El servidor carga nodos desde:
 | `DELETE` | `/editor/flows/{name}/load` | Descargar flow de Ray |
 | `GET` | `/editor/flows/loaded` | Lista todos los flows cargados en Ray con su interfaz (inputs/outputs) |
 | `GET` | `/editor/flows/{name}/loaded` | Estado de carga de un flow concreto |
-| `POST` | `/editor/flows/{name}/run` | Ejecutar flow (SSE stream); primer evento es `run_start` con `run_id` |
+| `POST` | `/editor/flows/{name}/run` | Ejecutar flow. Con header `Accept: text/event-stream` devuelve el stream SSE (primer evento `run_start` con `run_id`); sin ese header devuelve un único JSON con los outputs al terminar |
 | `GET` | `/editor/flows/{name}/run/{run_id}/stream` | Reconectar a un run activo (SSE stream sin relanzar ejecución) |
 | `POST` | `/editor/flows/{name}/serve-events` | Suscribir al event bus |
 | `DELETE` | `/editor/flows/{name}/serve-events/{graph_id}` | Desuscribir |

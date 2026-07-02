@@ -690,7 +690,7 @@
       "system": "frontend-state"
     },
     "rayflow/editor/frontend/src/hooks/useRunStream.ts": {
-      "description": "Custom hook managing flow execution via SSE streaming, event batching for animation, and run reconnection on disconnect.",
+      "description": "Custom hook managing flow execution via SSE streaming (requested explicitly via an `Accept: text/event-stream` header, the same content-negotiation mechanism any API caller uses), event batching for animation, and run reconnection on disconnect.",
       "depends_on": [
         "rayflow/editor/frontend/src/lib/api.ts",
         "rayflow/editor/frontend/src/store/flowStore.ts"
@@ -817,7 +817,7 @@
       "system": "editor-api"
     },
     "rayflow/editor/routes.py": {
-      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/run/test execution endpoints, guide/examples, and event subscription — the same logic the MCP tools reuse.",
+      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/run/test execution endpoints, guide/examples, and event subscription — the same logic the MCP tools reuse. run_flow_response/wants_stream implement content negotiation for flow execution (Accept: text/event-stream → SSE event stream, otherwise a single JSON response once the flow finishes) and are shared by both /editor/flows/{name}/run here and /flows/{name}/run in rayflow/server.py.",
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
@@ -1156,7 +1156,7 @@
       "system": "schema"
     },
     "rayflow/server.py": {
-      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Loads every served flow into Ray once at startup and /flows/{name}/run reuses that persistent graph via execute_async. Builds a richer flow_inputs dict per request (headers/query/body/method, alongside the parsed body) since a served flow's trigger IS the HTTP request, and reads response_status/response_headers off the flow_done event to shape the real HTTP response instead of always returning 200.",
+      "description": "FastAPI app factory for `rayflow serve`: builds the REST API for served flows, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Loads every served flow into Ray once at startup; /flows/{name}/run reuses that persistent graph and builds a richer flow_inputs dict per request (headers/query/body/method, alongside the parsed body) since a served flow's trigger IS the HTTP request. Rendering the response (SSE stream vs. a single JSON reply once flow_done arrives, with response_status/response_headers from the flow_done event) is delegated to run_flow_response/wants_stream in rayflow/editor/routes.py, shared with the editor's own /run endpoint so the two don't duplicate that logic.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
