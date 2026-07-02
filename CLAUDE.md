@@ -317,7 +317,7 @@ Los flows se guardan en `flows/` dentro del directorio de trabajo.
 
 ### Request/response HTTP en `POST /flows/{name}/run`
 
-Todo flow disparado vía `POST /flows/{name}/run` — sea un flow servido (`rayflow serve --file`, pre-cargado) o un flow del editor (`flows/`, cargado on-demand en esa misma request) — se dispara por una request HTTP real, así que `OnStart` (y `OnEvent`) exponen siempre 4 outputs fijos además de los que genera desde `inputs`: `headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`, el JSON del body ya parseado), `method` (`str`). No hace falta declararlos ni un nodo especial — cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos).
+Todo flow disparado vía `POST /flows/{name}/run` — sea un flow servido (`rayflow serve --file`, pre-cargado) o un flow del editor (`flows/`, cargado on-demand en esa misma request) — se dispara por una request HTTP real, así que cualquier nodo de entrada con `exposes_flow_inputs = True` (`OnStart`/`FlowInput` y `OnEvent` son los ejemplos built-in; un nodo custom puede declarar el mismo flag) expone siempre 4 outputs fijos además de los que genera desde `inputs`: `headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`, el JSON del body ya parseado), `method` (`str`). No hace falta declararlos ni un nodo especial — cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos).
 
 Para la respuesta, `ctx.set_response_status(code)` / `ctx.set_response_header(name, value)` (en `ExecContext`) fijan el status/headers HTTP reales de la respuesta — viven en el `RunContext` de la ejecución (no en `flow.outputs`), así que **no aparecen** en el resultado que ve un caller no-HTTP (`run_flow`/`test_flow` de MCP, `execute()` directo). Sin llamarlos, el default es 200 sin headers extra. Cuidado con `Parallel`: si dos ramas verdaderamente paralelas llaman `set_response_status` a la vez, gana la última escritura — solo una rama de un fork debería fijarlos.
 
@@ -461,7 +461,7 @@ stop(graph_id, event_names)
 - El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
-- `OnEvent` puede coexistir con `OnStart` en el mismo flow (distintos puntos de entrada).
+- Un flow tiene **exactamente un** nodo de entrada — cualquier nodo con `meta.is_entry = True` (`OnStart`, `OnEvent`, y `OnVariableChange` son los tres tipos built-in; un nodo custom puede declarar el mismo flag). Si un flow declara más de uno (p.ej. `OnStart` y `OnEvent` a la vez), `build()` falla con "more than one entry node" — antes de generalizar esta detección, `OnStart` ganaba silenciosamente sobre `OnEvent` si ambos estaban presentes (dejando `OnEvent` como código muerto); ahora es un error de build explícito.
 
 ### Triggers por cambio de variable (`OnVariableChange`)
 
@@ -474,7 +474,8 @@ Set escribe variable vigilada → GraphState.set_variable
             └─ engine.execute(payload_como_flow_inputs, queue, run_id)  # OnVariableChange expone value/old
 ```
 
-- **`OnVariableChange`** (nodo de entrada, `events.py`) declara `variable` y `source` (flow dueño; vacío = el propio). Sus outputs `value`/`old` los inyecta el engine. Es un punto de entrada como `OnEvent` (lo reconoce `_find_entry`).
+- **`OnVariableChange`** (nodo de entrada, `events.py`) declara `variable` y `source` (flow dueño; vacío = el propio). Sus outputs `value`/`old` los inyecta el engine. Es un punto de entrada genérico: declara `is_entry = True` (reconocido por `_find_entry` vía `meta.is_entry`, no por nombre) — a diferencia de `OnStart`/`OnEvent`, no declara `exposes_flow_inputs`, porque sus outputs son pines estáticos propios, no derivados de `flow.inputs`.
+- El registro de vigilancia de variables (`serve_events` suscribiendo `var:{source}/{var}` + `gs.watch_variable`) es **específico de `OnVariableChange`**, no algo que un nodo custom con `is_entry = True` obtenga gratis solo por declarar el flag — necesitaría su propio mecanismo de opt-in.
 - El registro lo hace `serve_events`: suscribe el flow vigía al evento sintético `var:{source}/{var}` **y** marca la variable como vigilada en el `GraphState` del flow fuente (`gs.watch_variable`). Solo las variables vigiladas publican (sin amplificación sobre el resto).
 - `GraphState.set_variable` **solo publica si el valor cambió** (compara viejo vs nuevo, resolviendo `ObjectRef`). Escribir el mismo valor no dispara.
 - **Orden de carga**: el flow fuente debe estar cargado antes que el vigía (su `gs_{source}` debe existir al registrar). Por eso `LoadedFlow.load` ahora **espera** a que el engine termine `__init__` (`ray.get(engine.get_graph_id.remote())`) antes de devolver: garantiza que `gs_{flow}` sea localizable por nombre apenas `load()` retorna.

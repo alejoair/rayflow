@@ -77,7 +77,7 @@ class ResolvedNode:
 class BuiltFlow:
     flow_def: FlowDef
     nodes: dict[str, ResolvedNode]  # node_id → ResolvedNode
-    entry_node_id: str  # OnStart / FlowInput / OnEvent
+    entry_node_id: str  # the flow's sole node with meta.is_entry = True
     output_node_ids: list[str]  # FlowOutput nodes (there can be several)
 
 
@@ -372,13 +372,16 @@ _REQUEST_PINS = (
 def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta:
     """Generates the dynamic pins of public-interface nodes.
 
-    - FlowInput / OnEvent: data outputs = the flow's declared inputs, PLUS
-      fixed headers/query/body/method pins — every served flow's trigger
-      IS an HTTP request, so the entry node always exposes the raw
-      envelope alongside whatever named inputs the flow declares. A flow
-      that doesn't run over HTTP (or wasn't given a request) just sees
-      empty dicts/strings for these — see execute()'s seeding in
-      engine/executor.py.
+    - Any node with exposes_flow_inputs = True (OnStart/FlowInput and
+      OnEvent are the built-in examples): data outputs = the flow's
+      declared inputs, PLUS fixed headers/query/body/method pins — every
+      served flow's trigger IS an HTTP request, so such an entry node
+      always exposes the raw envelope alongside whatever named inputs the
+      flow declares. A flow that doesn't run over HTTP (or wasn't given a
+      request) just sees empty dicts/strings for these — see execute()'s
+      seeding in engine/executor.py. (OnVariableChange is also an entry
+      node but does NOT set this flag — its value/old outputs are its own
+      static pins, not flow.inputs-derived.)
     - FlowOutput: data inputs = the flow's declared outputs.
     - CallFlow: extra data inputs = any key in node_def.inputs not already
       declared as a pin. Lets arbitrary inputs be passed to the subflow.
@@ -392,7 +395,7 @@ def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta
     flow_inputs = iface["inputs"] if iface else flow.inputs
     flow_outputs = iface["outputs"] if iface else flow.outputs
 
-    if meta.name in ("OnStart", "OnEvent"):
+    if meta.exposes_flow_inputs:
         meta = copy.copy(meta)
         meta.outputs = list(meta.outputs) + [
             PinSpec(name=name, kind="data_out", type=type_str)
@@ -707,33 +710,21 @@ def _check_exec_cycles(nodes: dict[str, ResolvedNode]) -> None:
 
 
 def _find_entry(nodes: dict[str, ResolvedNode], err: _Errors) -> str:
-    # Entry/output nodes of spliced subgraphs carry subflow_of: they don't
-    # count as the root flow's entry/exit.
-    on_starts = [
+    # A flow has exactly one entry node: any node with meta.is_entry = True
+    # (OnStart, OnEvent, and OnVariableChange are the three built-in
+    # examples; a custom node can declare the same flag). Entry nodes of
+    # spliced subgraphs carry subflow_of: they don't count as the root
+    # flow's entry.
+    entries = [
         nid for nid, rn in nodes.items()
-        if rn.meta.name == "OnStart" and rn.node_def.subflow_of is None
+        if rn.meta.is_entry and rn.node_def.subflow_of is None
     ]
-    on_events = [
-        nid for nid, rn in nodes.items()
-        if rn.meta.name == "OnEvent" and rn.node_def.subflow_of is None
-    ]
-    on_varchange = [
-        nid for nid, rn in nodes.items()
-        if rn.meta.name == "OnVariableChange" and rn.node_def.subflow_of is None
-    ]
-    all_entries = on_starts + on_events + on_varchange
-    if not all_entries:
-        err.add("The flow has no entry node (OnStart, OnEvent, or OnVariableChange)")
+    if not entries:
+        err.add("The flow has no entry node")
         return ""
-    if len(on_starts) > 1:
-        err.add(f"The flow has more than one OnStart node: {on_starts}")
-    # Prefer OnStart for direct execution; otherwise an externally-triggered
-    # entry point (OnEvent or OnVariableChange).
-    if on_starts:
-        return on_starts[0]
-    if on_events:
-        return on_events[0]
-    return on_varchange[0]
+    if len(entries) > 1:
+        err.add(f"The flow has more than one entry node: {entries}")
+    return entries[0]
 
 
 def _find_outputs(nodes: dict[str, ResolvedNode]) -> list[str]:

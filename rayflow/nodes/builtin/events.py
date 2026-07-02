@@ -20,6 +20,8 @@ class OnEvent:
     node's output (the entry node's flow_inputs are written as its
     outputs), so the subgraph consumes it as "<id>.payload".
     """
+    is_entry = True
+    exposes_flow_inputs = True
     event_name = Input("str", default="")
     exec_out = ExecOutput()
     payload = Output("Any")
@@ -42,6 +44,7 @@ class OnVariableChange:
     fire-and-forget with no order guarantee (same as the rest of the bus).
     """
     category = "Events"
+    is_entry = True
     variable = Input("str", default="")
     source   = Input("str", default="")
     value    = Output("Any")

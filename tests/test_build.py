@@ -52,6 +52,70 @@ def test_build_missing_entry_node():
         build(flow, catalog)
 
 
+def test_build_more_than_one_entry_node():
+    """A flow with two is_entry nodes (OnStart + OnEvent) must pick exactly one."""
+    flow = load_flow({
+        "name": "two_entries",
+        "nodes": [
+            {"id": "a", "type": "OnStart"},
+            {"id": "b", "type": "OnEvent"},
+        ],
+    })
+    catalog = _make_catalog()
+    with pytest.raises(BuildError, match="more than one entry"):
+        build(flow, catalog)
+
+
+def test_build_custom_entry_node():
+    """Any node with is_entry=True can be a flow's entry point, not just the builtins."""
+    from rayflow.nodes.decorators import engine_node, ExecOutput, Output
+
+    @engine_node
+    class MyTrigger:
+        is_entry = True
+        exec_out = ExecOutput()
+        value = Output("int")
+
+    reset_catalog()
+    catalog = get_catalog()
+    catalog.register(MyTrigger)
+
+    flow = load_flow({
+        "name": "custom_entry",
+        "nodes": [
+            {"id": "trig", "type": "MyTrigger"},
+            {"id": "out", "type": "FlowOutput", "exec_in": "trig"},
+        ],
+    })
+    built = build(flow, catalog)
+    assert built.entry_node_id == "trig"
+
+
+def test_build_ray_node_with_is_entry_rejected():
+    """is_entry=True nodes must be @engine_node/@parallel_node — the entry
+    short-circuit lives in _fire_engine_node and never calls a @ray_node's run()."""
+    from rayflow.nodes.decorators import ray_node, ExecOutput
+
+    with pytest.raises(ValueError, match="is_entry"):
+        @ray_node
+        class BadRayEntry:
+            is_entry = True
+            exec_out = ExecOutput()
+
+
+def test_build_entry_node_with_exec_in_rejected():
+    """An is_entry=True node must not declare exec_in — nothing inside the
+    graph should be able to fire an entry node."""
+    from rayflow.nodes.decorators import engine_node, ExecInput, ExecOutput
+
+    with pytest.raises(ValueError, match="exec_in"):
+        @engine_node
+        class BadWiredEntry:
+            is_entry = True
+            exec_in = ExecInput()
+            exec_out = ExecOutput()
+
+
 def test_build_exec_input_missing():
     """FlowOutput requires exec_in but doesn't have it."""
     flow = load_flow({

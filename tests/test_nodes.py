@@ -51,6 +51,35 @@ def test_engine_node_decorator_extracts_meta():
     assert len(meta.exec_outputs) == 2
 
 
+def test_engine_node_is_entry_defaults_false():
+    @engine_node
+    class PlainNode:
+        exec_in = ExecInput()
+        exec_out = ExecOutput()
+
+        def run(self, ctx: ExecContext) -> dict:
+            ctx.fire("exec_out")
+            return {}
+
+    meta = get_node_meta(PlainNode)
+    assert meta is not None
+    assert meta.is_entry is False
+    assert meta.exposes_flow_inputs is False
+
+
+def test_engine_node_is_entry_extracted():
+    @engine_node
+    class MyTrigger:
+        is_entry = True
+        exposes_flow_inputs = True
+        exec_out = ExecOutput()
+
+    meta = get_node_meta(MyTrigger)
+    assert meta is not None
+    assert meta.is_entry is True
+    assert meta.exposes_flow_inputs is True
+
+
 def test_data_node_has_no_exec():
     @ray_node
     class MultiplyNode:

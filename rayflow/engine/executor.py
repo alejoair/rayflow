@@ -255,7 +255,7 @@ class FlowEngine:
                 run.output_refs.update(inputs)
             return []
 
-        if name in ("OnStart", "OnEvent", "OnVariableChange"):
+        if rnode.meta.is_entry:
             await self._write_node_outputs(run, node_id, inputs)
             targets = rnode.exec_targets.get("exec_out", [])
             if len(targets) > 1:

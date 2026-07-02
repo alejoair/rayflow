@@ -245,6 +245,14 @@ class NodeMeta:
     is_builtin: bool = False           # True for a builtin node, False for custom
     category: str = "General"          # User-facing category: "Control", "Math", etc.
     description: str | None = None     # Class docstring
+    is_entry: bool = False             # Can be a flow's entry point (consumed generically
+                                        # by _find_entry/_fire_engine_node, same pattern as
+                                        # is_parallel — not a name comparison)
+    exposes_flow_inputs: bool = False  # Gets the flow's declared `inputs` + the fixed
+                                        # headers/query/body/method pins injected as dynamic
+                                        # outputs (_with_dynamic_pins). Narrower than
+                                        # is_entry: OnVariableChange is an entry but doesn't
+                                        # want this — its outputs are its own static pins.
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -273,6 +281,13 @@ def ray_node(cls: type) -> type:
     Without exec pins → a Ray task (a pure function evaluated on demand).
     """
     meta = _extract_meta(cls)
+    if meta.is_entry:
+        raise ValueError(
+            f"{cls.__name__}: is_entry=True nodes must be @engine_node or "
+            f"@parallel_node, not @ray_node — the entry short-circuit in "
+            f"FlowEngine._fire_engine_node never calls run(), so a @ray_node "
+            f"entry's run() would silently never execute."
+        )
     meta.is_engine_node = False
     if meta.is_exec_node:
         original_run = cls.run
@@ -380,6 +395,15 @@ def _extract_meta(cls: type) -> NodeMeta:
     # Extract the category from the class attribute (if present).
     category = getattr(cls, 'category', 'General')  # Defaults to "General"
 
+    # Entry-point flags (class attributes, same convention as `category`).
+    is_entry = getattr(cls, 'is_entry', False)
+    exposes_flow_inputs = getattr(cls, 'exposes_flow_inputs', False)
+    if is_entry and has_exec_in:
+        raise ValueError(
+            f"{cls.__name__}: is_entry=True nodes must not declare exec_in — "
+            f"nothing inside the graph should be able to fire an entry node."
+        )
+
     return NodeMeta(
         name=cls.__name__,
         py_class=cls,
@@ -391,6 +415,8 @@ def _extract_meta(cls: type) -> NodeMeta:
         is_exec_node=is_exec_node,
         description=description,  # ← extracted docstring
         category=category,        # ← class category
+        is_entry=is_entry,
+        exposes_flow_inputs=exposes_flow_inputs,
     )
 
 
