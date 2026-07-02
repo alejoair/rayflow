@@ -528,28 +528,9 @@ class LoadedFlow:
             pass
 
 
-# ---------------------------------------------------------------------------
-# Global registry of loaded flows (in the driver process)
-# ---------------------------------------------------------------------------
-
-_loaded_flows: dict[str, LoadedFlow] = {}
-
-
-def get_loaded_flow(name: str) -> LoadedFlow | None:
-    return _loaded_flows.get(name)
-
-
-def load_flow_into_ray(built: BuiltFlow) -> LoadedFlow:
-    lf = LoadedFlow.load(built)
-    _loaded_flows[built.flow_def.name] = lf
-    return lf
-
-
-def unload_flow_from_ray(name: str) -> None:
-    lf = _loaded_flows.pop(name, None)
-    if lf:
-        lf.unload()
-
-
-def is_flow_loaded(name: str) -> bool:
-    return name in _loaded_flows
+# NOTE: The previous process-wide registry of loaded flows (`_loaded_flows`,
+# `get_loaded_flow`, `load_flow_into_ray`, `unload_flow_from_ray`,
+# `is_flow_loaded`) has moved to rayflow/registry.py, which is now the single
+# source of truth for "which flows are currently served". `LoadedFlow` stays
+# here as a pure constructor/wrapper of live Ray actors — the registry holds
+# ServedFlow instances that reference a LoadedFlow via the `.loaded` field.

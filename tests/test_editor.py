@@ -364,6 +364,7 @@ def _parse_sse_result(r) -> dict:
 
 def test_run_flow_from_editor(client):
     client.post("/editor/flows", json=SUMA)
+    client.post("/editor/flows/suma/load")
     r = client.post(
         "/flows/suma/run",
         json={"x": 4, "y": 6},
@@ -375,6 +376,7 @@ def test_run_flow_from_editor(client):
 
 def test_run_flow_from_editor_without_stream_header_returns_json(client):
     client.post("/editor/flows", json=SUMA)
+    client.post("/editor/flows/suma/load")
     r = client.post("/flows/suma/run", json={"x": 4, "y": 6})
     assert r.status_code == 200
     assert r.json()["resultado"] == 10
@@ -387,6 +389,7 @@ def test_run_flow_nonexistent(client):
 
 def test_run_flow_body_is_not_an_object(client):
     client.post("/editor/flows", json=MINIMAL)
+    client.post("/editor/flows/minimal/load")
     r = client.post("/flows/minimal/run", json=[1, 2])
     assert r.status_code == 400
 
@@ -465,6 +468,7 @@ def test_custom_node_passes_validation(client_with_custom_node, tmp_path, monkey
 def test_custom_engine_node_runs(client_with_custom_node):
     """A custom @engine_node runs on the driver — doesn't depend on Ray's runtime_env."""
     client_with_custom_node.post("/editor/flows", json=DUPLICATE_FLOW)
+    client_with_custom_node.post("/editor/flows/duplicate_flow/load")
     r = client_with_custom_node.post(
         "/flows/duplicate_flow/run",
         json={"n": 7},

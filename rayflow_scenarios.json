@@ -4,31 +4,63 @@
     {
       "id": "editor-visual-run",
       "title": "A user runs a flow from the visual editor and watches it animate",
-      "systems_path": ["frontend-panels", "frontend-state", "editor-api", "engine", "state", "frontend-canvas"],
-      "narrative": "RunsPanel triggers a POST to /editor/flows/{name}/run via the typed client in frontend-state's api.ts. editor-api's routes.py hands off to execute_async, which spawns the flow in the engine system: FlowEngine walks the BuiltFlow node by node, pushing node_start/edge_fire/node_done events fire-and-forget into the RunQueue actor (state system) as it goes, and awaiting flow_done/flow_error at the end so the sub-queue can be closed safely. frontend-state's useRunStream hook consumes that SSE stream (reconnecting on drop via the run_id from run_start) and drives the animation state that frontend-canvas's FlowCanvas/NodeCard render. The user never sees any of this handoff — they just see nodes light up in execution order."
+      "systems_path": [
+        "frontend-panels",
+        "frontend-state",
+        "editor-api",
+        "engine",
+        "state",
+        "frontend-canvas",
+        "server"
+      ],
+      "narrative": "RunsPanel triggers a POST to /flows/{name}/run via the typed client in frontend-state's api.ts (the same single run endpoint any external API caller would use). For that to succeed the flow must be in rayflow.registry — the editor's POST /editor/flows/{name}/load (or an earlier run via /run, but /run itself no longer auto-loads: 'served' = 'explicitly loaded'). editor-api's routes.py hands off to execute_async, which dispatches execute on the engine system's FlowEngine. FlowEngine walks the BuiltFlow node by node, AWAITING every event push (node_start/edge_fire/node_done, plus the terminal flow_done/flow_error) into the RunQueue actor (state system) so the terminal event is never reordered ahead of the per-node ones the driver is waiting on. frontend-state's useRunStream hook consumes that SSE stream (reconnecting on drop via the run_id from run_start) and drives the animation state that frontend-canvas's FlowCanvas/NodeCard render. The user never sees any of this handoff — they just see nodes light up in execution order."
     },
     {
       "id": "llm-agent-autonomous-build",
       "title": "An LLM agent authors, validates, and runs a flow through the MCP layer without touching the editor UI",
-      "systems_path": ["mcp", "schema", "build", "nodes", "editor-api", "engine"],
-      "narrative": "An external LLM client calls get_guide and list_nodes (mcp system) to learn the node vocabulary, drafts a FlowDef, and loops on validate_flow until build's validate_all() returns no errors (it collects every problem in one pass instead of raising on the first, precisely so an agent can fix several issues per round-trip instead of one). create_flow/update_flow reuse editor-api's storage.py directly (same process, same logic the visual editor's REST routes use — the MCP layer is a curated subset, not a reimplementation). run_flow/test_flow then hand off to the engine system exactly as the visual editor does; the agent gets structured JSON back instead of watching an animation. The whole loop is designed to close in a handful of round-trips because validate_flow front-loads every error at once."
+      "systems_path": [
+        "mcp",
+        "schema",
+        "build",
+        "nodes",
+        "editor-api",
+        "engine",
+        "server"
+      ],
+      "narrative": "An external LLM client calls get_guide and list_nodes (mcp system) to learn the node vocabulary, drafts a FlowDef, and loops on validate_flow until build's validate_all() returns no errors (it collects every problem in one pass instead of raising on the first, precisely so an agent can fix several issues per round-trip instead of one). create_flow/update_flow reuse editor-api's storage.py directly (same process, same logic the visual editor's REST routes use — the MCP layer is a curated subset, not a reimplementation). Before run_flow/test_flow can execute, the flow must be registered in rayflow.registry: run_flow loads it on demand (via rayflow.api.load, which pre-validates + spawns actors) if it isn't already served; test_flow does the same. Once served, the engine system runs it exactly as the visual editor's /run does; the agent gets structured JSON back instead of watching an animation. The whole loop is designed to close in a handful of round-trips because validate_flow front-loads every error at once."
     },
     {
       "id": "event-reactive-flow",
       "title": "A flow reacts automatically when another flow changes a watched variable",
-      "systems_path": ["nodes", "state", "events", "engine"],
+      "systems_path": [
+        "nodes",
+        "state",
+        "events",
+        "engine"
+      ],
       "narrative": "Flow A's Set node writes a variable through the state system's GraphState actor, which only publishes to the events system's EventBroker if the value actually changed (comparing old vs new, resolving any ObjectRef first) — this is the single guard preventing write-storms from becoming trigger-storms. If Flow B is registered as watching that variable (via serve_events, which also marked it watched on Flow A's GraphState at registration time), the publish fires a Ray task that runs in a *different worker process* than the driver, resolves Flow B's engine/queue by their detached actor names (this worker's process-local registry is empty, so name lookup is the only option), and calls execute() on Flow B's engine directly. Flow B's OnVariableChange node receives value/old as if they were normal flow inputs. Two flows, zero shared memory, connected only by a string-matched event name."
     },
     {
       "id": "custom-node-hot-reload",
       "title": "A user edits a custom node's source in the browser and the next run uses the new code, with no server restart",
-      "systems_path": ["frontend-panels", "frontend-state", "editor-api", "nodes"],
+      "systems_path": [
+        "frontend-panels",
+        "frontend-state",
+        "editor-api",
+        "nodes"
+      ],
       "narrative": "CustomNodesPanel's CodeMirror editor sends the edited source via PUT /editor/custom-nodes/{name}/source. editor-api's custom_nodes_routes.py runs ast.parse() first — purely a syntax gate, it doesn't execute anything — writes the file only if that succeeds, then forces a hot reload: it evicts any custom_nodes.* modules cached in sys.modules (so the next import re-reads the file instead of serving a stale bytecode object) and calls reset_catalog() + get_catalog() to rebuild the nodes system's NodeCatalog from scratch. There's no process restart and no explicit signal to the frontend that anything changed — the next flow run simply resolves the node type against the freshly rebuilt catalog."
     },
     {
       "id": "callflow-subflow-splice",
       "title": "A flow embeds another flow as a reusable subflow, and the engine never finds out",
-      "systems_path": ["editor-api", "mcp", "schema", "build", "engine"],
+      "systems_path": [
+        "editor-api",
+        "mcp",
+        "schema",
+        "build",
+        "engine"
+      ],
       "narrative": "A flow can reference another saved flow via a CallFlow node — authored through either editor-api or mcp, both just producing a FlowDef against the schema system's models. All of the subflow handling happens once, at build time, entirely inside the build system: flatten() splices the sub-flow's nodes into the parent's namespace with ids prefixed like parent/sub/node, reparenting every exec and data reference (_reparent_exec_in, _reparent_inputs) so they point at the new prefixed ids. By the time a BuiltFlow reaches the engine system, CallFlow boundaries no longer exist as a runtime concept — FlowEngine executes one flat graph and has no idea nesting was ever involved. This is why 'one node = one Python class' and 'flat namespace' are both true at once: nesting is a build-time illusion, not a runtime one."
     }
   ]

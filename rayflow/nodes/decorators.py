@@ -249,6 +249,13 @@ class NodeMeta:
                                         # by _find_entry/_fire_engine_node, same pattern as
                                         # is_parallel — not a name comparison)
     exposes_flow_inputs: bool = False  # Gets the flow's declared `inputs` + the fixed
+    frontend: str | None = None        # If set, names a static bundle directory (HTML/
+                                        # JS/CSS) sibling to the node's source file that
+                                        # create_app() mounts at /flows/{name}/ui for any
+                                        # served flow whose entry node declares it. The
+                                        # bundle talks to the flow over the normal HTTP
+                                        # run endpoint — this flag only selects "what UI
+                                        # to serve", not a new transport.
                                         # headers/query/body/method pins injected as dynamic
                                         # outputs (_with_dynamic_pins). Narrower than
                                         # is_entry: OnVariableChange is an entry but doesn't
@@ -398,6 +405,7 @@ def _extract_meta(cls: type) -> NodeMeta:
     # Entry-point flags (class attributes, same convention as `category`).
     is_entry = getattr(cls, 'is_entry', False)
     exposes_flow_inputs = getattr(cls, 'exposes_flow_inputs', False)
+    frontend = getattr(cls, 'frontend', None)
     if is_entry and has_exec_in:
         raise ValueError(
             f"{cls.__name__}: is_entry=True nodes must not declare exec_in — "
@@ -417,6 +425,7 @@ def _extract_meta(cls: type) -> NodeMeta:
         category=category,        # ← class category
         is_entry=is_entry,
         exposes_flow_inputs=exposes_flow_inputs,
+        frontend=frontend,
     )
 
 

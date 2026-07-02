@@ -233,14 +233,15 @@
       "system": "server"
     },
     "rayflow/api.py": {
-      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray. The one-shot run() wrapper (load+execute+unload every call) was removed: rayflow/server.py was using it to serve HTTP requests, silently destroying and recreating a served flow's actors (losing GraphState) on every single request instead of reusing the persistent graph the engine already supports sharing across concurrent runs.",
+      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray. load() pre-validates (build) before spawning any actor, then constructs a ServedFlow and registers it in rayflow.registry. is_flow_loaded/get_loaded_flow remain as thin aliases over the registry for legacy callers. reconnect_async returns clean human-readable error messages (not raw Ray stacktraces) when a run_id is unknown or already closed.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/engine/executor.py",
         "rayflow/events/bus.py",
         "rayflow/nodes/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/workspace.py"
+        "rayflow/workspace.py",
+        "rayflow/registry.py"
       ],
       "dependents": [
         "rayflow/__init__.py",
@@ -817,7 +818,7 @@
       "system": "editor-api"
     },
     "rayflow/editor/routes.py": {
-      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/test endpoints, guide/examples, and event subscription — the same logic the MCP tools reuse. _node_spec() surfaces meta.is_entry (alongside is_parallel/is_builtin) so clients can discover which node types can be a flow's entry point generically instead of hardcoding names. Flow execution itself (POST /flows/{name}/run, GET /flows/{name}/run/{run_id}/stream) lives in rayflow/server.py, not here — but run_flow_response/wants_stream, the content-negotiation helpers that pick SSE vs. a single JSON response (Accept: text/event-stream), are defined here and imported by server.py so that logic isn't duplicated between served and editor-managed flows.",
+      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/test endpoints, guide/examples, and event subscription — the same logic the MCP tools reuse. _node_spec() surfaces meta.is_entry. Flow execution itself (POST /flows/{name}/run, GET /flows/{name}/run/{run_id}/stream) lives in rayflow/server.py, not here — but run_flow_response/wants_stream, the content-negotiation helpers that pick SSE vs. a single JSON response (Accept: text/event-stream), are defined here and imported by server.py so that logic isn't duplicated between served and editor-managed flows. POST /editor/flows/{name}/load now pre-validates (build) and returns 400 on BuildError; list_loaded_flows reads from rayflow.registry.",
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
@@ -827,7 +828,8 @@
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/types.py"
+        "rayflow/types.py",
+        "rayflow/registry.py"
       ],
       "dependents": [
         "rayflow/mcp/server.py",
@@ -880,7 +882,7 @@
       "system": "editor-api"
     },
     "rayflow/engine/__init__.py": {
-      "description": "Re-exports the engine's public symbols: LoadedFlow and the load/unload/get/is-loaded helpers.",
+      "description": "Re-exports LoadedFlow (the engine's only public symbol after the registry moved to rayflow/registry.py).",
       "depends_on": [
         "rayflow/engine/executor.py"
       ],
@@ -888,7 +890,7 @@
       "system": "engine"
     },
     "rayflow/engine/executor.py": {
-      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (the lifecycle of a flow's actors in Ray). _fire_engine_node's entry short-circuit (write flow_inputs as the node's own outputs, fan out over exec_out, no run() call) triggers on rnode.meta.is_entry generically, not a hardcoded OnStart/OnEvent/OnVariableChange name check — any @engine_node/@parallel_node with is_entry=True gets the same treatment. RunContext carries response_status/response_headers (set via ctx.set_response_status()/set_response_header()), included in the flow_done event so rayflow serve's HTTP layer can use them as the real response status/headers — invisible to non-HTTP callers since they live outside output_refs.",
+      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (the lifecycle of a flow's actors in Ray). The previous process-wide registry of loaded flows (_loaded_flows, load_flow_into_ray, unload_flow_from_ray, get_loaded_flow, is_flow_loaded) has moved to rayflow/registry.py, which is now the single source of truth for served flows. LoadedFlow stays here as a pure constructor/wrapper of live Ray actors — the registry holds ServedFlow instances that reference a LoadedFlow via the .loaded field.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/nodes/decorators.py",
@@ -934,7 +936,7 @@
       "system": "mcp"
     },
     "rayflow/mcp/server.py": {
-      "description": "Builds the FastMCP server exposing the curated MCP tool set for LLM agents: discovery (get_guide/list_nodes/get_node/list_types/type_check), validation (validate_flow), flow CRUD (list/get/create/update/delete_flow, flow_catalog), custom-node CRUD with hot reload (list/get_source/create/update_source/delete_custom_node, reload_custom_nodes), events (serve_flow_events, stop_flow_events), and execution (run_flow/test_flow with an optional trace of per-node events, unload_flow). All reuse the editor REST logic instead of reimplementing it. update_flow/delete_flow unload the flow from Ray if it was already loaded, so the next run picks up the change instead of silently reusing the stale graph.",
+      "description": "Builds the FastMCP server exposing the curated MCP tool set for LLM agents: discovery (get_guide/list_nodes/get_node/list_types/type_check), validation (validate_flow), flow CRUD (list/get/create/update/delete_flow, flow_catalog), custom-node CRUD with hot reload, events (serve_flow_events/stop_flow_events), and execution (run_flow/test_flow with optional trace, unload_flow). All reuse the editor REST logic via rayflow.api (which uses rayflow.registry internally) instead of reimplementing it. create_mcp() takes no parameters — served flows are read from the registry, not passed in.",
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
@@ -943,7 +945,8 @@
         "rayflow/editor/storage.py",
         "rayflow/nodes/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/types.py"
+        "rayflow/types.py",
+        "rayflow/registry.py"
       ],
       "dependents": [
         "rayflow/mcp/__init__.py",
@@ -1156,7 +1159,7 @@
       "system": "schema"
     },
     "rayflow/server.py": {
-      "description": "FastAPI app factory for `rayflow serve`: builds the REST API, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Loads every served flow (from `--file`) into Ray once at startup. POST /flows/{name}/run is the single execution endpoint for both served flows and editor-managed flows in flows/ (loaded into Ray on demand if not already served) — the editor frontend has no separate run route. It builds a flow_inputs dict per request (headers/query/body/method, alongside the parsed body) since the trigger IS the HTTP request, and delegates rendering the response (SSE stream vs. a single JSON reply once flow_done arrives, with response_status/response_headers from the flow_done event) to run_flow_response/wants_stream in rayflow/editor/routes.py. GET /flows/{name}/run/{run_id}/stream reconnects to an active run the same way for either kind of flow.",
+      "description": "FastAPI app factory for `rayflow serve`: builds the REST API, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Served flows are tracked in rayflow.registry — POST /flows/{name}/run, GET /flows/{name}/ui, GET /flows all consult that registry in runtime, so flows added later via POST /editor/flows/{name}/load are visible without rebuilding the app. /run returns 404 if the flow isn't served (no implicit on-demand loading anymore — 'served' = 'explicitly loaded'). /ui is served dynamically by a per-request FileResponse that resolves the entry node's `frontend` bundle from the catalog; it 404s automatically when the flow is unloaded. GET /flows/{name}/run/{run_id}/stream reconnects to an active run.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
@@ -1166,7 +1169,8 @@
         "rayflow/mcp/server.py",
         "rayflow/nodes/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/schema/models.py"
+        "rayflow/schema/models.py",
+        "rayflow/registry.py"
       ],
       "dependents": [
         "rayflow/cli/main.py",
@@ -1459,6 +1463,20 @@
         "tests/test_custom_nodes.py"
       ],
       "system": "tests"
+    },
+    "rayflow/registry.py": {
+      "description": "Process-wide registry of served flows — the single source of truth for 'which flows are currently served' (have live Ray actors and can receive requests). A neutral module-level dict with typed accessors (register_served/unregister_served/get_served/all_served/is_served/clear_served). Defines the ServedFlow class (source, flow_def, built, loaded: LoadedFlow). Consulted by rayflow.api (load/unload mutate it), rayflow.server (the /run, /ui, /flows endpoints read it), rayflow.editor.routes (the editor's /load, /unload, CRUD endpoints), and rayflow.mcp.server. Replaces the previous _loaded_flows module-level dict that lived in engine/executor.py — the fragmentation caused bugs like ChatTrigger's /ui bundle only being served for --file flows, not editor-loaded ones.",
+      "depends_on": [
+        "rayflow/build/validator.py",
+        "rayflow/engine/executor.py",
+        "rayflow/schema/models.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/editor/routes.py",
+        "rayflow/mcp/server.py",
+        "rayflow/server.py"
+      ]
     }
   },
   "systems": {

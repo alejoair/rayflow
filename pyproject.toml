@@ -43,6 +43,7 @@ include = ["rayflow*"]
 "rayflow.editor.static" = ["dist/**/*"]
 "rayflow.editor.examples" = ["*.json"]
 "rayflow.claude_tools" = ["**/*.md", "mcp.json"]
+"rayflow.nodes.builtin" = ["*_frontend/**/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

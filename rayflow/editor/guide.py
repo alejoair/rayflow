@@ -32,10 +32,15 @@ A flow is a graph of nodes connected by two kinds of wire:
 ## Wiring rules
 
 - **Every flow needs exactly one entry node** — a node type declaring
-  `is_entry = True`. The three built-ins are `OnStart` (direct execution),
-  `OnEvent` (event-triggered), and `OnVariableChange` (variable change); a
-  custom node can declare the same flag. Declaring more than one entry node
-  in the same flow is a build error.
+  `is_entry = True`. The built-ins are `OnStart` (direct execution),
+  `OnEvent` (event-triggered), `OnVariableChange` (variable change), and
+  `ChatTrigger` (`OnStart` + a built-in chat UI served at
+  `/flows/{name}/ui`); a custom node can declare the same flag. Declaring
+  more than one entry node in the same flow is a build error. Any entry
+  node may optionally declare `frontend = "<dir>"` to serve a static UI
+  bundle at `/flows/{name}/ui` when the flow is served (`rayflow serve
+  --file`) — the bundle's JS talks to the flow over the normal
+  `/flows/{name}/run` endpoint.
 - **Exec edges**: declared FROM the consumer with `exec_in`:
   - `"exec_in": "node_id"` -> the source node's default exec output.
   - `"exec_in": "node_id.pin"` -> a specific exec output (`branch.true`, `seq.then_0`).

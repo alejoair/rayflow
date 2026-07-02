@@ -9,32 +9,65 @@ import ray
 from rayflow.schema.loader import load_flow
 from rayflow.nodes.registry import get_catalog
 from rayflow.build.validator import build
-from rayflow.engine.executor import (
-    load_flow_into_ray,
-    unload_flow_from_ray,
-    get_loaded_flow,
-    is_flow_loaded,
+from rayflow.engine.executor import LoadedFlow
+from rayflow.registry import (
+    ServedFlow,
+    register_served,
+    unregister_served,
+    get_served,
+    is_served,
 )
 
 
 def load(source: str | Path | dict) -> str:
-    """Loads a flow into Ray: creates actors and a persistent GraphState.
+    """Loads a flow into Ray: pre-validates, creates actors and a persistent
+    GraphState, and registers it as a served flow.
 
-    Idempotent: if the flow is already loaded, it reloads it (destroys and recreates).
+    Idempotent: if the flow is already loaded, it reloads it (destroys and
+    recreates actors and registry entry).
+
+    The pre-validation (`build()`) runs BEFORE any actor is spawned, so an
+    invalid flow fails loudly without leaking half-built state.
 
     Returns:
         graph_id of the loaded flow (= the flow's name).
     """
     flow_def = load_flow(source)
     catalog = get_catalog()
-    built = build(flow_def, catalog)
-    lf = load_flow_into_ray(built)
+    built = build(flow_def, catalog)  # pre-validate — raises BuildError before any actor is spawned
+
+    name = flow_def.name
+    # Reload semantic: if already served, kill its actors first.
+    existing = get_served(name)
+    if existing is not None and existing.loaded is not None:
+        existing.loaded.unload()
+
+    lf = LoadedFlow.load(built)
+    register_served(ServedFlow(source, flow_def, built, loaded=lf))
     return lf.graph_id
 
 
 def unload(name: str) -> None:
-    """Unloads a flow from Ray, destroying its actors and GraphState."""
-    unload_flow_from_ray(name)
+    """Unloads a flow from Ray, destroying its actors and GraphState, and
+    removes it from the served registry. No-op if the flow wasn't loaded."""
+    sf = unregister_served(name)
+    if sf is not None and sf.loaded is not None:
+        sf.loaded.unload()
+
+
+def get_loaded_flow(name: str):
+    """Returns the LoadedFlow for `name`, or None if not served.
+
+    Thin adapter over the registry — kept so existing callers (e.g. execute()
+    below, mcp/server.py) work unchanged.
+    """
+    sf = get_served(name)
+    return sf.loaded if sf is not None else None
+
+
+def is_flow_loaded(name: str) -> bool:
+    """True if `name` is currently in the served registry."""
+    return is_served(name)
 
 
 def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[dict, None, None]:
@@ -124,8 +157,21 @@ async def reconnect_async(name: str, run_id: str) -> AsyncGenerator[dict, None]:
             yield evt
             if evt.get("event") in ("flow_done", "flow_error"):
                 break
+    except KeyError as e:
+        # Ray wraps the RunQueue's KeyError("unknown run_id: ...") with a
+        # full internal traceback in str(e). Surface just the message, not
+        # the framework's plumbing — callers (HTTP /stream, MCP) get a clean
+        # error string without leaking implementation details.
+        msg = str(e)
+        if "unknown run_id" in msg:
+            msg = f"Run '{run_id}' is not active (it already finished or never existed)"
+        yield {"event": "flow_error", "error": msg, "ts": 0}
     except Exception as e:
-        yield {"event": "flow_error", "error": str(e), "ts": 0}
+        # Other Ray actor errors: keep type name + message, skip the
+        # multi-line traceback that Ray prepends (it leaks actor ids,
+        # pid, ip, file paths — not useful to API callers).
+        msg = str(e).split("\n")[-1] if "\n" in str(e) else str(e)
+        yield {"event": "flow_error", "error": msg, "ts": 0}
 
 
 def serve_events(source: str | Path | dict, extra_node_dirs: list[str | Path] | None = None) -> str:
@@ -141,7 +187,9 @@ def serve_events(source: str | Path | dict, extra_node_dirs: list[str | Path] | 
     catalog = get_catalog(extra_node_dirs)
     built = build(flow_def, catalog)
 
-    graph_id = load_flow_into_ray(built).graph_id
+    lf = LoadedFlow.load(built)
+    graph_id = lf.graph_id
+    register_served(ServedFlow(source, flow_def, built, loaded=lf))
 
     from rayflow.events.bus import get_event_broker
     broker = get_event_broker()
@@ -177,7 +225,9 @@ def stop(graph_id: str, event_names: list[str]) -> None:
     broker = get_event_broker()
     for event_name in event_names:
         ray.get(broker.unsubscribe.remote(event_name, graph_id))
-    unload_flow_from_ray(graph_id)
+    sf = unregister_served(graph_id)
+    if sf is not None and sf.loaded is not None:
+        sf.loaded.unload()
 
 
 @ray.remote
@@ -185,8 +235,8 @@ def _run_event_flow(flow_name: str, event_name: str, payload: Any) -> None:
     """Ray task that runs a resident flow when an event arrives.
 
     Resolves the flow via its named actors (engine_/queue_), not via the
-    _loaded_flows registry: this task runs on a Ray worker distinct from
-    the driver process, where _loaded_flows is empty. The loaded flow's
+    _loaded_flows registry (now rayflow.registry): this task runs on a Ray
+    worker distinct from the driver process, where the registry is empty. The loaded flow's
     detached actors ARE reachable by name from any process, though.
     """
     import uuid as _uuid

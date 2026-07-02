@@ -58,6 +58,23 @@ class OnStart:
     exposes_flow_inputs = True
     exec_out = ExecOutput()
 
+
+@engine_node
+class ChatTrigger:
+    """Entry point of the flow with a built-in chat UI.
+
+    Mechanically identical to OnStart (its data outputs are generated at
+    build time from the flow's declared `inputs`), but declares `frontend`
+    so create_app() serves the bundled chat page at /flows/{name}/ui when
+    the flow is served. The page POSTs the user's message to the normal
+    /flows/{name}/run endpoint — no new transport.
+    """
+    category = "Control"
+    is_entry = True
+    exposes_flow_inputs = True
+    frontend = "chat_trigger_frontend"
+    exec_out = ExecOutput()
+
 @engine_node
 class FlowOutput:
     """Exit point of the flow.

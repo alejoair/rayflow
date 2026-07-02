@@ -150,13 +150,15 @@ Un flow necesita **exactamente un** nodo de entrada — el punto donde el engine
 class MiTrigger:
     is_entry = True              # puede ser el entry point de un flow
     exposes_flow_inputs = True   # opcional: inyecta flow.inputs + headers/query/body/method como outputs dinámicos
+    frontend = "mi_trigger_ui"   # opcional: nombre del directorio de UI a servir en /flows/{name}/ui
     exec_out = ExecOutput()
 ```
 
 - **`is_entry`**: lo reconoce `_find_entry` (`build/validator.py`) al buildear — si el flow declara cero o más de un nodo con `is_entry = True`, `build()` falla ("no entry node" / "more than one entry node"). En runtime, `_fire_engine_node` (`engine/executor.py`) trata a un nodo de entrada como puro passthrough: sus `flow_inputs` se escriben como sus outputs y dispara `exec_out` — **nunca llama a `run()`**. Cualquier lógica sobre el payload recibido va en un nodo normal wireado después de su `exec_out`.
 - **`exposes_flow_inputs`**: más angosto que `is_entry` — inyecta dinámicamente los `inputs` declarados del flow más los 4 pines fijos `headers`/`query`/`body`/`method` como outputs (ver "Un solo endpoint de ejecución" más abajo). `OnVariableChange` es un nodo de entrada que NO lo declara, porque sus outputs (`value`/`old`) son pines estáticos propios.
+- **`frontend`** (str, opcional): nombre de un directorio de assets estáticos (HTML/JS/CSS) hermano del archivo `.py` del nodo. Si el entry de un flow servido lo declara, `create_app` (`rayflow/server.py`) monta ese directorio en `GET /flows/{name}/ui` con `StaticFiles(html=True)`. El bundle es **neutral al tipo de entry**: el framework no impone cómo la UI habla con el flow — para `OnStart`/`ChatTrigger` el JS típicamente POSTea a `/flows/{name}/run`; otro entry (p.ej. un `OnVariableChange` con UI de dashboard) podría no usar `/run`. Hay a lo sumo un `frontend` por flow (garantizado por exactly-one-entry). El directorio se resuelve vía `inspect.getfile(cls).parent / frontend`, así que para built-ins vive en `rayflow/nodes/builtin/<bundle>/` y para custom en `custom_nodes/<bundle>/` (empaquetado como package-data, no distribuido a workers — lo sirve el proceso FastAPI). Si el directorio declarado no existe, se loguea un warning y la ruta `/ui` no se monta (no rompe el startup). **`ChatTrigger`** es el built-in de referencia: idéntico a `OnStart` pero con `frontend = "chat_trigger_frontend"`, así que cualquier flow con entry `ChatTrigger` expone una UI de chat estilo n8n.
 - **Restricciones validadas al decorar/registrar** (`ValueError` inmediato): un nodo `is_entry = True` no puede declarar `exec_in` (nada dentro del grafo debe poder dispararlo), ni estar decorado con `@ray_node` (el short-circuit de entrada vive en `_fire_engine_node`, que nunca llama a `run()` — un `@ray_node` sí lo llamaría, silenciosamente nunca ejecutándose). Usar `@engine_node`/`@parallel_node`.
-- `OnStart`, `OnEvent`, y `OnVariableChange` son los tres tipos built-in con `is_entry = True` — no una lista cerrada del engine.
+- `OnStart`, `OnEvent`, `OnVariableChange`, y `ChatTrigger` son los cuatro tipos built-in con `is_entry = True` — no una lista cerrada del engine.
 - **Excepción deliberada**: los subflows (`CallFlow`) siguen reconociendo su nodo de entrada spliceado por nombre literal (`OnStart`/`OnEvent`) en `_splice_subflow`, no por `is_entry` — un subflow se invoca inline por su padre (`CallFlow`), no se dispara desde afuera, así que generalizar ese camino no aplicaba.
 
 ### Estado en nodos
@@ -222,7 +224,7 @@ Antes se empujaban `node_start`/`edge_fire`/`node_done` fire-and-forget (sin `aw
 
 El costo es una RPC bloqueante por evento en el hot path del engine — se prioriza correctitud de la respuesta sobre esa latencia extra.
 
-**Un solo endpoint de ejecución, con content negotiation por header**: `POST /flows/{name}/run` (`rayflow/server.py`) es el único endpoint de ejecución HTTP — sirve tanto flows servidos (`rayflow serve --file`, pre-cargados al arrancar) como flows del editor (`flows/`, cargados en Ray on-demand la primera vez que se corren). El editor visual no tiene su propia ruta de ejecución: `useRunStream.ts` pega contra el mismo `/flows/{name}/run` que pegaría cualquier caller externo. Dentro, `run_flow` decide si el flow ya está en `served` o si hace falta resolverlo/cargarlo desde el storage del editor, arma `flow_inputs`, y delega el renderizado de la respuesta a `run_flow_response`/`wants_stream` (en `rayflow/editor/routes.py`, reusado desde server.py para no duplicar esa lógica) — que decide el formato según el header `Accept` de la request: `Accept: text/event-stream` devuelve el stream SSE completo, cualquier otro valor (o ausencia del header) drena `execute_async()` internamente y devuelve un solo JSON con los outputs una vez que llega `flow_done`. El frontend manda explícitamente ese header en cada `POST .../run`.
+**Un solo endpoint de ejecución, con content negotiation por header**: `POST /flows/{name}/run` (`rayflow/server.py`) es el único endpoint de ejecución HTTP — requiere que el flow esté **servido** (cargado en `rayflow.registry`). Servido = "validado y con actores Ray vivos", y se llega por dos caminos equivalentes: `rayflow serve --file` al arranque, o `POST /editor/flows/{name}/load` en runtime. Ambos pre-validan (`build()`) y pre-cargan (`LoadedFlow.load`) de forma idéntica. Un flow que no esté servido devuelve **404** — ya no hay auto-carga on-demand desde `/run` (decisión deliberada: "servido" = "cargado explícitamente"). El editor visual no tiene su propia ruta de ejecución: `useRunStream.ts` pega contra el mismo `/flows/{name}/run` que pegaría cualquier caller externo. `run_flow` delega el renderizado de la respuesta a `run_flow_response`/`wants_stream` (en `rayflow/editor/routes.py`, reusado desde server.py para no duplicar esa lógica) — que decide el formato según el header `Accept` de la request: `Accept: text/event-stream` devuelve el stream SSE completo, cualquier otro valor (o ausencia del header) drena `execute_async()` internamente y devuelve un solo JSON con los outputs una vez que llega `flow_done`. El frontend manda explícitamente ese header en cada `POST .../run`.
 
 **Reconexión SSE**: si el cliente pierde la conexión mientras el flow corre, puede reconectarse usando el `run_id` recibido en `run_start`:
 
@@ -231,6 +233,8 @@ GET /flows/{name}/run/{run_id}/stream
 ```
 
 Este endpoint (también en `rayflow/server.py`, junto a `run_flow`) consume la sub-queue existente sin relanzar la ejecución ni cerrarla — funciona igual para un flow servido o uno del editor, ya que solo depende de que el flow esté cargado en Ray (`is_flow_loaded`). El frontend (`useRunStream.ts`) lo hace automáticamente: hasta 5 reintentos con backoff lineal de 500 ms, solo si no se había recibido un evento terminal (`flow_done`/`flow_error`) antes de que el stream cayera.
+
+**Frontend bundle por flow** (`GET /flows/{name}/ui`): si el entry de un flow servido declaró `frontend` (ver "Nodos de entrada"), el handler dinámico de `rayflow/server.py` sirve ese bundle de assets desde `/flows/{name}/ui`. Aplica a **todo flow en el registry** — tanto los servidos por CLI (`rayflow serve --file`) como los cargados desde el editor (`POST /editor/flows/{name}/load`). La UI se "monta y desmonta" automáticamente según la presencia del flow en el registry: un `DELETE /editor/flows/{name}/load` hace que `/ui` devuelva 404 al instante, sin necesidad de desmontar nada en el router. La UI habla con el flow por el mismo `/flows/{name}/run` de siempre — el atributo `frontend` solo selecciona "qué UI servir", no es un transporte nuevo. `ChatTrigger` (built-in) expone así una UI de chat estilo n8n.
 
 ### Descubrimiento de nodos
 El servidor carga nodos desde:
@@ -434,12 +438,13 @@ No usar el componente `<Badge>` de shadcn (tiene problemas de tipos). Usar spans
 
 ```
 load(flow_json)
-  └─ build()               # valida + produce BuiltFlow
+  └─ build()               # pre-valida + produce BuiltFlow (falla loud sin levantar actores)
   └─ LoadedFlow.load()
        ├─ spawn @ray_node actors  (uno por nodo exec con decorator ray_node)
        ├─ spawn FlowEngine actor  (engine_{flow_name}, lifetime="detached")
        ├─ spawn GraphState actor  (gs_{flow_name}, lifetime="detached")
        └─ spawn RunQueue actor    (queue_{flow_name}, lifetime="detached")
+  └─ register_served(ServedFlow(...))   # ← lo agrega al registry (rayflow.registry)
 
 execute(flow_name, inputs)
   └─ genera run_id (uuid hex 8 chars)
@@ -450,6 +455,7 @@ execute(flow_name, inputs)
   └─ al llegar flow_done/flow_error → queue.close_run(run_id)
 
 unload(flow_name)
+  └─ unregister_served(flow_name)        # ← lo quita del registry
   └─ kill actors @ray_node + FlowEngine + GraphState + RunQueue
 ```
 
@@ -475,7 +481,7 @@ stop(graph_id, event_names)
   └─ EventBroker.unsubscribe() + unload()
 ```
 
-- `_run_event_flow` corre como task `@ray.remote` en un **worker distinto del proceso driver**, donde el registro `_loaded_flows` está vacío. Por eso resuelve el flow receptor por sus **actores detached con nombre** (`engine_{flow}`/`queue_{flow}`), no con `get_loaded_flow()`. Y como dispara `engine.execute` directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes — aisladas por el `RunContext` de cada una (sin lock).
+- `_run_event_flow` corre como task `@ray.remote` en un **worker distinto del proceso driver**, donde el registry (`rayflow.registry`) está vacío. Por eso resuelve el flow receptor por sus **actores detached con nombre** (`engine_{flow}`/`queue_{flow}`), no con `get_served()`. Y como dispara `engine.execute` directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes — aisladas por el `RunContext` de cada una (sin lock).
 - El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
@@ -503,11 +509,12 @@ Set escribe variable vigilada → GraphState.set_variable
 
 | Archivo | Responsabilidad |
 |---------|----------------|
-| `rayflow/server.py` | FastAPI app, monta editor estático y ambos routers |
+| `rayflow/server.py` | FastAPI app, monta editor estático y ambos routers, handler dinámico `/ui` |
 | `rayflow/editor/routes.py` | Endpoints de flows, catálogo y ejecución |
 | `rayflow/editor/custom_nodes_routes.py` | CRUD de nodos custom + hot reload del catálogo |
 | `rayflow/editor/storage.py` | CRUD de flows en disco |
-| `rayflow/engine/executor.py` | `FlowEngine` (actor Ray), `LoadedFlow` (ciclo de vida) |
+| `rayflow/registry.py` | **Única fuente de verdad** sobre flows servidos. Módulo neutral (sin FastAPI ni Ray) con dict process-level y accesores `register_served`/`unregister_served`/`get_served`/`all_served`/`is_served`/`clear_served`. Define la clase `ServedFlow` |
+| `rayflow/engine/executor.py` | `FlowEngine` (actor Ray), `LoadedFlow` (wrapper de actores, **sin registry** — eso vive en `rayflow/registry.py`) |
 | `rayflow/build/validator.py` | `flatten()`, `build()`, validación de tipos |
 | `rayflow/nodes/decorators.py` | `@ray_node`, `@engine_node`, `@parallel_node`, `ExecContext` |
 | `rayflow/nodes/loader.py` | `NodeCatalog`: registro, aliases, carga desde disco |
