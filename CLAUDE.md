@@ -194,15 +194,15 @@ El FlowEngine empuja eventos a la sub-queue del run activo; FastAPI los consume 
 | `flow_done` | `result`, `ts` | `FlowEngine` |
 | `flow_error` | `error`, `ts` | `FlowEngine` |
 
-**Regla crítica de rendimiento**: `node_start`, `node_done` y `edge_fire` se empujan **fire-and-forget** (sin `await`):
+**Los 5 eventos (`node_start`, `edge_fire`, `node_done`, `flow_done`, `flow_error`) se empujan con `await`**:
 
 ```python
-self._run_queue.push.remote(self._run_id, {...})  # NO await — fire-and-forget
+await run.queue.push.remote(run.run_id, {...})
 ```
 
-Si se usara `await`, el FlowEngine (actor Ray con event loop secuencial) bloquearía esperando la confirmación del push. El orden FIFO está garantizado por el event loop secuencial del actor `RunQueue`, así que `await` es innecesario para correctitud.
+Antes se empujaban `node_start`/`edge_fire`/`node_done` fire-and-forget (sin `await`), asumiendo que el orden FIFO quedaba garantizado solo por el event loop secuencial del actor `RunQueue`. Eso no alcanzaba: como `flow_done` sí se esperaba, era posible que `execute()` terminara y su push de `flow_done` ya estuviera en el mailbox de la `RunQueue` mientras los pushes fire-and-forget anteriores todavía estaban en vuelo. Un driver que drena la queue (`execute_async()`) corta el loop en cuanto ve `flow_done`/`flow_error` — así que esos eventos por-nodo, si llegaban después, **no aparecían en la respuesta** (trace vacío en `run_flow`/`test_flow` con `trace=True`, o en el stream SSE), no solo desordenados. `await` en cada push garantiza que cada evento esté confirmado en el mailbox antes de que se dispare el siguiente, así que `flow_done` nunca se adelanta.
 
-`flow_done` y `flow_error` sí usan `await` — para garantizar que el evento llegue antes de que el driver cierre la sub-queue.
+El costo es una RPC bloqueante por evento en el hot path del engine — se prioriza correctitud de la respuesta sobre esa latencia extra.
 
 **Reconexión SSE**: si el cliente pierde la conexión mientras el flow corre, puede reconectarse usando el `run_id` recibido en `run_start`:
 
