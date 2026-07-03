@@ -1,7 +1,7 @@
 {
   "$schema_note": "Cola de issues ABIERTOS detectados al comparar RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del repo. Cada issue enlaza claim_ids (RAYFLOW_SOURCE_OF_TRUTH.json), files (rutas afectadas, típicamente ya en rayflow_file_map.json), y docs (archivos de documentación en prosa que también quedan desactualizados: CLAUDE.md, README.md, SKILL.md, guide.py, etc.). Este archivo NO acumula historial: 'resolver' un issue es eliminarlo del array en el mismo commit que aplica el fix — el historial completo (cuándo se creó, cuándo se resolvió, en qué commit) vive en `git log -p -- rayflow_issues.json` / `git blame`, no acá. `next_id` es un contador monótono que nunca retrocede ni reutiliza ids, aunque el array se achique — por eso puede haber huecos en la numeración. Ver docs/issues_system.md para el diseño completo.",
   "schema_version": 1,
-  "next_id": 2,
+  "next_id": 5,
   "issues": [
     {
       "id": "ISSUE-0001",
@@ -28,6 +28,103 @@
         {
           "file": "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx",
           "note": "Props de FlowSettingsDialog ya no incluyen `inputs` — solo `outputs` (ver commit 9191da8)."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0002",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "El SOT afirma 'React 18' pero el frontend real corre React 19",
+      "summary": "La claim de stack en la sección Frontend (editor visual) dice 'Stack: React 18 + TypeScript + Vite.' pero package.json y package-lock.json fijan react/react-dom en ^19.2.6 — no hay ninguna dependencia resuelta en la línea 18.x. Un agente que confíe en la afirmación podría asumir comportamiento/APIs de React 18 (p.ej. respecto a breaking changes) sobre un código que ya corre React 19.",
+      "claim_ids": [
+        "frontend-editor-visual#stack-react-18-typescript-vite"
+      ],
+      "files": [
+        "rayflow/editor/frontend/package.json",
+        "rayflow/editor/frontend/package-lock.json"
+      ],
+      "docs": [
+        "docs/frontend.md"
+      ],
+      "detected_by": {
+        "agent": "audit-sot-parallel-workflow",
+        "run_id": "audit-sot-parallel-2026-07-03-frontend-editor-visual-group",
+        "trigger": "manual"
+      },
+      "detected_at": "2026-07-03T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/frontend/package.json",
+          "note": "dependencies declara \"react\": \"^19.2.6\" y \"react-dom\": \"^19.2.6\" (líneas 28-29)."
+        },
+        {
+          "file": "rayflow/editor/frontend/package-lock.json",
+          "note": "La resolución raíz del lockfile confirma react/react-dom en 19.2.6, no en la serie 18.x."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0003",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "CustomNodesPanel.tsx ya no es el editor CodeMirror — solo lista archivos; el editor real es CodeEditor.tsx",
+      "summary": "La claim describe 'CustomNodesPanel.tsx: sidebar izq, editor CodeMirror de nodos custom (colapsable).' pero el componente real es únicamente una lista colapsable de archivos custom_nodes (crear/abrir/eliminar) y no importa CodeMirror en ningún lado. El editor CodeMirror en sí (import de '@uiw/react-codemirror', highlighting Python, tema oneDark) vive en un componente separado, CodeEditor.tsx, montado en el área central de App.tsx (reemplazando FlowCanvas cuando hay una pestaña de código activa), no dentro del sidebar. Un agente que busque el editor CodeMirror dentro de CustomNodesPanel.tsx no lo encontraría.",
+      "claim_ids": [
+        "frontend-editor-visual#customnodespanel-tsx-sidebar-izq-editor-codemirror"
+      ],
+      "files": [
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/components/CodeEditor.tsx",
+        "rayflow/editor/frontend/src/App.tsx"
+      ],
+      "docs": [
+        "docs/frontend.md"
+      ],
+      "detected_by": {
+        "agent": "audit-sot-parallel-workflow",
+        "run_id": "audit-sot-parallel-2026-07-03-frontend-editor-visual-group",
+        "trigger": "manual"
+      },
+      "detected_at": "2026-07-03T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+          "note": "Componente completo: header colapsable + lista de archivos (crear/abrir/eliminar); no hay import de '@uiw/react-codemirror' ni de ningún módulo CodeMirror."
+        },
+        {
+          "file": "rayflow/editor/frontend/src/components/CodeEditor.tsx",
+          "note": "Importa CodeMirror de '@uiw/react-codemirror' (línea 2) y lo renderiza (línea ~87) — este es el componente que realmente implementa el editor."
+        },
+        {
+          "file": "rayflow/editor/frontend/src/App.tsx",
+          "note": "Importa CustomNodesPanel (línea 15) y CodeEditor (línea 16) por separado; CustomNodesPanel se renderiza en el sidebar (línea 530) y CodeEditor en el área central cuando hay pestaña de código activa (línea 540) — son dos componentes distintos, no uno anidado en otro."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0004",
+      "severity": "low",
+      "kind": "claim_contradicted",
+      "title": "El componente Button tiene 6 variantes reales (agrega secondary y link) pero la guía de UI solo documenta 4",
+      "summary": "La claim de reglas-de-ui sobre <Button> dice: 'Variantes disponibles: default (azul), outline (borde gris), destructive (rojo), ghost (transparente)'. El código real de button.tsx define VARIANT_STYLE con 6 keys: default, destructive, outline, secondary, ghost, link — todas implementadas con el mismo patrón de estilos inline que las 4 documentadas. Un agente que siga la guía al pie de la letra podría no saber que 'secondary' y 'link' ya existen y reimplementarlas o descartarlas por error, aunque el impacto práctico es bajo (variantes adicionales, no contradicción de comportamiento).",
+      "claim_ids": [
+        "reglas-de-ui#componente-button-src-components-ui-button"
+      ],
+      "files": [
+        "rayflow/editor/frontend/src/components/ui/button.tsx"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "audit-sot-parallel-workflow",
+        "run_id": "audit-sot-parallel-2026-07-03-reglas-de-ui-group",
+        "trigger": "manual"
+      },
+      "detected_at": "2026-07-03T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/frontend/src/components/ui/button.tsx",
+          "note": "VARIANT_STYLE (líneas 25-32) define 6 keys: default, destructive, outline, secondary, ghost, link — coherentes con el resto del componente (sin Tailwind), no solo las 4 mencionadas por la claim."
         }
       ]
     }
