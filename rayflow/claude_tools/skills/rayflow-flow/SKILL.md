@@ -15,8 +15,7 @@ them entirely through the MCP tools — don't hand-write flow JSON blind.
    session; it's the authoritative reference for flow JSON shape and wiring
    rules.
 2. `mcp__rayflow__list_nodes` (and `get_node` for exact pins) to learn the
-   vocabulary. `mcp__rayflow__list_examples` / `get_example` for a similar
-   pattern to start from.
+   vocabulary.
 3. Draft the FlowDef JSON.
 4. `mcp__rayflow__validate_flow` — **iterate on this until `valid: true`**.
    It returns every error in one pass (not just the first), so fix

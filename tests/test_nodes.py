@@ -1,6 +1,6 @@
 """Tests for the node definition and discovery system."""
 import pytest
-from rayflow.nodes.decorators import ray_node, engine_node, ExecContext, Input, Output, ExecInput, ExecOutput, get_node_meta
+from rayflow.nodes.decorators import ray_node, engine_node, entry_node, ExecContext, Input, Output, ExecInput, ExecOutput, get_node_meta
 from rayflow.nodes.loader import NodeCatalog
 from rayflow.nodes.registry import get_catalog, reset_catalog
 
@@ -64,20 +64,36 @@ def test_engine_node_is_entry_defaults_false():
     meta = get_node_meta(PlainNode)
     assert meta is not None
     assert meta.is_entry is False
-    assert meta.exposes_flow_inputs is False
 
 
 def test_engine_node_is_entry_extracted():
-    @engine_node
+    @entry_node
     class MyTrigger:
-        is_entry = True
-        exposes_flow_inputs = True
+        message = Input("str")
         exec_out = ExecOutput()
 
     meta = get_node_meta(MyTrigger)
     assert meta is not None
     assert meta.is_entry is True
-    assert meta.exposes_flow_inputs is True
+
+
+def test_entry_node_rejects_exec_in():
+    """@entry_node must not declare exec_in — nothing wires into an entry."""
+    import pytest
+    with pytest.raises(ValueError, match="exec_in"):
+        @entry_node
+        class BadEntry:
+            exec_in = ExecInput()
+            exec_out = ExecOutput()
+
+
+def test_entry_node_requires_exec_out():
+    """@entry_node must declare at least one ExecOutput."""
+    import pytest
+    with pytest.raises(ValueError, match="ExecOutput"):
+        @entry_node
+        class BadEntry:
+            message = Input("str")
 
 
 def test_frontend_flag_defaults_none_and_is_extracted():
@@ -94,11 +110,10 @@ def test_frontend_flag_defaults_none_and_is_extracted():
     assert get_node_meta(NoFrontend).frontend is None
 
     # A node declaring `frontend` (typically an entry node) surfaces the value.
-    @engine_node
+    @entry_node
     class UiTrigger:
-        is_entry = True
-        exposes_flow_inputs = True
         frontend = "ui_bundle"
+        message = Input("str")
         exec_out = ExecOutput()
 
     meta = get_node_meta(UiTrigger)
@@ -162,5 +177,9 @@ def test_catalog_registers_chat_trigger_with_frontend():
     assert entry is not None, "ChatTrigger must be in the builtin catalog"
     _cls, meta = entry
     assert meta.is_entry is True
-    assert meta.exposes_flow_inputs is True
     assert meta.frontend == "chat_trigger_frontend"
+    # ChatTrigger declares `message` as Input and `message_out` as Output
+    input_names = {p.name for p in meta.inputs}
+    output_names = {p.name for p in meta.outputs}
+    assert "message" in input_names
+    assert "message_out" in output_names

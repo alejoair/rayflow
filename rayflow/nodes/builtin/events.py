@@ -1,4 +1,4 @@
-"""Event nodes (OnEvent/EmitEvent). Run inside the engine (@engine_node)."""
+"""Event nodes (OnEvent/EmitEvent). Run inside the engine (@entry_node / @engine_node)."""
 from typing import Any
 
 from rayflow.nodes.decorators import (
@@ -8,25 +8,26 @@ from rayflow.nodes.decorators import (
     Input,
     Output,
     engine_node,
+    entry_node,
 )
 
 
-@engine_node
+@entry_node
 class OnEvent:
     """Entry point triggered by an external event. No exec input.
 
     `event_name` is static config (which namespaced event the flow
     subscribes to). The event's `payload` is injected by the engine as this
-    node's output (the entry node's flow_inputs are written as its
-    outputs), so the subgraph consumes it as "<id>.payload".
+    node's input (flow_inputs["payload"]), and auto-passthrough mirrors it
+    as an output so the subgraph can consume it as "<id>.payload".
     """
-    is_entry = True
-    exposes_flow_inputs = True
+    category = "Trigger"
     event_name = Input("str", default="")
+    payload = Input("Any")
     exec_out = ExecOutput()
-    payload = Output("Any")
 
-@engine_node
+
+@entry_node
 class OnVariableChange:
     """Entry point triggered when a state variable changes.
 
@@ -37,18 +38,18 @@ class OnVariableChange:
     When a `Set` node writes that variable with a different value, the
     source flow's GraphState publishes the event `var:{source}/{variable}`
     and this flow runs. The engine injects the new value (`value`) and the
-    previous one (`old`) as this node's outputs.
+    previous one (`old`) as this node's inputs (flow_inputs["value"] and
+    ["old"]), and auto-passthrough mirrors them as outputs.
 
     The source flow must be loaded (served) before the watching flow, so its
     GraphState exists when the watch is registered. Delivery is
     fire-and-forget with no order guarantee (same as the rest of the bus).
     """
-    category = "Events"
-    is_entry = True
+    category = "Trigger"
     variable = Input("str", default="")
     source   = Input("str", default="")
-    value    = Output("Any")
-    old      = Output("Any")
+    value    = Input("Any")
+    old      = Input("Any")
     exec_out = ExecOutput()
 
 

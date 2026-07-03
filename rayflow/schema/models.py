@@ -73,8 +73,9 @@ class VariableDef:
 class FlowDef:
     name: str
     version: str = "1"
-    # Public interface inputs/outputs: name → type
-    inputs: dict[str, str] = field(default_factory=dict)
+    # Public interface outputs: name → type. (Inputs live on the entry node —
+    # it declares its own Input pins, which the engine populates from the
+    # HTTP body. There is no flow-level `inputs` field anymore.)
     outputs: dict[str, str] = field(default_factory=dict)
     variables: list[VariableDef] = field(default_factory=list)
     # Events this flow may emit (informational)

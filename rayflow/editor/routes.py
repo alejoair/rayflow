@@ -32,13 +32,12 @@ def _pin_spec(p) -> dict[str, Any]:
 # catalog's static metadata. Documenting them here lets a client (the editor
 # or an LLM agent) know they exist and how they're named, without having to
 # memorize the convention. See `_with_dynamic_pins` in build/validator.py.
+#
+# Note: entry nodes (@entry_node like OnStart, OnEvent, ChatTrigger) no
+# longer appear here — their pins are statically declared on the class and
+# auto-passthrough (mirroring each Input as a same-named Output) is handled
+# by _with_dynamic_pins when run() is not defined.
 _DYNAMIC_PINS: dict[str, dict[str, Any]] = {
-    "OnStart": {"outputs_from": "flow.inputs",
-                "note": "Exposes one data output per declared input of the flow (e.g. 'entry.x')."},
-    "FlowInput": {"outputs_from": "flow.inputs",
-                  "note": "Alias of OnStart. Exposes one data output per input of the flow."},
-    "OnEvent": {"outputs_from": "flow.inputs",
-                "note": "Exposes one data output per declared input of the flow (the event's payload)."},
     "FlowOutput": {"inputs_from": "flow.outputs",
                    "note": "Receives one required data input per declared output of the flow."},
     "Parallel": {"exec_outputs_pattern": "branch_N",
@@ -147,45 +146,6 @@ async def get_guide() -> dict[str, Any]:
     return {"guide": GUIDE}
 
 
-def _examples_dir():
-    from pathlib import Path
-    return Path(__file__).parent / "examples"
-
-
-@router.get("/examples")
-async def list_examples() -> dict[str, Any]:
-    """Lists the bundled example flows (few-shot templates)."""
-    import json
-    examples = []
-    d = _examples_dir()
-    if d.exists():
-        for path in sorted(d.glob("*.json")):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            examples.append({
-                "name": path.stem,
-                "flow_name": data.get("name"),
-                "inputs": data.get("inputs", {}),
-                "outputs": data.get("outputs", {}),
-            })
-    return {"examples": examples}
-
-
-@router.get("/examples/{name}")
-async def get_example(name: str) -> dict[str, Any]:
-    """Returns the full JSON of an example flow by its file name."""
-    import json
-    path = _examples_dir() / f"{name}.json"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Example '{name}' not found")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading the example: {e}")
-
-
 @router.get("/types")
 async def get_types() -> dict[str, Any]:
     """Available canonical types and compatibility rules."""
@@ -272,12 +232,11 @@ async def list_loaded_flows() -> dict[str, Any]:
     for sf in all_served():
         entry: dict[str, Any] = {"flow": sf.name}
         if sf.flow_def is not None:
-            entry["inputs"] = {
-                k: {"type": v} for k, v in sf.flow_def.inputs.items()
-            }
-            entry["outputs"] = {
-                k: {"type": v} for k, v in sf.flow_def.outputs.items()
-            }
+            # Inputs are derived from the entry node's declared Input pins
+            # (see ServedFlow.interface), not from the removed flow.inputs.
+            iface = sf.interface
+            entry["inputs"] = iface["inputs"]
+            entry["outputs"] = iface["outputs"]
         result.append(entry)
     return {"loaded": result, "count": len(result)}
 
@@ -402,7 +361,13 @@ def wants_stream(request: Request) -> bool:
     return "text/event-stream" in request.headers.get("accept", "")
 
 
-async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: bool) -> Response:
+async def run_flow_response(
+    name: str,
+    flow_inputs: dict[str, Any],
+    *,
+    stream: bool,
+    request: Any = None,
+) -> Response:
     """Runs a flow and renders the result as SSE or a single JSON response.
 
     Used by `POST /flows/{name}/run` in server.py — the single run endpoint
@@ -410,6 +375,9 @@ async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: b
     demand there). Kept here, not in server.py, so it stays next to
     `wants_stream` and reusable without server.py depending on anything
     editor-specific beyond these two helpers.
+
+    `request` is an optional RequestData envelope (body/headers/query/method)
+    forwarded to the entry node's ctx.request. None for non-HTTP callers.
     """
     import json
     from rayflow.api import execute_async
@@ -417,7 +385,7 @@ async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: b
     if stream:
         async def event_generator():
             try:
-                async for evt in execute_async(name, flow_inputs):
+                async for evt in execute_async(name, flow_inputs, request):
                     yield f"data: {json.dumps(evt)}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'event': 'flow_error', 'error': str(e)})}\n\n"
@@ -432,7 +400,7 @@ async def run_flow_response(name: str, flow_inputs: dict[str, Any], *, stream: b
     response_status = 200
     response_headers: dict[str, str] = {}
     try:
-        async for evt in execute_async(name, flow_inputs):
+        async for evt in execute_async(name, flow_inputs, request):
             if evt.get("event") == "flow_done":
                 result = evt.get("result", {}) or {}
                 response_status = evt.get("response_status", 200)

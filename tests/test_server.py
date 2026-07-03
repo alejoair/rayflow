@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from rayflow.nodes.registry import reset_catalog
 from rayflow.server import load_served_flows, create_app
 from rayflow.registry import clear_served
+from tests import entry_fixtures
 
 
 @pytest.fixture(autouse=True)
@@ -13,6 +14,7 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     clear_served()
     yield
     clear_served()
@@ -20,10 +22,9 @@ def ray_init():
 
 SUMA = {
     "name": "suma",
-    "inputs": {"x": "int", "y": "int"},
     "outputs": {"resultado": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "EntryXY"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.x", "b": "entry.y"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -50,6 +51,8 @@ def test_list_flows(client):
     flows = r.json()["flows"]
     assert len(flows) == 1
     assert flows[0]["name"] == "suma"
+    # Inputs are derived from the entry node's declared Input pins.
+    # EntryXY declares x and y as int (required).
     assert flows[0]["inputs"] == {"x": {"type": "int", "required": True}, "y": {"type": "int", "required": True}}
     assert flows[0]["outputs"] == {"resultado": {"type": "int"}}
 
@@ -272,12 +275,11 @@ def test_ctx_set_response_status_reaches_the_real_http_response(check_api_key_cl
 
 CHAT_FLOW = {
     "name": "chat",
-    "inputs": {"message": "str"},
     "outputs": {"reply": "str"},
     "nodes": [
         {"id": "entry", "type": "ChatTrigger"},
         {"id": "exit", "type": "FlowOutput", "exec_in": "entry",
-         "inputs": {"reply": "entry.message"}},
+         "inputs": {"reply": "entry.message_out"}},
     ],
 }
 

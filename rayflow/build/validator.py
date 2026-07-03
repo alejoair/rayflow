@@ -177,7 +177,7 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
         # subflow_of = full_id is the IMMEDIATE parent: in a deeper
         # recursion, the inner levels already got their own.
         sub_flat = flatten(sub_flow, catalog, prefix=full_id, state_path=sub_state)
-        sub_nodes, entry_id, exit_id = _splice_subflow(sub_flat, full_id, nd, sub_flow)
+        sub_nodes, entry_id, exit_id = _splice_subflow(sub_flat, full_id, nd, sub_flow, catalog)
 
         # The shell keeps its own exec_in and exec_out (the parent's
         # continuation). At runtime it fires subflow_entry (blocking), reads
@@ -206,7 +206,6 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
     return FlowDef(
         name=flow.name,
         version=flow.version,
-        inputs=flow.inputs,
         outputs=flow.outputs,
         variables=flow.variables,
         events=flow.events,
@@ -271,13 +270,13 @@ def _reparent_node(nd: NodeDef, prefix: str, full_id: str,
 
 
 def _splice_subflow(sub_flat: FlowDef, cf_id: str, cf_def: NodeDef,
-                    sub_flow: FlowDef) -> tuple[list[NodeDef], str, str | None]:
+                    sub_flow: FlowDef, catalog=None) -> tuple[list[NodeDef], str, str | None]:
     """Splices an already-flattened subflow into the parent graph.
 
-    Reuses the FlowInput/OnStart and FlowOutput the subflow already declares
-    — doesn't create new nodes. Marks THIS level's entry/exit with
-    `subflow_of = cf_id` so the root flow doesn't treat them as its own
-    entry/exit:
+    Reuses the entry node (any @entry_node: OnStart, OnEvent, ChatTrigger,
+    or a custom one) and FlowOutput the subflow already declares — doesn't
+    create new nodes. Marks THIS level's entry/exit with `subflow_of =
+    cf_id` so the root flow doesn't treat them as its own entry/exit:
     - entry: fired by the CallFlow shell via subflow_entry; its inputs come from the CallFlow.
     - exit: doesn't close the flow; the shell collects its inputs as 'result'.
 
@@ -287,8 +286,7 @@ def _splice_subflow(sub_flat: FlowDef, cf_id: str, cf_def: NodeDef,
     """
     nodes = list(sub_flat.nodes)
     extra = {k: v for k, v in cf_def.inputs.items() if k not in ("flow", "isolated")}
-    input_names = set(sub_flow.inputs.keys())
-    sub_iface = {"inputs": dict(sub_flow.inputs), "outputs": dict(sub_flow.outputs)}
+    sub_iface = {"outputs": dict(sub_flow.outputs)}
 
     entry_id: str | None = None
     exit_id: str | None = None
@@ -296,15 +294,29 @@ def _splice_subflow(sub_flat: FlowDef, cf_id: str, cf_def: NodeDef,
     for nd in nodes:
         if nd.subflow_of is not None:
             continue  # a node from a deeper subgraph — already spliced
-        if nd.type in ("OnStart", "OnEvent"):
+        # Identify the entry generically via catalog meta.is_entry; fall back
+        # to the historical OnStart/OnEvent names if catalog isn't available
+        # (legacy callers).
+        is_entry = False
+        if catalog is not None:
+            entry_in_cat = catalog.get(nd.type)
+            if entry_in_cat is not None:
+                # catalog.get() returns (cls, meta) — meta is the 2nd element.
+                is_entry = entry_in_cat[1].is_entry
+        else:
+            is_entry = nd.type in ("OnStart", "OnEvent")
+        if is_entry:
             entry_id = nd.id
             nd.subflow_of = cf_id
             nd.iface = sub_iface
             # The shell fires the entry directly — no incoming exec edge.
             nd.exec_in = None
-            for name in input_names:
-                if name in extra:
-                    nd.inputs[name] = extra[name]
+            # Pass any of the CallFlow's inputs that match the entry's
+            # declared Input pins. Names come from the wiring already
+            # placed on nd.inputs (the parent's CallFlow node) — same key
+            # space as the entry's Input pin names.
+            for name, value in extra.items():
+                nd.inputs[name] = value
         elif nd.type == "FlowOutput":
             exit_id = nd.id
             nd.subflow_of = cf_id
@@ -326,8 +338,6 @@ def _validate_declared_types(flow: FlowDef, nodes: dict[str, ResolvedNode], err:
         except TypeError_ as e:
             err.add(f"{where}: {e}")
 
-    for name, t in flow.inputs.items():
-        check(t, f"flow input '{name}'")
     for name, t in flow.outputs.items():
         check(t, f"flow output '{name}'")
     for nid, rnode in nodes.items():
@@ -361,27 +371,16 @@ def _index_nodes(flow: FlowDef, catalog: NodeCatalog, err: _Errors) -> dict[str,
     return nodes
 
 
-_REQUEST_PINS = (
-    ("headers", "dict[str, str]"),
-    ("query", "dict[str, str]"),
-    ("body", "Any"),
-    ("method", "str"),
-)
-
-
 def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta:
     """Generates the dynamic pins of public-interface nodes.
 
-    - Any node with exposes_flow_inputs = True (OnStart/FlowInput and
-      OnEvent are the built-in examples): data outputs = the flow's
-      declared inputs, PLUS fixed headers/query/body/method pins — every
-      served flow's trigger IS an HTTP request, so such an entry node
-      always exposes the raw envelope alongside whatever named inputs the
-      flow declares. A flow that doesn't run over HTTP (or wasn't given a
-      request) just sees empty dicts/strings for these — see execute()'s
-      seeding in engine/executor.py. (OnVariableChange is also an entry
-      node but does NOT set this flag — its value/old outputs are its own
-      static pins, not flow.inputs-derived.)
+    - @entry_node (any node with meta.is_entry = True): if it does NOT
+      define run(), auto-passthrough mirrors each declared Input as an
+      output of the same name. (If it does define run(), the author is
+      responsible for calling ctx.set_output() for each output — their
+      declared Outputs already live in meta.outputs via _extract_meta.)
+      For a spliced entry of a subgraph, the declared Inputs are also
+      re-exposed as data_in so the CallFlow shell can feed them.
     - FlowOutput: data inputs = the flow's declared outputs.
     - CallFlow: extra data inputs = any key in node_def.inputs not already
       declared as a pin. Lets arbitrary inputs be passed to the subflow.
@@ -390,27 +389,35 @@ def _with_dynamic_pins(meta: NodeMeta, flow: FlowDef, node_def=None) -> NodeMeta
     from rayflow.nodes.decorators import PinSpec
 
     # For boundary nodes of a spliced subgraph, the interface is annotated on
-    # node_def.iface (the subflow's inputs/outputs, not the root flow's).
+    # node_def.iface (the subflow's outputs, not the root flow's). The entry
+    # of a subgraph now carries its own declared Inputs on meta.inputs, so
+    # we don't read inputs from iface anymore.
     iface = node_def.iface if node_def is not None else None
-    flow_inputs = iface["inputs"] if iface else flow.inputs
     flow_outputs = iface["outputs"] if iface else flow.outputs
 
-    if meta.exposes_flow_inputs:
-        meta = copy.copy(meta)
-        meta.outputs = list(meta.outputs) + [
-            PinSpec(name=name, kind="data_out", type=type_str)
-            for name, type_str in flow_inputs.items()
-        ] + [
-            PinSpec(name=name, kind="data_out", type=type_str)
-            for name, type_str in _REQUEST_PINS
-        ]
-        # In a spliced OnStart/OnEvent, the same names are also data inputs:
-        # they come in from the CallFlow and get re-exposed as outputs to the subgraph.
-        if node_def is not None and node_def.subflow_of is not None:
-            meta.inputs = list(meta.inputs) + [
-                PinSpec(name=name, kind="data_in", type=type_str, default=None)
-                for name, type_str in flow_inputs.items()
+    if meta.is_entry:
+        run_fn = getattr(meta.py_class, "run", None)
+        # Auto-passthrough for entries without run(): mirror each Input as
+        # an Output of the same name so it's cableable downstream. Entries
+        # with run() produce their own outputs explicitly.
+        needs_output_mirror = run_fn is None
+        # Spliced entry of a subgraph: re-expose the declared Inputs as
+        # data_in too, so the parent CallFlow can feed them via wiring.
+        in_subflow = node_def is not None and node_def.subflow_of is not None
+        if needs_output_mirror or in_subflow:
+            meta = copy.copy(meta)
+        if needs_output_mirror:
+            already_declared = {p.name for p in meta.outputs}
+            meta.outputs = list(meta.outputs) + [
+                PinSpec(name=p.name, kind="data_out", type=p.type)
+                for p in meta.inputs
+                if p.name not in already_declared
             ]
+        if in_subflow:
+            # The Inputs already exist on meta.inputs; the splicing logic
+            # in _splice_subflow wires the CallFlow's extra inputs to them.
+            # Nothing to add here — kept as an explicit no-op for clarity.
+            pass
     elif meta.name == "FlowOutput":
         meta = copy.copy(meta)
         meta.inputs = list(meta.inputs) + [
@@ -543,6 +550,16 @@ def _validate_data_inputs(
             raw = node_inputs_raw.get(pin_spec.name, _MISSING)
 
             if raw is _MISSING:
+                # The flow's ROOT entry node's inputs come from flow_inputs
+                # (HTTP body) at runtime, not from the graph — they're never
+                # wired and the "required but no value" check doesn't apply.
+                # Splicedeado subflow entries (subflow_of is not None) ARE
+                # wired by the CallFlow shell, so they take the normal path.
+                if meta.is_entry and rnode.node_def.subflow_of is None:
+                    rnode.resolved_inputs[pin_spec.name] = ResolvedPin(
+                        is_ref=False, literal=pin_spec.default
+                    )
+                    continue
                 if pin_spec.required:
                     err.add(
                         f"Node '{nid}' (type={rnode.meta.name}): "
@@ -572,9 +589,12 @@ def _validate_data_inputs(
                     # Implicit output injected by the engine on every node.
                     producer_type = "dict"
                 elif src_out is None:
-                    # A dynamic output (FlowInput/OnEvent): its declared type
-                    # lives in flow.inputs. We validate against it if available.
-                    producer_type = flow.inputs.get(src_pin)
+                    # Unknown output — entry outputs are mirrored into
+                    # meta.outputs by _with_dynamic_pins, so this is a
+                    # genuine wiring error. Leave producer_type None; the
+                    # compatibility check below will skip if either side
+                    # is None.
+                    producer_type = None
                 else:
                     producer_type = src_out.type
 

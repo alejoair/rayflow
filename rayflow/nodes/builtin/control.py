@@ -4,12 +4,14 @@ import inspect
 from typing import Any
 
 from rayflow.nodes.decorators import (
+    EntryContext,
     ExecContext,
     ExecInput,
     ExecOutput,
     Input,
     Output,
     engine_node,
+    entry_node,
     parallel_node,
     ray_node,
 )
@@ -46,34 +48,45 @@ class _MapCaptureCtx:
         return []
 
 
-@engine_node
+@entry_node
 class OnStart:
-    """Entry point of the flow.
+    """Entry point of a flow triggered by a direct call (HTTP or programmatic).
 
-    Its data outputs are generated at build time from the flow's declared
-    `inputs`. The engine injects their values before calling run().
+    Declares the standard HTTP request envelope as inputs so the author can
+    cable them downstream. Defaults are empty so non-HTTP callers (MCP,
+    execute() direct) get sensible empty values instead of None. Without
+    run(), the engine auto-passthroughs each Input as an output of the same
+    name. For triggers that need to compute something before firing
+    exec_out, override run() and use ctx.set_output.
     """
-    category = "Control"
-    is_entry = True
-    exposes_flow_inputs = True
+    category = "Trigger"
+    body    = Input("Any", default={})
+    headers = Input("dict[str, str]", default={})
+    query   = Input("dict[str, str]", default={})
+    method  = Input("str", default="GET")
     exec_out = ExecOutput()
 
 
-@engine_node
+@entry_node
 class ChatTrigger:
-    """Entry point of the flow with a built-in chat UI.
+    """Entry point with a built-in chat UI.
 
-    Mechanically identical to OnStart (its data outputs are generated at
-    build time from the flow's declared `inputs`), but declares `frontend`
-    so create_app() serves the bundled chat page at /flows/{name}/ui when
-    the flow is served. The page POSTs the user's message to the normal
-    /flows/{name}/run endpoint — no new transport.
+    Declares `message` as the user's chat input (POSTed by the bundled UI
+    at /flows/{name}/ui). Defines run() to forward it as `message_out`,
+    which downstream nodes cable as `chat.message_out`. The bundle's JS
+    POSTs {"message": "..."} to /flows/{name}/run — same endpoint as any
+    caller, no special transport.
     """
-    category = "Control"
-    is_entry = True
-    exposes_flow_inputs = True
+    category = "Trigger"
     frontend = "chat_trigger_frontend"
+    message = Input("str")
+    message_out = Output("str")
     exec_out = ExecOutput()
+
+    async def run(self, ctx: EntryContext, message: str) -> None:
+        ctx.set_output("message_out", message)
+        await ctx.fire("exec_out")
+
 
 @engine_node
 class FlowOutput:

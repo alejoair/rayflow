@@ -73,15 +73,24 @@ class ServedFlow:
     @property
     def interface(self) -> dict:
         """Public HTTP interface description (used by GET /flows, /flows/{name})."""
+        # Inputs are derived from the entry node's declared Input pins
+        # (the entry's run() arguments), not from flow.inputs (removed).
+        # Falls back to {} if the built graph isn't available.
+        entry_inputs: dict[str, dict[str, str | bool]] = {}
+        if self.built is not None:
+            entry_rnode = self.built.nodes.get(self.built.entry_node_id)
+            if entry_rnode is not None:
+                for pin in entry_rnode.meta.inputs:
+                    entry_inputs[pin.name] = {
+                        "type": pin.type or "Any",
+                        "required": pin.required,
+                    }
         return {
             "name": self.flow_def.name,
             "version": self.flow_def.version,
             "endpoint": f"/flows/{self.flow_def.name}/run",
             "method": "POST",
-            "inputs": {
-                name: {"type": type_str, "required": True}
-                for name, type_str in self.flow_def.inputs.items()
-            },
+            "inputs": entry_inputs,
             "outputs": {
                 name: {"type": type_str}
                 for name, type_str in self.flow_def.outputs.items()

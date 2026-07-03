@@ -212,6 +212,54 @@ class ExecContext:
 
 
 # ---------------------------------------------------------------------------
+# Entry nodes — request envelope
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RequestData:
+    """The HTTP request envelope, available only to entry nodes via ctx.request.
+
+    Built by the server from the real HTTP request when a flow is invoked via
+    POST /flows/{name}/run. For runs without an HTTP caller (MCP, execute()
+    direct), the server passes None and entry nodes that try to read
+    ctx.request fail with a clear AttributeError.
+    """
+    body: dict[str, Any] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
+    query: dict[str, str] = field(default_factory=dict)
+    method: str = "GET"
+
+
+class EntryContext(ExecContext):
+    """Execution context for @entry_node classes.
+
+    Subclass of ExecContext that additionally exposes `request` — the HTTP
+    envelope (body/headers/query/method). Only entry nodes receive an
+    EntryContext; regular nodes receive a plain ExecContext and have no
+    access to the request, by construction.
+    """
+
+    def __init__(self, *args, request: RequestData | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._request = request
+
+    @property
+    def request(self) -> RequestData:
+        if self._request is None:
+            raise AttributeError(
+                "ctx.request is only available inside @entry_node run() — "
+                "this run was not triggered by an HTTP request"
+            )
+        return self._request
+
+    def __getstate__(self):
+        # _request is plain data; it can travel with the ctx.
+        state = super().__getstate__()
+        state["_request"] = self._request
+        return state
+
+
+# ---------------------------------------------------------------------------
 # Extracted metadata
 # ---------------------------------------------------------------------------
 
@@ -245,10 +293,10 @@ class NodeMeta:
     is_builtin: bool = False           # True for a builtin node, False for custom
     category: str = "General"          # User-facing category: "Control", "Math", etc.
     description: str | None = None     # Class docstring
-    is_entry: bool = False             # Can be a flow's entry point (consumed generically
-                                        # by _find_entry/_fire_engine_node, same pattern as
-                                        # is_parallel — not a name comparison)
-    exposes_flow_inputs: bool = False  # Gets the flow's declared `inputs` + the fixed
+    is_entry: bool = False             # Can be a flow's entry point. Set only by the
+                                        # @entry_node decorator (not a class attribute
+                                        # authors set). Consumed generically by
+                                        # _find_entry/_fire_engine_node.
     frontend: str | None = None        # If set, names a static bundle directory (HTML/
                                         # JS/CSS) sibling to the node's source file that
                                         # create_app() mounts at /flows/{name}/ui for any
@@ -256,10 +304,6 @@ class NodeMeta:
                                         # bundle talks to the flow over the normal HTTP
                                         # run endpoint — this flag only selects "what UI
                                         # to serve", not a new transport.
-                                        # headers/query/body/method pins injected as dynamic
-                                        # outputs (_with_dynamic_pins). Narrower than
-                                        # is_entry: OnVariableChange is an entry but doesn't
-                                        # want this — its outputs are its own static pins.
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -287,14 +331,16 @@ def ray_node(cls: type) -> type:
     and the node drives its own flow via ctx.set_output() + await ctx.fire().
     Without exec pins → a Ray task (a pure function evaluated on demand).
     """
-    meta = _extract_meta(cls)
-    if meta.is_entry:
+    # If @entry_node already ran on this class, the meta attribute is set
+    # and meta.is_entry=True. Refuse: entries must run inside the engine.
+    existing = getattr(cls, _NODE_META_ATTR, None)
+    if existing is not None and existing.is_entry:
         raise ValueError(
-            f"{cls.__name__}: is_entry=True nodes must be @engine_node or "
-            f"@parallel_node, not @ray_node — the entry short-circuit in "
-            f"FlowEngine._fire_engine_node never calls run(), so a @ray_node "
-            f"entry's run() would silently never execute."
+            f"{cls.__name__}: @entry_node classes cannot also be @ray_node — "
+            f"entry nodes run inside the engine and use EntryContext. Use "
+            f"@entry_node (which is engine-side by default)."
         )
+    meta = _extract_meta(cls)
     meta.is_engine_node = False
     if meta.is_exec_node:
         original_run = cls.run
@@ -339,6 +385,50 @@ def parallel_node(cls: type) -> type:
     meta = _extract_meta(cls)
     meta.is_engine_node = True
     meta.is_parallel = True
+    _strip_pin_descriptors(cls, meta)
+    setattr(cls, _NODE_META_ATTR, meta)
+    return cls
+
+
+def entry_node(cls: type) -> type:
+    """Registers a class as a flow's entry point.
+
+    An entry node is a regular engine_node (runs locally inside the engine,
+    can define a run()) with two additions:
+
+    1. It receives an EntryContext — a subclass of ExecContext that also
+       exposes `ctx.request` (the HTTP envelope: body/headers/query/method).
+       Only entry nodes have access to the request; regular nodes receive a
+       plain ExecContext and can't read it, by construction.
+    2. Its declared `Input`s are populated from the run's `flow_inputs`
+       (which the server fills from the HTTP body), instead of from wired
+       predecessors. The entry has no predecessors — it is the bridge
+       between the outside world and the graph.
+
+    If the class defines run(), the engine calls it (the author uses
+    ctx.set_output() + await ctx.fire("exec_out") like any engine_node).
+    If it does NOT define run(), the engine auto-passthroughs: it mirrors
+    each declared Input as an output of the same name and fires exec_out.
+    That covers the common "dumb trigger" case (e.g. OnStart).
+
+    Validation:
+    - Must not declare exec_in (nothing inside the graph can fire an entry).
+    - Must declare at least one ExecOutput (typically exec_out).
+    - Cannot be combined with @ray_node (entries run inside the engine).
+    """
+    meta = _extract_meta(cls)
+    if meta.has_exec_in:
+        raise ValueError(
+            f"{cls.__name__}: @entry_node must not declare exec_in — "
+            f"nothing inside the graph should be able to fire an entry node."
+        )
+    if not meta.exec_outputs:
+        raise ValueError(
+            f"{cls.__name__}: @entry_node must declare at least one "
+            f"ExecOutput (typically exec_out)."
+        )
+    meta.is_engine_node = True
+    meta.is_entry = True
     _strip_pin_descriptors(cls, meta)
     setattr(cls, _NODE_META_ATTR, meta)
     return cls
@@ -403,14 +493,10 @@ def _extract_meta(cls: type) -> NodeMeta:
     category = getattr(cls, 'category', 'General')  # Defaults to "General"
 
     # Entry-point flags (class attributes, same convention as `category`).
-    is_entry = getattr(cls, 'is_entry', False)
-    exposes_flow_inputs = getattr(cls, 'exposes_flow_inputs', False)
+    # is_entry is set exclusively by the @entry_node decorator — not a class
+    # attribute authors set directly. _extract_meta leaves it False; the
+    # decorator flips it after calling _extract_meta.
     frontend = getattr(cls, 'frontend', None)
-    if is_entry and has_exec_in:
-        raise ValueError(
-            f"{cls.__name__}: is_entry=True nodes must not declare exec_in — "
-            f"nothing inside the graph should be able to fire an entry node."
-        )
 
     return NodeMeta(
         name=cls.__name__,
@@ -423,8 +509,6 @@ def _extract_meta(cls: type) -> NodeMeta:
         is_exec_node=is_exec_node,
         description=description,  # ← extracted docstring
         category=category,        # ← class category
-        is_entry=is_entry,
-        exposes_flow_inputs=exposes_flow_inputs,
         frontend=frontend,
     )
 

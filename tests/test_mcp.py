@@ -8,6 +8,7 @@ from fastmcp import Client
 
 from rayflow.nodes.registry import reset_catalog
 from rayflow.mcp.server import create_mcp
+from tests import entry_fixtures
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +16,7 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     yield
 
 
@@ -45,10 +47,9 @@ def mcp():
 
 SUMA = {
     "name": "suma",
-    "inputs": {"x": "int", "y": "int"},
     "outputs": {"resultado": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "EntryXY"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.x", "b": "entry.y"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -61,7 +62,7 @@ async def test_lista_tools_curadas(mcp):
     async with Client(mcp) as c:
         names = {t.name for t in await c.list_tools()}
     for expected in ("get_guide", "list_nodes", "validate_flow", "create_flow",
-                     "run_flow", "test_flow", "list_examples", "flow_catalog"):
+                     "run_flow", "test_flow", "flow_catalog"):
         assert expected in names
 
 
@@ -83,7 +84,10 @@ async def test_list_nodes_incluye_dynamic(mcp):
     async with Client(mcp) as c:
         r = await c.call_tool("list_nodes", {})
     by_type = {n["type"]: n for n in r.data}
-    assert by_type["OnStart"]["dynamic"]["outputs_from"] == "flow.inputs"
+    # FlowOutput, Parallel, and CallFlow still expose dynamic pin metadata;
+    # OnStart no longer does (its pins are statically declared now).
+    assert by_type["FlowOutput"]["dynamic"]["inputs_from"] == "flow.outputs"
+    assert by_type["Parallel"]["dynamic"]["exec_outputs_pattern"] == "branch_N"
 
 
 async def test_crud_y_flow_catalog(mcp, flows_dir):
@@ -107,14 +111,6 @@ async def test_test_flow_verifica_outputs(mcp, flows_dir):
     assert r.data["passed"] is True
 
 
-async def test_examples_disponibles(mcp):
-    async with Client(mcp) as c:
-        ex = (await c.call_tool("list_examples", {})).data
-        assert any(e["name"] == "branch_demo" for e in ex)
-        full = (await c.call_tool("get_example", {"name": "suma"})).data
-        assert full["name"] == "suma"
-
-
 DOUBLE_SRC = (
     "from rayflow.nodes.decorators import engine_node, ExecContext, "
     "ExecInput, ExecOutput, Input, Output\n\n"
@@ -131,10 +127,9 @@ DOUBLE_SRC = (
 
 DOUBLE_FLOW: dict[str, Any] = {
     "name": "double_flow",
-    "inputs": {"x": "int"},
     "outputs": {"y": "int"},
     "nodes": [
-        {"id": "entry", "type": "OnStart"},
+        {"id": "entry", "type": "EntryX"},
         {"id": "d", "type": "DoubleIt", "exec_in": "entry", "inputs": {"value": "entry.x"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "d", "inputs": {"y": "d.result"}},
     ],
@@ -189,6 +184,11 @@ async def test_update_flow_unloads_stale_loaded_graph(mcp, flows_dir, custom_nod
     skip reloading a flow that's already loaded."""
     async with Client(mcp) as c:
         await c.call_tool("create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC})
+        # create_custom_node hot-reloads the catalog (reset_catalog() + a fresh
+        # get_catalog() inside _reload_catalog), which wipes the test-only entry
+        # fixtures registered by the ray_init autouse fixture — re-register them
+        # before wiring DOUBLE_FLOW's "EntryX" entry.
+        entry_fixtures.register()
         await c.call_tool("create_flow", {"flow": DOUBLE_FLOW})
 
         first = (await c.call_tool("run_flow", {"name": "double_flow", "inputs": {"x": 5}})).data

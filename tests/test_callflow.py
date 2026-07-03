@@ -4,6 +4,7 @@ import ray
 import rayflow
 from rayflow.nodes.registry import reset_catalog
 from tests.helpers import run_once
+from tests import entry_fixtures
 
 
 @pytest.fixture(autouse=True)
@@ -11,16 +12,18 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     yield
 
 
-# Helper flow used as a subgraph in several tests
+# Helper flow used as a subgraph in several tests.
+# Uses EntryAB (an entry declaring a/b as Input) — auto-passthrough mirrors
+# them as outputs so the subgraph can cable entry.a/entry.b.
 SUBFLOW_SUM = {
     "name": "subflow_sum",
-    "inputs": {"a": "int", "b": "int"},
     "outputs": {"total": "int"},
     "nodes": [
-        {"id": "entry", "type": "OnStart"},
+        {"id": "entry", "type": "EntryAB"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.a", "b": "entry.b"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -143,10 +146,9 @@ def test_callflow_inside_parallel_branch():
     """
     sub = {
         "name": "s",
-        "inputs": {"a": "int", "b": "int"},
         "outputs": {"t": "int"},
         "nodes": [
-            {"id": "e", "type": "OnStart"},
+            {"id": "e", "type": "EntryAB"},
             {"id": "add", "type": "Add", "exec_in": "e",
              "inputs": {"a": "e.a", "b": "e.b"}},
             {"id": "x", "type": "FlowOutput", "exec_in": "add",
@@ -236,10 +238,9 @@ def test_callflow_nested():
     """Two CallFlows in sequence — each one receives the previous one's outputs via the result dict."""
     subflow_double = {
         "name": "double",
-        "inputs": {"n": "int"},
         "outputs": {"value": "int"},
         "nodes": [
-            {"id": "entry", "type": "OnStart"},
+            {"id": "entry", "type": "EntryN"},
             {"id": "add", "type": "Add", "exec_in": "entry",
              "inputs": {"a": "entry.n", "b": "entry.n"}},
             {"id": "exit", "type": "FlowOutput", "exec_in": "add",

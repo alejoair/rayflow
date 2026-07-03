@@ -56,9 +56,6 @@ result = rayflow.run(suma, a=3, b=4)
 print(result)  # {"result": 7}
 ```
 
-The same flow as a JSON file lives in [`examples/suma.json`](examples/suma.json),
-along with other examples in [`examples/`](examples/).
-
 ## How a flow is triggered
 
 The same graph can be started in several ways:
@@ -133,7 +130,6 @@ rayflow.stop(graph_id, events)  # unsubscribe and unload
 
 ## Documentation
 
-- Flow examples: [`examples/`](examples/)
 - Contributing guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Development
