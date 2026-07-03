@@ -1171,7 +1171,7 @@
       "system": "tests"
     },
     "tests/test_build.py": {
-      "description": "Tests for the build/validation layer: BuildError cases for unknown node types, missing/duplicate entry nodes, missing exec inputs, type mismatches, and data cycles. Covers the generic is_entry entry-point mechanism: a custom node with is_entry=True builds as the flow's entry, more than one is_entry node is a build error, and is_entry=True is rejected on @ray_node classes or combined with exec_in.",
+      "description": "Tests for the build/validation layer: BuildError cases for unknown node types, missing/duplicate entry nodes, missing exec inputs, type mismatches, and data cycles. Covers the generic @entry_node entry-point mechanism: any class decorated with @entry_node (not just the builtins) builds as the flow's entry, more than one entry node is a build error, and @entry_node is rejected when combined with @ray_node or when it declares exec_in.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/nodes/decorators.py",
@@ -1227,7 +1227,7 @@
       "system": "tests"
     },
     "tests/test_executor.py": {
-      "description": "End-to-end execution tests with Ray: fan-out, Parallel fork/join (including nested), AND/OR exec_in join semantics, While/Map nodes, pure comparisons, per-run output isolation (the RunContext regression test), OnStart's request pins defaulting gracefully outside HTTP, ctx.set_response_status()/set_response_header() via both the engine_node local-closure and ray_node RPC paths, and a custom is_entry=True node running as a flow's entry point (with and without exposes_flow_inputs) exactly like OnStart/OnEvent do.",
+      "description": "End-to-end execution tests with Ray: fan-out, Parallel fork/join (including nested), AND/OR exec_in join semantics, While/Map nodes, pure comparisons, per-run output isolation (the RunContext regression test), OnStart's request pins defaulting gracefully outside HTTP, ctx.set_response_status()/set_response_header() via both the engine_node local-closure and ray_node RPC paths, and custom @entry_node classes running as a flow's entry point (with and without declaring the HTTP envelope pins) exactly like OnStart/OnEvent do.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/nodes/decorators.py",
@@ -1248,7 +1248,7 @@
       "system": "tests"
     },
     "tests/test_nodes.py": {
-      "description": "Tests for the node definition and discovery system: decorators, pin descriptors, NodeCatalog registration, and NodeMeta.is_entry/exposes_flow_inputs extraction from class attributes.",
+      "description": "Tests for the node definition and discovery system: decorators, pin descriptors, NodeCatalog registration, and NodeMeta.is_entry being set only by the @entry_node decorator (false by default, rejecting exec_in, requiring at least one ExecOutput).",
       "depends_on": [
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/loader.py",
@@ -1757,7 +1757,7 @@
       ]
     },
     "server": {
-      "description": "Top-level app wiring and the public Python API: FastAPI app assembly (rayflow/server.py), and rayflow.api's run()/load()/execute()/serve_events()/stop() functions that everything else (CLI, tests, external callers) goes through.",
+      "description": "Top-level app wiring and the public Python API: FastAPI app assembly (rayflow/server.py), and rayflow.api's load()/execute()/execute_async()/serve_events()/stop() functions that everything else (CLI, tests, external callers) goes through. run() was removed — no more load+run+unload one-shot in the public API (tests/helpers.py's run_once is a test-only replacement, not public).",
       "files": [
         "rayflow/__init__.py",
         "rayflow/__main__.py",

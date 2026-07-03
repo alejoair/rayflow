@@ -20,11 +20,11 @@
       "triggers": ["sse", "server-sent event", "evento de ejecución", "run event", "eventos del run", "node_start", "node_done", "flow_done"],
       "systems": ["engine", "frontend-state"],
       "checklist": [
-        "Event emission lives in rayflow/engine/executor.py (FlowEngine) — node_start/node_done/edge_fire are fire-and-forget (no await); flow_done/flow_error use await so they arrive before the sub-queue closes.",
+        "Event emission lives in rayflow/engine/executor.py (FlowEngine) — all 5 events (node_start/edge_fire/node_done/flow_done/flow_error) are awaited on push now, not fire-and-forget: a driver draining the queue would otherwise see flow_done before per-node events still in flight, since only flow_done used to be awaited.",
         "The consumer is rayflow/editor/frontend/src/hooks/useRunStream.ts — it drives the animation/state machine and has its own reconnect logic keyed on run_id.",
         "Update the event table in CLAUDE.md if you add/rename/remove an event or its fields.",
         "Check tests/test_executor.py and tests/test_editor.py for assertions on event shape/ordering.",
-        "Remember the RunQueue actor (rayflow/state/queue.py) is a strict per-run FIFO — event ordering guarantees come from the actor's sequential event loop, not from awaiting each push."
+        "The RunQueue actor (rayflow/state/queue.py) is a strict per-run FIFO once events reach its mailbox, but the actor's sequential event loop alone does NOT guarantee a driver sees them in order — that's exactly the bug that made all 5 pushes awaited (see above): a non-awaited push can still be in flight when a later awaited push (e.g. flow_done) already lands, so a driver draining the queue can see flow_done first and close the run early."
       ]
     },
     {
@@ -57,13 +57,12 @@
       "id": "change-flow-json-schema",
       "title": "Changing the flow JSON schema (FlowDef/NodeDef shape)",
       "triggers": ["flow json", "schema del flow", "flowdef", "nodedef", "cambiar el schema", "change the schema"],
-      "systems": ["schema", "build", "frontend-state", "examples", "tests"],
+      "systems": ["schema", "build", "frontend-state", "tests"],
       "checklist": [
         "Model changes go in rayflow/schema/models.py (Pydantic) and rayflow/schema/loader.py (unknown-key warnings).",
         "If the change affects validation/wiring semantics, rayflow/build/validator.py likely needs updating too (flatten/validate_all).",
         "The frontend translator (rayflow/editor/frontend/src/lib/translator.ts) converts flowDef JSON <-> React Flow nodes/edges — check both directions still round-trip.",
-        "Existing example flows (examples/*.json and rayflow/editor/examples/*.json, the packaged few-shot examples) may need migrating to the new shape.",
-        "Update the flow JSON schema example in CLAUDE.md.",
+        "Update the flow JSON schema example in CLAUDE.md, README.md, and rayflow/claude_tools/skills/rayflow-flow/SKILL.md, and rayflow/editor/guide.py's GUIDE text — there's no packaged examples/ directory anymore (GET /editor/examples was removed), so these inline examples are the only reference.",
         "Add coverage in tests/test_schema.py and tests/test_build.py."
       ]
     },
