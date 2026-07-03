@@ -1,24 +1,38 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 186,
+  "file_count": 187,
   "files": {
     ".claude/agents/rayflow-auditor.md": {
-      "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids. No longer has Bash — delegates any shell command it needs (e.g. running _sot_scope.py itself for an unscoped/manual run) to rayflow-bash-runner via the Agent tool.",
+      "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and detects contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). No longer has Edit: read-only, never touches RAYFLOW_SOURCE_OF_TRUTH.json, CLAUDE.md, or rayflow_issues.json itself — reports every confirmed finding to .claude/agents/rayflow-issue-writer.md, the only agent with write permission on rayflow_issues.json, instead of writing there directly (unless run as part of a parallel fan-out, in which case it just returns the requested proposed_issues data structure). No longer has Bash either — delegates any shell command it needs (e.g. running _sot_scope.py itself for an unscoped/manual run) to rayflow-bash-runner via the Agent tool.",
       "depends_on": [
-        ".claude/hooks/_sot_scope.py"
+        ".claude/hooks/_sot_scope.py",
+        ".claude/agents/rayflow-issue-writer.md"
       ],
       "dependents": [
         "scripts/run_sot_audit.py"
       ],
       "system": "hooks-infra"
     },
+    ".claude/agents/rayflow-issue-writer.md": {
+      "description": "Repo-dev subagent: the only agent in this repo with write permission on rayflow_issues.json. Any other agent (rayflow-auditor, the rayflow-<system>-specialists, rayflow-router, or anyone else) that spots a possible discrepancy between a RAYFLOW_SOURCE_OF_TRUTH.json claim and the real code reports the finding here instead of editing the file directly — whether the finding came from a formal audit or was incidental to other work. Independently re-verifies each candidate against RAYFLOW_SOURCE_OF_TRUTH.json and the real repo state before writing anything; does not blindly trust the report it receives. The consolidation phase of .claude/workflows/audit-sot-parallel.js now runs as an instance of this agent rather than of rayflow-auditor, since it performs the single atomic write to rayflow_issues.json.",
+      "depends_on": [
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [
+        ".claude/agents/rayflow-auditor.md",
+        ".claude/workflows/audit-sot-parallel.js"
+      ],
+      "system": "hooks-infra"
+    },
     ".claude/workflows/audit-sot-parallel.js": {
-      "description": "Claude Code Workflow tool script (deterministic multi-agent orchestration; .claude/workflows/ is a new file category alongside .claude/hooks/ and .claude/agents/, grouped into the same `hooks-infra` system since it serves the same repo-quality-tooling purpose via yet another mechanism). Parallelizes a full, unscoped audit of RAYFLOW_SOURCE_OF_TRUTH.json: partitions its sections into 6 hardcoded groups (SECTION_GROUPS, balanced by claim count — hardcoded because the script itself has no filesystem access, so it can't compute the partition dynamically; each spawned agent reads RAYFLOW_SOURCE_OF_TRUTH.json itself and filters by its group's section_ids), fans out one read-only rayflow-auditor instance per group (each returns structured proposed_issues per a JSON schema instead of writing, to avoid a race on the shared rayflow_issues.json), then runs a final consolidation-phase rayflow-auditor instance that re-reads the current rayflow_issues.json, dedupes proposed issues against already-open claim_ids and against each other, and performs the single atomic write. Complements scripts/run_sot_audit.py (which is diff-scoped to a commit via .claude/hooks/_sot_scope.py and runs one sequential auditor instance) for the case of a full manual audit across every claim.",
+      "description": "Claude Code Workflow tool script (deterministic multi-agent orchestration; .claude/workflows/ is a new file category alongside .claude/hooks/ and .claude/agents/, grouped into the same `hooks-infra` system since it serves the same repo-quality-tooling purpose via yet another mechanism). Parallelizes a full, unscoped audit of RAYFLOW_SOURCE_OF_TRUTH.json: partitions its sections into 6 hardcoded groups (SECTION_GROUPS, balanced by claim count — hardcoded because the script itself has no filesystem access, so it can't compute the partition dynamically; each spawned agent reads RAYFLOW_SOURCE_OF_TRUTH.json itself and filters by its group's section_ids), fans out one read-only rayflow-auditor instance per group (each returns structured proposed_issues per a JSON schema instead of writing, to avoid a race on the shared rayflow_issues.json), then runs a final consolidation-phase rayflow-issue-writer instance that re-reads the current rayflow_issues.json, dedupes proposed issues against already-open claim_ids and against each other, and performs the single atomic write. Complements scripts/run_sot_audit.py (which is diff-scoped to a commit via .claude/hooks/_sot_scope.py and runs one sequential auditor instance) for the case of a full manual audit across every claim.",
       "depends_on": [
         "RAYFLOW_SOURCE_OF_TRUTH.json",
         "rayflow_issues.json",
-        ".claude/agents/rayflow-auditor.md"
+        ".claude/agents/rayflow-auditor.md",
+        ".claude/agents/rayflow-issue-writer.md"
       ],
       "dependents": [
         ".claude/agents/rayflow-main.md"
@@ -2072,6 +2086,7 @@
       "description": "Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose.",
       "files": [
         ".claude/agents/rayflow-auditor.md",
+        ".claude/agents/rayflow-issue-writer.md",
         ".claude/workflows/audit-sot-parallel.js",
         ".claude/agents/rayflow_bash_runner.md",
         ".claude/agents/rayflow-router.md",

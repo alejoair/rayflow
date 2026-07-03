@@ -39,8 +39,9 @@ que alguien se acuerde de releerlo.
 | `RAYFLOW_SOURCE_OF_TRUTH.json` | Cada afirmación de `CLAUDE.md`, estructurada, con evidencia de dónde se sostiene en el código. | **Hecho.** Schema v2 aplicado a los 215 claims (ver §4). |
 | `rayflow_issues.json` | Cola de discrepancias abiertas entre una afirmación y la realidad del repo. | **Hecho.** Archivo creado en la raíz, con `ISSUE-0001` (el caso de `FlowSettingsDialog.tsx`, ver §5). |
 | `rayflow_file_map.json` | Ya existente, sin cambios de rol: mapa mecánico archivo→{descripción, depends_on, dependents}. | Sin cambios — ver §3 por qué no se fusiona con lo anterior. |
-| Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | **Hecho y confirmado.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Invocación real vía `claude -p --agent rayflow-auditor "..."` probada end-to-end (ver §6.1) — funciona, detecta el claim de evidencia vacía por búsqueda activa, reconoce `ISSUE-0001` y no duplica. |
-| Hook pre-commit | Dispara el agente auditor antes de cada commit; usa `claude -p` en modo headless. | **Hecho.** `scripts/run_sot_audit.py`, stage `pre-commit` de `.pre-commit-config.yaml` — sin scope, exit inmediato sin costo de LLM; con scope, corre el auditor y bloquea el commit (exit 1) solo si escribió en `rayflow_issues.json` (ver §6.2). Validado end-to-end. |
+| Agente auditor | Recorre cada claim del SOT (o el subset que le pasen de scope) y valida contra el repo. Ya no escribe `rayflow_issues.json` él mismo — delega cada hallazgo confirmado a `rayflow-issue-writer` (ver fila siguiente y §6.4), salvo cuando corre como parte de un fan-out paralelo, en cuyo caso solo devuelve una estructura de datos. | **Hecho y confirmado.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Invocación real vía `claude -p --agent rayflow-auditor "..."` probada end-to-end (ver §6.1) — funciona, detecta el claim de evidencia vacía por búsqueda activa, reconoce `ISSUE-0001` y no duplica. Ya no tiene `Edit` en su frontmatter (refactor posterior, ver §6.4). |
+| Agente `rayflow-issue-writer` | Único agente del repo con permiso para escribir en `rayflow_issues.json`. Recibe candidatos reportados por cualquier otro agente (el auditor, un `rayflow-<sistema>-specialist`, `rayflow-router`, etc.), los re-verifica de forma independiente, dedupea contra el estado real y entre sí, y hace la escritura atómica. | **Hecho.** `.claude/agents/rayflow-issue-writer.md` — ver §6.4. |
+| Hook pre-commit | Dispara el agente auditor antes de cada commit; usa `claude -p` en modo headless. | **Hecho.** `scripts/run_sot_audit.py`, stage `pre-commit` de `.pre-commit-config.yaml` — sin scope, exit inmediato sin costo de LLM; con scope, corre el auditor (que a su vez delega a `rayflow-issue-writer` dentro de la misma invocación de `claude -p`) y bloquea el commit (exit 1) solo si `rayflow_issues.json` cambió (ver §6.2). Validado end-to-end. |
 | Bloqueo de edición directa | Impide que `RAYFLOW_SOURCE_OF_TRUTH.json` se edite casualmente, para "garantizar" (mayúsculas del nombre del archivo) que nunca quede desactualizado por accidente. | **Hecho.** Dos capas: `.claude/hooks/sot_guard.py` (PreToolUse, rápida) + `scripts/check_sot_commit_message.py` (commit-msg, la garantía real) — ver §6.3. Validado end-to-end. |
 
 ## 3. Por qué tres archivos separados, no uno fusionado
@@ -319,6 +320,73 @@ rechazado con mensaje claro; mismo commit con `Sot-Change: ...` → pasa. La
 Capa 1 también se probó simulando el payload de stdin que le manda el
 harness: bloquea sin `RAYFLOW_SOT_UNLOCK=1`, permite con la variable
 seteada, no interviene en archivos que no son el SOT.
+
+### 6.4. `rayflow-issue-writer`: único punto de escritura, y el cuarto canal de creación de issues
+
+**Problema que motiva este refactor.** Con el diseño de §6.1-6.3, solo
+`rayflow-auditor` (y, desde la introducción de
+`.claude/workflows/audit-sot-parallel.js`, su etapa de consolidación)
+escribían en `rayflow_issues.json`. Eso dejaba un gap de descubribilidad:
+cualquier otro agente — un `rayflow-<sistema>-specialist` resolviendo una
+tarea normal, `rayflow-router` ubicando un archivo, o cualquiera que notara
+*incidentalmente* que un claim del SOT ya no es cierto mientras hacía otra
+cosa — no tenía un camino fácil para reportarlo. La alternativa obvia
+(editar `rayflow_issues.json` directamente) hubiera dispersado la lógica de
+validación/dedup/formato en cada agente del repo, y debilitado la
+garantía de que todo lo que entra a ese archivo pasó por una verificación
+real antes de escribirse.
+
+**Solución: centralizar toda escritura en `rayflow-issue-writer`.**
+`.claude/agents/rayflow-issue-writer.md` es ahora el único agente de este
+repo con `Edit` habilitado sobre `rayflow_issues.json` (de hecho, el único
+archivo que tiene sentido que edite). Cualquier agente que sospeche una
+discrepancia le reporta el candidato — qué `claim_id`(s), por qué, qué
+evidencia — y `rayflow-issue-writer`:
+
+1. Verifica cada candidato de forma independiente (lee el claim real, lee
+   los archivos de evidencia) — no confía ciegamente en el reporte
+   entrante, exactamente la misma disciplina que ya aplicaba
+   `rayflow-auditor`.
+2. Dedupea contra `rayflow_issues.json` (estado real, no lo que asuma quien
+   reportó) y, si le llega un batch, entre los propios candidatos del
+   batch.
+3. Arma el issue con el mismo formato exacto de siempre (§5) y hace una
+   única escritura atómica.
+
+Como consecuencia, `rayflow-auditor` (§6.1) perdió `Edit` de su
+frontmatter — ya no puede escribir en `rayflow_issues.json` ni en ningún
+otro archivo. Cuando corre standalone (invocación manual o vía
+`scripts/run_sot_audit.py`), delega cada hallazgo confirmado a
+`rayflow-issue-writer` en vez de escribirlo él mismo. Cuando corre como
+parte de un fan-out paralelo (`audit-sot-parallel.js`), sigue devolviendo
+únicamente la estructura de datos pedida — la etapa de consolidación de ese
+workflow ahora es una instancia de `rayflow-issue-writer` en vez de una
+instancia extra de `rayflow-auditor` con un prompt de merge/dedup/escritura
+incrustado a mano.
+
+**Los cuatro canales de creación de un issue**, con esto:
+
+1. **Manual, por un humano** — el caso original de `ISSUE-0001`
+   (`detected_by.agent: "manual-audit"`): alguien audita a mano y escribe
+   el issue directamente (o le pide a `rayflow-issue-writer` que lo haga
+   por él, ya que es el único con permiso).
+2. **`rayflow-auditor` invocado manualmente** (§6.1) — auditoría dirigida a
+   un scope concreto o al SOT completo, delegando sus hallazgos a
+   `rayflow-issue-writer`.
+3. **`rayflow-auditor` disparado automáticamente por el hook de
+   pre-commit** (§6.2, `scripts/run_sot_audit.py`) — mismo mecanismo de
+   delegación, pero dentro de la misma invocación de `claude -p` que
+   dispara el hook (por eso el chequeo de "¿cambió `rayflow_issues.json`
+   antes/después de la corrida?" en `run_sot_audit.py` sigue funcionando
+   sin cambios: la escritura de `rayflow-issue-writer` ocurre como
+   subagente dentro del mismo proceso).
+4. **Reporte incidental de cualquier otro agente** (nuevo, habilitado por
+   este refactor) — un `rayflow-<sistema>-specialist`, `rayflow-router`, o
+   cualquier agente que note una discrepancia mientras hace otro trabajo
+   puede reportarla directamente a `rayflow-issue-writer` (tool `Agent`,
+   `subagent_type: rayflow-issue-writer`), sin necesidad de disparar una
+   auditoría formal sobre todo el SOT ni esperar a que la note el hook de
+   pre-commit.
 
 ## 7. Pendientes
 
