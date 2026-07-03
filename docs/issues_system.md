@@ -36,11 +36,11 @@ que alguien se acuerde de releerlo.
 
 | Pieza | Rol | Estado |
 |---|---|---|
-| `RAYFLOW_SOURCE_OF_TRUTH.json` | Cada afirmación de `CLAUDE.md`, estructurada, con evidencia de dónde se sostiene en el código. | Existe (schema v1); migración a schema v2 (ver §4) pendiente de aplicar a los 215 claims reales. |
-| `rayflow_issues.json` | Cola de discrepancias abiertas entre una afirmación y la realidad del repo. | Schema acordado (§5); archivo aún no creado en el repo. |
+| `RAYFLOW_SOURCE_OF_TRUTH.json` | Cada afirmación de `CLAUDE.md`, estructurada, con evidencia de dónde se sostiene en el código. | **Hecho.** Schema v2 aplicado a los 215 claims (ver §4). |
+| `rayflow_issues.json` | Cola de discrepancias abiertas entre una afirmación y la realidad del repo. | **Hecho.** Archivo creado en la raíz, con `ISSUE-0001` (el caso de `FlowSettingsDialog.tsx`, ver §5). |
 | `rayflow_file_map.json` | Ya existente, sin cambios de rol: mapa mecánico archivo→{descripción, depends_on, dependents}. | Sin cambios — ver §3 por qué no se fusiona con lo anterior. |
-| Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | No implementado. Diseño pendiente. |
-| Hook pre-commit | Dispara el agente auditor (y otras herramientas) antes de cada commit; usa `claude -p` en modo headless. | No implementado. Diseño pendiente — `pre-commit` (Python, framework de hooks) ya está instalado en el entorno de trabajo. |
+| Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | **Definido.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Método validado a mano (ver §6.1) — la invocación real vía `Task`/`Agent` **no** se pudo probar en la misma sesión que creó el archivo (ver §6.1, hallazgo de descubrimiento de subagentes). |
+| Hook pre-commit | Dispara el agente auditor (y otras herramientas) antes de cada commit; usa `claude -p` en modo headless. | No implementado. `pre-commit` (framework) ya está instalado en el entorno de trabajo. |
 | Bloqueo de edición directa | Impide que `RAYFLOW_SOURCE_OF_TRUTH.json` se edite a mano fuera del flujo del agente auditor, para "garantizar" (mayúsculas del nombre del archivo) que nunca quede desactualizado. | No implementado. Mecanismo concreto pendiente de diseño. |
 
 ## 3. Por qué tres archivos separados, no uno fusionado
@@ -73,7 +73,7 @@ por contenido duplicado — el mismo patrón que ya usa `rayflow_file_map.json`
 con su objeto `systems` (agrupación separada, no repetida dentro de cada
 archivo).
 
-## 4. Schema de `RAYFLOW_SOURCE_OF_TRUTH.json` (v2, propuesto)
+## 4. Schema de `RAYFLOW_SOURCE_OF_TRUTH.json` (v2, implementado)
 
 Cambios respecto al v1 actual (claims como strings sueltos en un array):
 
@@ -89,8 +89,8 @@ Cambios respecto al v1 actual (claims como strings sueltos en un array):
   issue; si el array está vacío porque nadie lo miró todavía, no).
 - `known_issues` (el array que vivía embebido en el SOT v1) desaparece por
   completo — se muda a `rayflow_issues.json`. El caso concreto de
-  `FlowSettingsDialog.tsx` que motivó ese campo en v1 es hoy el primer issue
-  de ejemplo del nuevo archivo.
+  `FlowSettingsDialog.tsx` que motivó ese campo en v1 es hoy `ISSUE-0001`,
+  el primer issue real del nuevo archivo.
 - **Sin metadata de verificación por-claim** (nada de `last_verified`,
   `verified_by`, etc. colgando de cada uno de los ~215 claims): eso
   generaría diff-noise en cada corrida del auditor aunque no cambie nada
@@ -119,7 +119,7 @@ Cambios respecto al v1 actual (claims como strings sueltos en un array):
 }
 ```
 
-## 5. Schema de `rayflow_issues.json` (v1, acordado)
+## 5. Schema de `rayflow_issues.json` (v1, implementado)
 
 - **Solo issues abiertos.** El archivo no acumula historial: "resolver" un
   issue es eliminarlo del array en el mismo commit que aplica el fix. El
@@ -140,22 +140,25 @@ Cambios respecto al v1 actual (claims como strings sueltos en un array):
 - `kind` es un enum abierto (`claim_contradicted`, `orphan_claim`, ... se
   agregan tipos según los vaya necesitando el auditor).
 
+Contenido real (`rayflow_issues.json` en la raíz del repo, al momento de
+escribir esto):
+
 ```json
 {
   "$schema_note": "...",
   "schema_version": 1,
-  "next_id": 4,
+  "next_id": 2,
   "issues": [
     {
       "id": "ISSUE-0001",
-      "severity": "high",
+      "severity": "low",
       "kind": "claim_contradicted",
       "title": "FlowSettingsDialog.tsx ya no edita inputs del flow, pero CLAUDE.md sigue afirmando que sí",
       "summary": "...",
-      "claim_ids": ["frontend-editor-visual#flowsettingsdialog-inputs-outputs"],
+      "claim_ids": ["frontend-editor-visual#flowsettingsdialog-tsx-modal-inputs-outputs-flow"],
       "files": ["rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx"],
       "docs": ["CLAUDE.md"],
-      "detected_by": {"agent": "rayflow-audit", "run_id": "...", "trigger": "manual"},
+      "detected_by": {"agent": "manual-audit", "run_id": "session-8e8dee33-2026-07-03", "trigger": "manual"},
       "detected_at": "2026-07-03T14:02:11Z",
       "evidence": [{"file": "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx", "note": "Props ya no incluye `inputs`; solo `outputs`."}]
     }
@@ -163,15 +166,64 @@ Cambios respecto al v1 actual (claims como strings sueltos en un array):
 }
 ```
 
-## 6. Flujo previsto (agente auditor + pre-commit) — sin diseño detallado todavía
+`next_id` vale 2 porque `ISSUE-0001` ya ocupa el slot 1 — el próximo issue que
+se cree será `ISSUE-0002`. No hay ningún hueco todavía (para ver el caso de
+un hueco — un issue creado y después resuelto/eliminado — hace falta que se
+resuelva al menos uno primero).
+
+## 6. Flujo previsto (agente auditor + pre-commit)
+
+### 6.1. Agente auditor — implementado, invocación real sin probar
+
+`.claude/agents/rayflow-auditor.md` es el agente: verifica claims del SOT
+contra el código real y escribe issues en `rayflow_issues.json`. Diseño:
+
+- **Scope**: se le puede pasar una lista de archivos/claims concreta (el
+  caso típico desde pre-commit, scopeado al diff vía
+  `.claude/hooks/_sot_scope.py`), o correr sin scope para auditar el SOT
+  completo.
+- `.claude/hooks/_sot_scope.py` es el helper que cruza archivos cambiados
+  contra el campo `evidence` de cada claim — mecánico, no exhaustivo: un
+  claim con `evidence: []` nunca va a aparecer ahí aunque el diff lo
+  afecte, así que el agente tiene instrucción explícita de buscar
+  activamente con `Grep`/`Glob` además de confiar en el filtro mecánico.
+- **Deduplicación**: antes de crear un issue, revisa si ya hay uno abierto
+  con el mismo `claim_id` en `rayflow_issues.json` — no duplica.
+- **Restricciones duras**: nunca edita `RAYFLOW_SOURCE_OF_TRUTH.json` ni
+  `CLAUDE.md`, nunca agrega `suggested_fix`. Su única escritura es
+  `rayflow_issues.json`.
+- **Validación manual del método** (no de la invocación real, ver debajo):
+  se probó a mano el caso de `FlowSettingsDialog.tsx` — `_sot_scope.py`
+  correctamente NO encuentra el claim (evidence vacía a propósito), pero
+  una búsqueda activa por texto sí lo encuentra, y ya existe `ISSUE-0001`
+  para ese `claim_id` — el flujo de deduplicación funciona como se diseñó.
+
+**Hallazgo pendiente de confirmar**: intentar invocar `rayflow-auditor` vía
+el tool `Agent`/`Task` en la misma sesión que creó el archivo
+`.claude/agents/rayflow-auditor.md` devolvió "Agent type not found" — el
+descubrimiento de subagentes de proyecto parece resolverse al arrancar la
+sesión, no en caliente. Falta confirmar en una sesión nueva que el agente
+efectivamente aparece disponible después de reiniciar. Si esto se confirma,
+tiene una implicancia directa para el hook de pre-commit (§6.2): no puede
+asumir que un agente recién creado/editado en el mismo proceso ya está
+activo.
+
+### 6.2. Hook de pre-commit — sin diseño detallado todavía
 
 Lo discutido hasta ahora, a nivel de intención, no de mecanismo concreto:
 
 - Un hook de **pre-commit** (usando el framework `pre-commit`, ya instalado)
   dispara el agente auditor antes de cada commit, junto con otras
   herramientas (linters, type-check, etc. — no especificado).
-- El auditor se invoca como `claude -p` (modo headless/print), pidiéndole que
-  revise si el diff staged modifica alguna afirmación del SOT.
+- El auditor se invoca como `claude -p` (modo headless/print) — a diferencia
+  de invocarlo como subagente vía `Task`/`Agent` (que vive dentro de una
+  sesión interactiva), `claude -p` es un proceso nuevo por invocación, así
+  que el hallazgo de §6.1 (descubrimiento de subagentes al arrancar) no
+  debería aplicar acá de la misma forma — cada invocación de `claude -p` YA
+  es un arranque nuevo. Falta confirmar esto también.
+- Debería pasarle el scope (`git diff --cached --name-only`) al prompt, para
+  que el auditor no re-audite los 215 claims en cada commit — ya resuelto a
+  nivel de mecanismo (`_sot_scope.py`), falta engancharlo al hook en sí.
 - Si encuentra una divergencia, escribe/actualiza `rayflow_issues.json`.
 - Se quiere que `RAYFLOW_SOURCE_OF_TRUTH.json` **no se pueda editar a mano**
   fuera de ese flujo — la idea es que un hook lo bloquee, aunque el mecanismo
@@ -185,12 +237,14 @@ Todo este punto queda abierto para la próxima sesión de diseño.
 
 ## 7. Pendientes
 
-- [ ] Aprobar el schema v2 del SOT (§4) y migrar los ~215 claims existentes.
-- [ ] Crear `rayflow_issues.json` en la raíz con el schema de §5 (arrancando
+- [x] Aprobar el schema v2 del SOT (§4) y migrar los ~215 claims existentes.
+- [x] Crear `rayflow_issues.json` en la raíz con el schema de §5 (arrancando
       con `ISSUE-0001` = el caso de `FlowSettingsDialog.tsx`).
 - [ ] Diseñar el mecanismo de bloqueo de edición directa del SOT.
-- [ ] Diseñar el prompt/alcance del agente auditor (qué le entra, qué le
-      pedimos que devuelva, cómo evita falsos positivos).
+- [x] Diseñar el prompt/alcance del agente auditor — `.claude/agents/
+      rayflow-auditor.md` + `.claude/hooks/_sot_scope.py` (§6.1). Método
+      validado a mano; invocación real vía `Task`/`Agent` sin confirmar
+      todavía (falta probarlo en una sesión nueva).
 - [ ] Configurar `.pre-commit-config.yaml` para disparar el auditor y
       cualquier otra herramienta que se sume.
 - [ ] Decidir si el bloqueo/auditor corren en cada commit o solo cuando el

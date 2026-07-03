@@ -10,3 +10,4 @@ exclude rayflow_file_map.json
 exclude rayflow_workflows.json
 exclude rayflow_scenarios.json
 exclude RAYFLOW_SOURCE_OF_TRUTH.json
+exclude rayflow_issues.json
