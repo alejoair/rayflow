@@ -3,8 +3,10 @@
 exclude CLAUDE.md
 prune docs
 
-# Generated LLM-orientation file map, workflow checklists, and scenario
-# narratives — internal tooling artifacts, not user docs.
+# Generated LLM-orientation file map, workflow checklists, scenario
+# narratives, and the CLAUDE.md claim breakdown — internal tooling
+# artifacts, not user docs.
 exclude rayflow_file_map.json
 exclude rayflow_workflows.json
 exclude rayflow_scenarios.json
+exclude RAYFLOW_SOURCE_OF_TRUTH.json
