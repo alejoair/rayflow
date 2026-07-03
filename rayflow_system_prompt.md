@@ -1,13 +1,3 @@
-<!--
-  ARCHIVO GENERADO — no editar a mano, se sobreescribe en cada commit.
-  Fuente: rayflow_system_prompt.md (prosa) + RAYFLOW_SOURCE_OF_TRUTH.json +
-  rayflow_file_map.json (índices, más abajo). Regenerado por
-  scripts/generate_claude_md.py, wireado como hook `claude-md-generate` en
-  .pre-commit-config.yaml (stage pre-commit). Ver docs/claude_md_generation.md.
--->
-
-# CLAUDE.md
-
 > `rayflow_system_prompt.md` — fuente hand-maintained de `CLAUDE.md`.
 > `CLAUDE.md` en sí es un archivo **generado**
 > (`scripts/generate_claude_md.py`) que envuelve este contenido verbatim más
@@ -545,64 +535,3 @@ Set escribe variable vigilada → GraphState.set_variable
 | `rayflow/api.py` | API pública: `load()`, `execute()`, `execute_async()`, `serve_events()`, `stop()` |
 | `rayflow/cli/main.py` | CLI: `rayflow serve` |
 | `rayflow/workspace.py` | Convenciones de directorio: `custom_nodes/`, `flows/` |
-
-
-## Índice de `RAYFLOW_SOURCE_OF_TRUTH.json`
-
-Cada sección abajo corresponde a un heading de este documento y tiene sus afirmaciones registradas como claims verificables en `RAYFLOW_SOURCE_OF_TRUTH.json` — leé ese archivo, filtrando por `section_id`, para el detalle de cada claim (texto + evidencia en código + docs relacionados). No se listan acá para no duplicar la prosa de arriba ni hacer que este archivo crezca con cada claim nuevo.
-
-| section_id | heading | claims |
-|---|---|---|
-| `carpeta-de-pruebas` | Carpeta de pruebas | 2 |
-| `comandos-de-desarrollo` | Comandos de desarrollo | 9 |
-| `arquitectura-general` | Arquitectura general | 5 |
-| `frontend-editor-visual` | Frontend (editor visual) | 19 |
-| `sistema-de-nodos-decoradores` | Sistema de nodos > Decoradores | 6 |
-| `sistema-de-nodos-entrada` | Sistema de nodos > Nodos de entrada (@entry_node) | 18 |
-| `sistema-de-nodos-estado` | Sistema de nodos > Estado en nodos | 6 |
-| `sistema-de-nodos-ctx-fire` | Sistema de nodos > Cómo funciona ctx.fire() internamente | 2 |
-| `sistema-de-nodos-pending-outputs` | Sistema de nodos > Buffer _pending_outputs en engine_nodes | 4 |
-| `sistema-de-nodos-runqueue-sse` | Sistema de nodos > RunQueue y eventos de ejecución (SSE) | 22 |
-| `sistema-de-nodos-descubrimiento` | Sistema de nodos > Descubrimiento de nodos | 1 |
-| `api-rest-flows` | API REST del editor > Flows (rayflow/editor/routes.py) | 21 |
-| `api-rest-custom-nodes` | API REST del editor > Nodos custom (rayflow/editor/custom_nodes_routes.py) | 8 |
-| `capa-mcp` | Capa MCP (para agentes LLM) | 23 |
-| `schema-de-un-flow` | Schema de un flow (JSON) | 14 |
-| `reglas-de-ui` | Reglas de UI (frontend Vite) | 9 |
-| `ciclo-de-vida-de-un-flow` | Ciclo de vida de un flow en Ray | 14 |
-| `sistema-de-eventos` | Sistema de eventos | 9 |
-| `triggers-por-cambio-de-variable` | Sistema de eventos > Triggers por cambio de variable (OnVariableChange) | 8 |
-| `archivos-clave-del-backend` | Archivos clave del backend | 15 |
-
-
-## Índice de sistemas (`rayflow_file_map.json`)
-
-Agrupación de los archivos del repo en sistemas, con su descripción y cantidad de archivos — el detalle completo (lista de archivos, `depends_on`/`dependents`) vive en `rayflow_file_map.json`.
-
-| sistema | archivos | descripción |
-|---|---|---|
-| `build` | 2 | Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one namespace, checks type/wiring/cycle correctness, and either raises on first error or collects every error in one pass for editor/MCP clients. |
-| `ci` | 3 | GitHub Actions workflows: CLA enforcement, test suite, and PyPI publishing. |
-| `cli` | 7 | The `rayflow` command-line entry point (serve, and future subcommands) built on top of rayflow.api and rayflow.server. |
-| `docs` | 21 | Long-form prose: README, CLAUDE.md (this repo's own agent-facing architecture guide), design-decision docs, and licensing/contribution documents (LICENSE, CLA.md, COMMERCIAL-LICENSE.md, CONTRIBUTING.md). |
-| `editor-api` | 5 | The REST surface for the visual editor: flow CRUD, validation, catalog resolution, custom-node CRUD with hot reload, and the curated markdown guide served to LLM agents. |
-| `engine` | 2 | The FlowEngine Ray actor and LoadedFlow lifecycle: executes a BuiltFlow node-by-node (sequential exec pins, parallel data pins), manages per-run scratch state (RunContext), and is the runtime core every other backend system ultimately drives. |
-| `events` | 2 | The EventBroker pub/sub bus: fire-and-forget publish/subscribe connecting EmitEvent nodes, OnEvent/OnVariableChange entry points, and cross-flow event-triggered execution. |
-| `frontend-app` | 10 | App shell: root component, entry point, global styles, static assets, and the HTML page the editor mounts into. |
-| `frontend-build` | 10 | Frontend build/tooling config: Vite, TypeScript project references, ESLint, npm package manifest — governs how src/ compiles into rayflow/editor/static/dist/. |
-| `frontend-canvas` | 4 | The React Flow graph canvas: node rendering (NodeCard), the FlowCanvas itself with execution animations, and the flowDef-JSON <-> React Flow nodes/edges translator. |
-| `frontend-panels` | 7 | Sidebar/footer editor panels: node palette, variables panel, custom-nodes CodeMirror editor, properties panel, runs panel, and the flow settings dialog. |
-| `frontend-state` | 5 | Client-side state and data access: the Zustand store (tabs, runs, catalog), the typed HTTP API client, and the SSE run-streaming hook with reconnect logic. |
-| `frontend-ui-kit` | 11 | Design-system primitives adapted from shadcn/ui (Button, Dialog, Select, Tabs, etc.), rewritten to use inline styles instead of Tailwind per this repo's UI conventions. |
-| `hooks-infra` | 20 | Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose. |
-| `mcp` | 3 | The curated FastMCP tool layer exposing a subset of the editor API as MCP tools for LLM agents (get_guide, list_nodes, validate_flow, run_flow, etc.) plus the .mcp.json client registration for this repo. |
-| `nodes` | 13 | The node system: @ray_node/@engine_node/@parallel_node decorators, pin descriptors (Input/Output/ExecInput/ExecOutput), NodeCatalog discovery/loading, and the built-in node library (math, control flow, casting, comparisons, variables, events). |
-| `packaging` | 7 | Controls what actually ships: pyproject.toml package metadata/dependencies, MANIFEST.in inclusion/exclusion rules, and the built frontend bundle (rayflow/editor/static/dist/) that server.py serves. |
-| `schema` | 4 | Flow JSON schema (FlowDef/NodeDef plain stdlib @dataclass models, not Pydantic — no pydantic dependency exists in this project) and the canonical data-pin type system (int/str/list[T]/dict[str,V]/Any) with compatibility rules. Foundational — almost every other backend system imports from here. |
-| `server` | 6 | Top-level app wiring and the public Python API: FastAPI app assembly (rayflow/server.py), and rayflow.api's load()/execute()/execute_async()/serve_events()/stop() functions that everything else (CLI, tests, external callers) goes through. run() was removed — no more load+run+unload one-shot in the public API (tests/helpers.py's run_once is a test-only replacement, not public). |
-| `state` | 3 | Two detached Ray actors that persist across executions of a loaded flow: GraphState (variables + watch_variable for change-triggered flows) and RunQueue (per-run SSE event sub-queues consumed by FastAPI). |
-| `tests` | 14 | The pytest suite covering build/validation, the engine/executor, the editor REST API, custom nodes, events, CallFlow subflows, MCP tools, node behavior, and schema parsing. |
-
-
----
-_Generado desde el commit `8c5434a`._

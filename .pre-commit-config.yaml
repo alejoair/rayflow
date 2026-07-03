@@ -11,6 +11,21 @@ default_install_hook_types:
 repos:
   - repo: local
     hooks:
+      - id: claude-md-generate
+        name: Regenerate CLAUDE.md from rayflow_system_prompt.md + SOT + file map
+        description: >
+          See docs/claude_md_generation.md and scripts/generate_claude_md.py.
+          CLAUDE.md is a generated file (banner + rayflow_system_prompt.md
+          verbatim + an index of RAYFLOW_SOURCE_OF_TRUTH.json sections and
+          rayflow_file_map.json systems). Runs on every commit, deterministic
+          (no LLM), and re-stages CLAUDE.md if it changed so the regenerated
+          version rides along in the same commit. Never blocks — editing
+          CLAUDE.md by hand is simply overwritten on the next commit; edit
+          rayflow_system_prompt.md instead.
+        entry: python3 scripts/generate_claude_md.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
       - id: sot-commit-guard
         name: Require a Sot-Change trailer when editing RAYFLOW_SOURCE_OF_TRUTH.json
         description: >

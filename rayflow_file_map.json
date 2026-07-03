@@ -173,8 +173,9 @@
       "system": "mcp"
     },
     ".pre-commit-config.yaml": {
-      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/check_sot_commit_message.py at the commit-msg stage (Layer 2 of SOT edit-blocking, §6.3) and scripts/run_sot_audit.py at the pre-commit stage (scoped auditor invocation, §6.2 — blocks the commit if the auditor finds a divergence). default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
+      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/generate_claude_md.py at the pre-commit stage (id claude-md-generate — regenerates and re-stages CLAUDE.md from rayflow_system_prompt.md + SOT/file-map indices on every commit, never blocks), scripts/check_sot_commit_message.py at the commit-msg stage (Layer 2 of SOT edit-blocking, §6.3 of docs/issues_system.md), and scripts/run_sot_audit.py at the pre-commit stage (scoped auditor invocation, §6.2 — blocks the commit if the auditor finds a divergence). default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
       "depends_on": [
+        "scripts/generate_claude_md.py",
         "scripts/check_sot_commit_message.py",
         "scripts/run_sot_audit.py"
       ],
@@ -188,8 +189,13 @@
       "system": "docs"
     },
     "CLAUDE.md": {
-      "description": "Architecture and conventions guide for Claude Code (or any LLM agent) working in this repo: node system, engine internals, REST/MCP API tables, flow JSON schema.",
-      "depends_on": [],
+      "description": "GENERATED FILE (scripts/generate_claude_md.py, pre-commit hook `claude-md-generate`, re-staged automatically on every commit if changed — never edit by hand, edits are silently overwritten at the next commit). Banner + rayflow_system_prompt.md verbatim + an index of RAYFLOW_SOURCE_OF_TRUTH.json's sections (heading + claim count + pointer, not the claim text) + an index of rayflow_file_map.json's systems. See docs/claude_md_generation.md for the full design.",
+      "depends_on": [
+        "rayflow_system_prompt.md",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_file_map.json",
+        "scripts/generate_claude_md.py"
+      ],
       "dependents": [],
       "system": "docs"
     },
@@ -212,13 +218,13 @@
       "system": "docs"
     },
     "MANIFEST.in": {
-      "description": "setuptools sdist manifest: excludes CLAUDE.md, docs/, and the five generated LLM-orientation JSONs (rayflow_file_map.json, rayflow_workflows.json, rayflow_scenarios.json, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json) from the published PyPI package — all internal tooling artifacts, not user docs.",
+      "description": "setuptools sdist manifest: excludes CLAUDE.md (a generated file, see docs/claude_md_generation.md) and its hand-maintained source rayflow_system_prompt.md, docs/, and the five generated LLM-orientation JSONs (rayflow_file_map.json, rayflow_workflows.json, rayflow_scenarios.json, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json) from the published PyPI package — all internal tooling artifacts, not user docs.",
       "depends_on": [],
       "dependents": [],
       "system": "packaging"
     },
     "RAYFLOW_SOURCE_OF_TRUTH.json": {
-      "description": "Structured, section-organized claims about the rayflow codebase (schema_version 2), each claim an object {id, text, evidence, docs}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative code paths (optionally '#symbol') supporting the claim. docs is a best-effort array of OTHER documentation files (README.md, a SKILL.md, guide.py, ...) that independently restate the same fact — CLAUDE.md is deliberately excluded from every claim's docs, since it's slated to become a generated rendering of this file rather than an independent doc that can drift. Both evidence and docs empty mean 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the audit agent (.claude/agents/rayflow-auditor.md) and by hand.",
+      "description": "Structured, section-organized claims about the rayflow codebase (schema_version 2), extracted from rayflow_system_prompt.md (its source_file) — each claim an object {id, text, evidence, docs}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative code paths (optionally '#symbol') supporting the claim. docs is a best-effort array of OTHER documentation files (README.md, a SKILL.md, guide.py, ...) that independently restate the same fact — CLAUDE.md and rayflow_system_prompt.md are both deliberately excluded from every claim's docs: CLAUDE.md because it's a generated mechanical re-render (scripts/generate_claude_md.py), rayflow_system_prompt.md because it's the source the claims were extracted FROM, not an independent restatement. Both evidence and docs empty mean 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed by itself — read by scripts/generate_claude_md.py (index only, not full dump), read/written by the audit agent (.claude/agents/rayflow-auditor.md), and by hand.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
@@ -1518,6 +1524,30 @@
         ".pre-commit-config.yaml"
       ],
       "system": "hooks-infra"
+    },
+    "rayflow_system_prompt.md": {
+      "description": "Hand-maintained source of CLAUDE.md's prose (process/conventions: dev commands, node system, engine internals, REST/MCP API tables, flow JSON schema, UI style rules). CLAUDE.md itself is now generated FROM this file — edit this one, not CLAUDE.md. See docs/claude_md_generation.md.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "docs"
+    },
+    "scripts/generate_claude_md.py": {
+      "description": "pre-commit stage hook (framework `pre-commit`, wired via .pre-commit-config.yaml, id `claude-md-generate`): regenerates CLAUDE.md from rayflow_system_prompt.md + an index of RAYFLOW_SOURCE_OF_TRUTH.json sections + an index of rayflow_file_map.json systems. Deterministic, no LLM. If the regenerated content differs from what's on disk, overwrites CLAUDE.md and `git add`s it so the new version rides along in the commit being made. Never blocks (always exit 0). See docs/claude_md_generation.md.",
+      "depends_on": [
+        "rayflow_system_prompt.md",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_file_map.json"
+      ],
+      "dependents": [
+        ".pre-commit-config.yaml"
+      ],
+      "system": "hooks-infra"
+    },
+    "docs/claude_md_generation.md": {
+      "description": "Design doc (in Spanish, self-contained) for the CLAUDE.md generation mechanism: why CLAUDE.md became a generated file (banner + rayflow_system_prompt.md verbatim + SOT/file-map indices), why it stays git-tracked rather than gitignored (avoids a fresh-clone bootstrap problem entirely), why no edit-blocking was needed (unlike the SOT — CLAUDE.md just gets silently overwritten on the next commit, so blocking would be redundant), and the scripts/generate_claude_md.py mechanism wired as the `claude-md-generate` pre-commit hook.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "docs"
     }
   },
   "systems": {
@@ -1580,6 +1610,7 @@
         "RAYFLOW_SOURCE_OF_TRUTH.json",
         "README.md",
         "docs/analisis-conceptual.md",
+        "docs/claude_md_generation.md",
         "docs/frontend.md",
         "docs/issues_system.md",
         "docs/propuesta-runcontext.md",
@@ -1588,6 +1619,7 @@
         "rayflow_file_map.json",
         "rayflow_issues.json",
         "rayflow_scenarios.json",
+        "rayflow_system_prompt.md",
         "rayflow_workflows.json",
         "signatures/cla.json"
       ],
@@ -1783,6 +1815,7 @@
         ".claude/settings.local.json",
         ".pre-commit-config.yaml",
         "scripts/check_sot_commit_message.py",
+        "scripts/generate_claude_md.py",
         "scripts/run_sot_audit.py"
       ],
       "depends_on_systems": [],
