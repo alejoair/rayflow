@@ -28,6 +28,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 .claude/hooks/sot_guard.py 2>/dev/null || true",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "python3 .claude/hooks/ty_diff_pre.py 2>/dev/null || true",
             "timeout": 5
           }

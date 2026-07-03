@@ -98,23 +98,25 @@ function PinEditor({ rows, onChange }: { rows: PinRow[]; onChange: (rows: PinRow
 }
 
 interface Props {
-  inputs: Record<string, string>
   outputs: Record<string, string>
   onClose: () => void
-  onSave: (inputs: Record<string, string>, outputs: Record<string, string>) => void
+  onSave: (outputs: Record<string, string>) => void
 }
 
-export default function FlowSettingsDialog({ inputs, outputs, onClose, onSave }: Props) {
-  const [inputRows, setInputRows] = useState<PinRow[]>(parsePins(inputs))
+// Only the flow's outputs are editable here. There's no flow-level
+// "inputs" — a flow's inputs live on whichever node declares itself the
+// entry (OnStart, ChatTrigger, a custom @entry_node, ...), via that
+// node's own Input pins, not on the flow itself.
+export default function FlowSettingsDialog({ outputs, onClose, onSave }: Props) {
   const [outputRows, setOutputRows] = useState<PinRow[]>(parsePins(outputs))
   const [err, setErr] = useState('')
 
   function handleSave() {
     setErr('')
-    const names = [...inputRows, ...outputRows].map(r => r.name.trim()).filter(Boolean)
+    const names = outputRows.map(r => r.name.trim()).filter(Boolean)
     const dupes = names.filter((n, i) => names.indexOf(n) !== i)
     if (dupes.length) { setErr(`Nombres duplicados: ${dupes.join(', ')}`); return }
-    onSave(pinsToRecord(inputRows), pinsToRecord(outputRows))
+    onSave(pinsToRecord(outputRows))
     onClose()
   }
 
@@ -127,13 +129,6 @@ export default function FlowSettingsDialog({ inputs, outputs, onClose, onSave }:
         <DialogHeader>
           <DialogTitle style={{ fontSize: 15, fontWeight: 600 }}>Flow settings</DialogTitle>
         </DialogHeader>
-
-        <div>
-          <div style={sectionLabel}>Inputs</div>
-          <PinEditor rows={inputRows} onChange={setInputRows} />
-        </div>
-
-        <div style={{ height: 1, background: 'var(--border)' }} />
 
         <div>
           <div style={sectionLabel}>Outputs</div>

@@ -59,7 +59,7 @@
       "triggers": ["flow json", "schema del flow", "flowdef", "nodedef", "cambiar el schema", "change the schema"],
       "systems": ["schema", "build", "frontend-state", "tests"],
       "checklist": [
-        "Model changes go in rayflow/schema/models.py (Pydantic) and rayflow/schema/loader.py (unknown-key warnings).",
+        "Model changes go in rayflow/schema/models.py (plain stdlib @dataclass, not Pydantic — there's no pydantic dependency in this project) and rayflow/schema/loader.py (unknown-key warnings).",
         "If the change affects validation/wiring semantics, rayflow/build/validator.py likely needs updating too (flatten/validate_all).",
         "The frontend translator (rayflow/editor/frontend/src/lib/translator.ts) converts flowDef JSON <-> React Flow nodes/edges — check both directions still round-trip.",
         "Update the flow JSON schema example in CLAUDE.md, README.md, and rayflow/claude_tools/skills/rayflow-flow/SKILL.md, and rayflow/editor/guide.py's GUIDE text — there's no packaged examples/ directory anymore (GET /editor/examples was removed), so these inline examples are the only reference.",

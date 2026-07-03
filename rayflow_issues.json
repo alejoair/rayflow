@@ -1,0 +1,35 @@
+{
+  "$schema_note": "Cola de issues ABIERTOS detectados al comparar RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del repo. Cada issue enlaza claim_ids (RAYFLOW_SOURCE_OF_TRUTH.json), files (rutas afectadas, típicamente ya en rayflow_file_map.json), y docs (archivos de documentación en prosa que también quedan desactualizados: CLAUDE.md, README.md, SKILL.md, guide.py, etc.). Este archivo NO acumula historial: 'resolver' un issue es eliminarlo del array en el mismo commit que aplica el fix — el historial completo (cuándo se creó, cuándo se resolvió, en qué commit) vive en `git log -p -- rayflow_issues.json` / `git blame`, no acá. `next_id` es un contador monótono que nunca retrocede ni reutiliza ids, aunque el array se achique — por eso puede haber huecos en la numeración. Ver docs/issues_system.md para el diseño completo.",
+  "schema_version": 1,
+  "next_id": 2,
+  "issues": [
+    {
+      "id": "ISSUE-0001",
+      "severity": "low",
+      "kind": "claim_contradicted",
+      "title": "FlowSettingsDialog.tsx ya no edita inputs del flow, pero CLAUDE.md sigue afirmando que sí",
+      "summary": "La fila de FlowSettingsDialog.tsx en la tabla de componentes de CLAUDE.md (línea ~99, sección Frontend > Componentes clave) dice 'Modal de inputs/outputs del flow'. El componente fue corregido en el commit 9191da8 para editar solo outputs — inputs vive en el Input pin que declara el nodo de entrada del flow, no en el flow mismo.",
+      "claim_ids": [
+        "frontend-editor-visual#flowsettingsdialog-tsx-modal-inputs-outputs-flow"
+      ],
+      "files": [
+        "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx"
+      ],
+      "docs": [
+        "CLAUDE.md"
+      ],
+      "detected_by": {
+        "agent": "manual-audit",
+        "run_id": "session-8e8dee33-2026-07-03",
+        "trigger": "manual"
+      },
+      "detected_at": "2026-07-03T14:02:11Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx",
+          "note": "Props de FlowSettingsDialog ya no incluyen `inputs` — solo `outputs` (ver commit 9191da8)."
+        }
+      ]
+    }
+  ]
+}

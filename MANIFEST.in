@@ -1,10 +1,16 @@
 # Files to keep OUT of the published package (sdist/wheel).
 # CLAUDE.md is internal tooling guidance for the Claude Code agent, not user docs.
+# It's a generated file (see scripts/generate_claude_md.py); its hand-maintained
+# source, rayflow_system_prompt.md, is excluded for the same reason.
 exclude CLAUDE.md
+exclude rayflow_system_prompt.md
 prune docs
 
-# Generated LLM-orientation file map, workflow checklists, and scenario
-# narratives — internal tooling artifacts, not user docs.
+# Generated LLM-orientation file map, workflow checklists, scenario
+# narratives, and the CLAUDE.md claim breakdown — internal tooling
+# artifacts, not user docs.
 exclude rayflow_file_map.json
 exclude rayflow_workflows.json
 exclude rayflow_scenarios.json
+exclude RAYFLOW_SOURCE_OF_TRUTH.json
+exclude rayflow_issues.json

@@ -1,0 +1,69 @@
+# Local, first-party hooks only — no external repos, nothing published.
+# `pre-commit install` only wires the `pre-commit` stage by default; this
+# repo also uses `commit-msg`, so run:
+#   pre-commit install --hook-type pre-commit --hook-type commit-msg
+# (default_install_hook_types below makes a plain `pre-commit install`
+# do the same.)
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: local
+    hooks:
+      - id: claude-md-generate
+        name: Regenerate CLAUDE.md from rayflow_system_prompt.md + SOT + file map
+        description: >
+          See docs/claude_md_generation.md and scripts/generate_claude_md.py.
+          CLAUDE.md is a generated file (banner + rayflow_system_prompt.md
+          verbatim + an index of RAYFLOW_SOURCE_OF_TRUTH.json sections and
+          rayflow_file_map.json systems). Runs on every commit, deterministic
+          (no LLM), and re-stages CLAUDE.md if it changed so the regenerated
+          version rides along in the same commit. Never blocks — editing
+          CLAUDE.md by hand is simply overwritten on the next commit; edit
+          rayflow_system_prompt.md instead.
+        entry: python3 scripts/generate_claude_md.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+      - id: agents-generate
+        name: Regenerate per-system specialist subagents (.claude/agents/)
+        description: >
+          See rayflow_agents_system.md and scripts/generate_specialist_agents.py.
+          One .claude/agents/rayflow-<system>-specialist.md per system in
+          rayflow_file_map.json.systems, with real content (file
+          descriptions, inter-system dependencies, the SOT claims whose
+          evidence falls in that system, open issues that mention it) — not
+          just pointers, since regenerating on every commit (same mechanism
+          as claude-md-generate) removes the staleness risk that motivated
+          avoiding embedded content in the first place. Deterministic, no
+          LLM. Never blocks.
+        entry: python3 scripts/generate_specialist_agents.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+      - id: sot-commit-guard
+        name: Require a Sot-Change trailer when editing RAYFLOW_SOURCE_OF_TRUTH.json
+        description: >
+          See docs/issues_system.md §6.3 and scripts/check_sot_commit_message.py.
+          Layer 2 of the SOT edit-blocking design: rejects any commit that
+          touches RAYFLOW_SOURCE_OF_TRUTH.json without a `Sot-Change: <reason>`
+          trailer in the commit message.
+        entry: python3 scripts/check_sot_commit_message.py
+        language: system
+        stages: [commit-msg]
+      - id: sot-audit
+        name: Audit SOT claims affected by this commit's staged diff
+        description: >
+          See docs/issues_system.md §6.2 and scripts/run_sot_audit.py. Scopes
+          RAYFLOW_SOURCE_OF_TRUTH.json claims to the staged diff via
+          .claude/hooks/_sot_scope.py (no-op, no LLM call, if nothing in
+          scope), then runs the rayflow-auditor subagent
+          (.claude/agents/rayflow-auditor.md) via `claude -p --agent`. Blocks
+          the commit only if the auditor writes new content to
+          rayflow_issues.json — infra failures (claude missing, timeout) fail
+          open and just warn.
+        entry: python3 scripts/run_sot_audit.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false

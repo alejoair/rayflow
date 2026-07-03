@@ -54,14 +54,10 @@ function buildFlowIOmeta(catalog: Record<string, NodeSpec>, flowDef: FlowDef): R
     inputs: [], outputs: [], exec_outputs: ['exec_out'],
   }
 
-  // OnStart: sin exec_in, con exec_out, outputs = inputs del flow
-  const fiBase = baseMeta('OnStart')
-  base['OnStart'] = {
-    ...fiBase,
-    outputs: Object.entries(flowDef.inputs || {}).map(([name, type]) => ({
-      name, type, kind: 'output' as const, required: false,
-    })),
-  }
+  // Entry nodes (OnStart, ChatTrigger, OnEvent, custom @entry_node, ...) are
+  // NOT overridden here: they declare their own static Input/Output pins on
+  // the class, already reflected verbatim in `catalog`. There's no more
+  // flow-level `inputs` field to derive dynamic pins from.
 
   // FlowOutput: con exec_in, sin exec_out, inputs = outputs del flow
   const foBase = baseMeta('FlowOutput')
