@@ -56,6 +56,9 @@ pytest tests/
 
 # Type-check el backend (ty, de Astral — muy rápido, ~0.3s para todo rayflow/)
 ty check rayflow/
+
+# Activar los git hooks de pre-commit (una sola vez por clon; ver .pre-commit-config.yaml)
+pre-commit install --hook-type pre-commit --hook-type commit-msg
 ```
 
 `ty` marca falsos positivos conocidos en archivos con actores Ray (`@ray.remote`
