@@ -1527,7 +1527,7 @@
       "system": "hooks-infra"
     },
     "rayflow_system_prompt.md": {
-      "description": "Hand-maintained source of CLAUDE.md's prose (process/conventions: dev commands, node system, engine internals, REST/MCP API tables, flow JSON schema, UI style rules). CLAUDE.md itself is now generated FROM this file — edit this one, not CLAUDE.md. See docs/claude_md_generation.md.",
+      "description": "Hand-maintained source of CLAUDE.md's prose. Deliberately high-level only: workflow conventions (test sandbox), dev commands, and the top-level architecture/design-principles mental map needed to route work to the right specialist — plus instructions for delegating per-system detail to the .claude/agents/rayflow-<system>-specialist subagents (spawn via Agent, then converse via SendMessage instead of re-reading files). Per-system detail (node system, engine internals, REST/MCP API tables, flow JSON schema, UI style rules) now lives only in those specialist agents, not here. CLAUDE.md itself is generated FROM this file — edit this one, not CLAUDE.md. See docs/claude_md_generation.md.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
