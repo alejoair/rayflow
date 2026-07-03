@@ -33,18 +33,30 @@ rayflow serve --port 8000
 - REST API: http://localhost:8000/flows
 - Health check: http://localhost:8000/health
 
-Or run a flow from Python:
+Or run a flow from Python. A flow's inputs live on its entry node — there's
+no flow-level `inputs` field, so a flow that wants named typed inputs (like
+`a`/`b` below, as opposed to the raw HTTP envelope `OnStart` gives you)
+declares its own `@entry_node`:
 
 ```python
 import rayflow
+from rayflow.nodes.decorators import entry_node, Input, ExecOutput
+from rayflow.nodes.registry import get_catalog
 
-# A flow is plain data — here defined inline. Load, run, and unload in one call.
+@entry_node
+class SumaEntry:
+    a = Input("int", default=0)
+    b = Input("int", default=0)
+    exec_out = ExecOutput()
+
+get_catalog().register(SumaEntry)
+
+# A flow is plain data — here defined inline.
 suma = {
     "name": "suma",
-    "inputs":  {"a": "int", "b": "int"},
     "outputs": {"result": "int"},
     "nodes": [
-        {"id": "entry", "type": "OnStart"},
+        {"id": "entry", "type": "SumaEntry"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.a", "b": "entry.b"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -52,15 +64,18 @@ suma = {
     ],
 }
 
-result = rayflow.run(suma, a=3, b=4)
-print(result)  # {"result": 7}
+rayflow.load(suma)
+for event in rayflow.execute("suma", {"a": 3, "b": 4}):
+    if event["event"] == "flow_done":
+        print(event["result"])  # {"result": 7}
+rayflow.unload("suma")
 ```
 
 ## How a flow is triggered
 
 The same graph can be started in several ways:
 
-- **One-shot** — `rayflow.run(flow, **inputs)`: load, run, and unload. For a single computation.
+- **Programmatically** — `load()` once, `execute()` any number of times (each call streams `node_start`/`node_done`/`flow_done` events and returns the flow's outputs in `flow_done`), `unload()` when done.
 - **Served as an API** — `load()` once and `execute()` many times; exposed over HTTP with event streaming. The system stays resident and is invoked repeatedly.
 - **With a built-in UI** — use the `ChatTrigger` entry node (or any custom entry node declaring `frontend`) and `rayflow serve --file flow.json` mounts a static web UI at `GET /flows/{name}/ui`. The page talks to the flow over the same `/flows/{name}/run` endpoint — no separate transport. Useful for chat-style flows, forms, or any flow that wants a human-facing surface without writing a frontend app.
 - **By event** — `serve_events()` plus an `OnEvent` node: the flow stays resident and is triggered by an event, with no direct call.
@@ -103,10 +118,9 @@ A flow is stored as JSON. For example, the `suma` flow from the quickstart:
 ```json
 {
   "name": "suma",
-  "inputs":  { "a": "int", "b": "int" },
   "outputs": { "result": "int" },
   "nodes": [
-    { "id": "entry", "type": "OnStart" },
+    { "id": "entry", "type": "SumaEntry" },
     { "id": "add", "type": "Add", "exec_in": "entry",
       "inputs": { "a": "entry.a", "b": "entry.b" } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -120,8 +134,7 @@ A flow is stored as JSON. For example, the `suma` flow from the quickstart:
 ```python
 import rayflow
 
-rayflow.run(source, **inputs)   # load + run + unload (one-shot)
-rayflow.load(source)            # keep the flow resident in Ray
+rayflow.load(source)            # pre-validate, spawn actors, register as served
 rayflow.execute(name, inputs)   # run an already-loaded flow (event stream)
 rayflow.unload(name)            # unload the flow
 rayflow.serve_events(source)    # keep the flow resident, subscribed to the event bus

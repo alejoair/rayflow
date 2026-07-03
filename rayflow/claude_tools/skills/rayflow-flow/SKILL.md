@@ -40,11 +40,10 @@ conversation on the noisy back-and-forth.
 ```json
 {
   "name": "my_flow",
-  "inputs": { "x": "int" },
   "outputs": { "result": "int" },
   "nodes": [
     { "id": "entry", "type": "OnStart" },
-    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
+    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": 5, "b": 10 } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
   ]
 }
@@ -54,12 +53,16 @@ conversation on the noisy back-and-forth.
 - `exec_in` wires control flow: `"<node_id>"`, or `"<node_id>.<exec_out_pin>"`
   if that node has more than one exec output (e.g. `Branch`'s `"true"`/`"false"`).
 - Data inputs are either a literal value or a reference string
-  `"<node_id>.<output_pin>"`. `OnStart`'s outputs are the flow's own declared
-  `inputs`; a `FlowOutput` node's inputs become the flow's declared `outputs`.
+  `"<node_id>.<output_pin>"`. There's no flow-level `inputs` field — the
+  entry node (`OnStart` or a custom `@entry_node`) declares its own `Input`
+  pins, populated from the request body by name; wire them downstream as
+  `entry.<pin_name>` like any other pin. A `FlowOutput` node's inputs become
+  the flow's declared `outputs`.
 - Use `mcp__rayflow__flow_catalog` on a saved flow to see each node's
-  *actual resolved* pins in context (dynamic pins like `OnStart`'s or
-  `Parallel`'s branches only exist once wired, so `list_nodes`/`get_node`
-  alone won't show them for a specific flow).
+  *actual resolved* pins in context (dynamic pins like `Parallel`'s branches
+  or `FlowOutput`'s inputs only exist once wired, so `list_nodes`/`get_node`
+  alone won't show them for a specific flow — entry nodes like `OnStart` are
+  static and already show up there).
 
 ## Composing bigger flows
 
@@ -80,12 +83,14 @@ conversation on the noisy back-and-forth.
 
 ## HTTP request/response (flows served via `rayflow serve --file`)
 
-Every served flow's trigger IS an HTTP request, so `OnStart` always exposes
-4 fixed outputs alongside whatever named `inputs` the flow declares:
-`headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`,
-the parsed JSON body), `method` (`str`). Wire from `entry.headers` etc.
-like any other pin — no special node needed. Outside HTTP (MCP tools,
-programmatic calls) these just come back empty.
+Every served flow's trigger IS an HTTP request. `OnStart` declares
+`body` (`Any`, the parsed JSON body), `headers` (`dict[str, str]`), `query`
+(`dict[str, str]`), and `method` (`str`) as its own `Input` pins, so any
+flow with `OnStart` as entry gets them for free — wire from `entry.headers`
+etc. like any other pin. A custom `@entry_node` that wants them must
+declare the same pins itself (or read `ctx.request` directly inside its
+`run()`). Outside HTTP (MCP tools, programmatic calls) these just come back
+empty.
 
 For the response, `ctx.set_response_status(code)` /
 `ctx.set_response_header(name, value)` inside any node's `run()` set the

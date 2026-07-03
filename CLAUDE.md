@@ -141,25 +141,30 @@ class MiPure:
         return {"result": x * 2}
 ```
 
-### Nodos de entrada (`is_entry`)
+### Nodos de entrada (`@entry_node`)
 
-Un flow necesita **exactamente un** nodo de entrada — el punto donde el engine arranca la ejecución. Cualquier nodo, built-in o custom, puede declararse como tal con atributos de clase (misma convención que `category`, extraídos en `_extract_meta`, sin decorador nuevo):
+Un flow necesita **exactamente un** nodo de entrada — el punto donde el engine arranca la ejecución. A diferencia de `category`/`frontend` (atributos de clase leídos por `_extract_meta`), ser entry point **no** es algo que el autor del nodo fije directamente: lo otorga el decorador `@entry_node` (`rayflow/nodes/decorators.py`), que marca `meta.is_entry = True` después de extraer la metadata.
 
 ```python
-@engine_node
+@entry_node
 class MiTrigger:
-    is_entry = True              # puede ser el entry point de un flow
-    exposes_flow_inputs = True   # opcional: inyecta flow.inputs + headers/query/body/method como outputs dinámicos
-    frontend = "mi_trigger_ui"   # opcional: nombre del directorio de UI a servir en /flows/{name}/ui
+    frontend = "mi_trigger_ui"          # opcional: nombre del directorio de UI a servir en /flows/{name}/ui
+    x        = Input("int", default=0)  # pin propio, poblado desde el body HTTP (flow_inputs)
     exec_out = ExecOutput()
+
+    async def run(self, ctx: EntryContext, x: int) -> None:
+        ctx.set_output("x", x * 2)
+        await ctx.fire("exec_out")
 ```
 
-- **`is_entry`**: lo reconoce `_find_entry` (`build/validator.py`) al buildear — si el flow declara cero o más de un nodo con `is_entry = True`, `build()` falla ("no entry node" / "more than one entry node"). En runtime, `_fire_engine_node` (`engine/executor.py`) trata a un nodo de entrada como puro passthrough: sus `flow_inputs` se escriben como sus outputs y dispara `exec_out` — **nunca llama a `run()`**. Cualquier lógica sobre el payload recibido va en un nodo normal wireado después de su `exec_out`.
-- **`exposes_flow_inputs`**: más angosto que `is_entry` — inyecta dinámicamente los `inputs` declarados del flow más los 4 pines fijos `headers`/`query`/`body`/`method` como outputs (ver "Un solo endpoint de ejecución" más abajo). `OnVariableChange` es un nodo de entrada que NO lo declara, porque sus outputs (`value`/`old`) son pines estáticos propios.
-- **`frontend`** (str, opcional): nombre de un directorio de assets estáticos (HTML/JS/CSS) hermano del archivo `.py` del nodo. Si el entry de un flow servido lo declara, `create_app` (`rayflow/server.py`) monta ese directorio en `GET /flows/{name}/ui` con `StaticFiles(html=True)`. El bundle es **neutral al tipo de entry**: el framework no impone cómo la UI habla con el flow — para `OnStart`/`ChatTrigger` el JS típicamente POSTea a `/flows/{name}/run`; otro entry (p.ej. un `OnVariableChange` con UI de dashboard) podría no usar `/run`. Hay a lo sumo un `frontend` por flow (garantizado por exactly-one-entry). El directorio se resuelve vía `inspect.getfile(cls).parent / frontend`, así que para built-ins vive en `rayflow/nodes/builtin/<bundle>/` y para custom en `custom_nodes/<bundle>/` (empaquetado como package-data, no distribuido a workers — lo sirve el proceso FastAPI). Si el directorio declarado no existe, se loguea un warning y la ruta `/ui` no se monta (no rompe el startup). **`ChatTrigger`** es el built-in de referencia: idéntico a `OnStart` pero con `frontend = "chat_trigger_frontend"`, así que cualquier flow con entry `ChatTrigger` expone una UI de chat estilo n8n.
-- **Restricciones validadas al decorar/registrar** (`ValueError` inmediato): un nodo `is_entry = True` no puede declarar `exec_in` (nada dentro del grafo debe poder dispararlo), ni estar decorado con `@ray_node` (el short-circuit de entrada vive en `_fire_engine_node`, que nunca llama a `run()` — un `@ray_node` sí lo llamaría, silenciosamente nunca ejecutándose). Usar `@engine_node`/`@parallel_node`.
-- `OnStart`, `OnEvent`, `OnVariableChange`, y `ChatTrigger` son los cuatro tipos built-in con `is_entry = True` — no una lista cerrada del engine.
-- **Excepción deliberada**: los subflows (`CallFlow`) siguen reconociendo su nodo de entrada spliceado por nombre literal (`OnStart`/`OnEvent`) en `_splice_subflow`, no por `is_entry` — un subflow se invoca inline por su padre (`CallFlow`), no se dispara desde afuera, así que generalizar ese camino no aplicaba.
+- **`@entry_node`**: es un `@engine_node` (corre dentro del engine — nunca `@ray_node`, ver restricción abajo) con dos agregados: (1) recibe un `EntryContext`, subclase de `ExecContext` que expone `ctx.request` (`body`/`headers`/`query`/`method`, el envelope HTTP crudo) — **solo** un entry tiene acceso; cualquier otro nodo que intente leer `ctx.request` obtiene `AttributeError` por construcción; (2) sus `Input` declarados se pueblan desde `run.flow_inputs` (que el server llena con el body de la request, matcheando por nombre de pin) en vez de desde predecesores wireados — el entry no tiene predecesores, es el puente entre el mundo exterior y el grafo. `_find_entry` (`build/validator.py`) exige exactamente un nodo con `meta.is_entry = True` al buildear — cero o más de uno es error de build ("no entry node" / "more than one entry node").
+- **Sin `run()` → auto-passthrough**: si la clase no define `run()`, el engine (`_fire_engine_node`, `engine/executor.py`) espeja cada `Input` declarado como un `Output` del mismo nombre y dispara `exec_out` — cubre el caso "trigger tonto" (`OnStart`) sin escribir un `run()` trivial. Si define `run()`, el autor llama `ctx.set_output(...)` + `await ctx.fire(...)` como cualquier engine_node (`ChatTrigger` es la referencia: reenvía `message` como `message_out`).
+- **Red de seguridad**: si el `run()` de un entry no dispara ningún exec output, el engine dispara `exec_out` automáticamente al terminar, para no dejar el flow trabado — no es el camino principal, un entry bien escrito dispara explícitamente.
+- **`frontend`** (str, opcional): nombre de un directorio de assets estáticos (HTML/JS/CSS) hermano del archivo `.py` del nodo. Si el entry de un flow servido lo declara, `create_app` (`rayflow/server.py`) monta ese directorio en `GET /flows/{name}/ui` con `StaticFiles(html=True)`. El bundle es **neutral al tipo de entry**: el framework no impone cómo la UI habla con el flow — para `OnStart`/`ChatTrigger` el JS típicamente POSTea a `/flows/{name}/run`; otro entry (p.ej. un `OnVariableChange` con UI de dashboard) podría no usar `/run`. Hay a lo sumo un `frontend` por flow (garantizado por exactly-one-entry). El directorio se resuelve vía `inspect.getfile(cls).parent / frontend`, así que para built-ins vive en `rayflow/nodes/builtin/<bundle>/` y para custom en `custom_nodes/<bundle>/` (empaquetado como package-data, no distribuido a workers — lo sirve el proceso FastAPI). Si el directorio declarado no existe, se loguea un warning y la ruta `/ui` no se monta (no rompe el startup). **`ChatTrigger`** es el built-in de referencia: declara `frontend = "chat_trigger_frontend"` y un `message`/`message_out` propios, así que cualquier flow con entry `ChatTrigger` expone una UI de chat estilo n8n.
+- **Restricciones validadas al decorar** (`ValueError` inmediato): `@entry_node` no puede declarar `exec_in` (nada dentro del grafo debe poder dispararlo) y debe declarar al menos un `ExecOutput`. Y `@ray_node` rechaza una clase ya decorada con `@entry_node` (un entry corre dentro del engine con `EntryContext`; un `@ray_node` invocaría `run()` en un actor remoto, donde el camino de entrada nunca se ejecutaría silenciosamente). Usar `@entry_node` (que ya corre engine-side).
+- `OnStart`, `OnEvent`, `OnVariableChange`, y `ChatTrigger` son los cuatro tipos built-in decorados con `@entry_node` — no una lista cerrada del engine.
+- El campo `inputs` del flow (`FlowDef`) **ya no existe** en el schema (`rayflow/schema/models.py`) — los inputs de un flow viven exclusivamente en los `Input` que su entry declara, poblados por nombre desde el body HTTP. Ver "Schema de un flow (JSON)" más abajo.
+- Los subflows (`CallFlow`) reconocen su nodo de entrada spliceado genéricamente vía `meta.is_entry` en `_splice_subflow` (con un fallback por nombre literal `OnStart`/`OnEvent`, solo para callers legacy que invocan sin pasar el catálogo) — no hace falta un mecanismo aparte del que usa `_find_entry` para el entry raíz.
 
 ### Estado en nodos
 
@@ -249,7 +254,7 @@ El servidor carga nodos desde:
 |--------|------|-------------|
 | `GET` | `/editor/info` | Workspace activo: `{cwd}` |
 | `GET` | `/editor/nodes` | Catálogo de nodos disponibles |
-| `GET` | `/editor/nodes/{node_type}` | Spec de un tipo de nodo concreto. Incluye `dynamic` para nodos con pins dinámicos (OnStart, FlowOutput, Parallel, CallFlow) |
+| `GET` | `/editor/nodes/{node_type}` | Spec de un tipo de nodo concreto. Incluye `dynamic` para nodos con pins dinámicos (FlowOutput, Parallel, CallFlow); los nodos de entrada (`OnStart`, `OnEvent`, `ChatTrigger`, ...) ya no aparecen ahí — sus pins son estáticos, declarados en la clase |
 | `GET` | `/editor/types` | Tipos canónicos y reglas de compatibilidad |
 | `POST` | `/editor/type-check` | Verificar compatibilidad entre dos tipos |
 | `GET` | `/editor/guide` | Guía curada del modelo de Rayflow (markdown) para construir flows |
@@ -318,17 +323,18 @@ Copia plantillas empaquetadas en `rayflow/claude_tools/` (package-data) al direc
 {
   "name": "mi_flow",
   "version": "1",
-  "inputs": { "x": "int" },
   "outputs": { "result": "int" },
   "variables": [{ "name": "contador", "type": "int", "default": 0 }],
   "events": [],
   "nodes": [
     { "id": "entry", "type": "OnStart" },
-    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
+    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": 5, "b": 10 } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
   ]
 }
 ```
+
+No hay campo `inputs` a nivel de flow — los inputs viven en los `Input` que el propio nodo de entrada declara (ver "Nodos de entrada" más arriba); para leerlos downstream se wirea `entry.<nombre_del_pin>` igual que cualquier otro pin (p.ej. `"a": "entry.body"` si el entry es `OnStart`).
 
 `FlowInput` existe como alias de `OnStart` por compatibilidad hacia atrás, pero el nombre canónico es `OnStart`.
 
@@ -336,7 +342,7 @@ Los flows se guardan en `flows/` dentro del directorio de trabajo.
 
 ### Request/response HTTP en `POST /flows/{name}/run`
 
-Todo flow disparado vía `POST /flows/{name}/run` — sea un flow servido (`rayflow serve --file`, pre-cargado) o un flow del editor (`flows/`, cargado on-demand en esa misma request) — se dispara por una request HTTP real, así que cualquier nodo de entrada con `exposes_flow_inputs = True` (`OnStart`/`FlowInput` y `OnEvent` son los ejemplos built-in; un nodo custom puede declarar el mismo flag) expone siempre 4 outputs fijos además de los que genera desde `inputs`: `headers` (`dict[str, str]`), `query` (`dict[str, str]`), `body` (`Any`, el JSON del body ya parseado), `method` (`str`). No hace falta declararlos ni un nodo especial — cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos).
+Todo flow disparado vía `POST /flows/{name}/run` — sea un flow servido (`rayflow serve --file`, pre-cargado) o un flow del editor (`flows/`, cargado on-demand en esa misma request) — se dispara por una request HTTP real. `OnStart` (el entry built-in genérico) declara `body`/`headers`/`query`/`method` como sus propios `Input` pins (defaults vacíos), así que cualquier flow con `OnStart` como entry los tiene disponibles gratis; un entry custom que los quiera debe declararlos él mismo de la misma forma — ya no hay un flag genérico (`exposes_flow_inputs`) que los inyecte automáticamente en cualquier entry. Downstream, cualquier nodo los lee wireando `entry.headers`, etc., como cualquier otro pin. Si el flow no corre vía HTTP (MCP, `execute()` directo), esos pines caen al default del `Input` que los consume (no hay contexto de request, así que llegan vacíos). Para acceso al envelope crudo sin declarar pines, el propio entry puede leer `ctx.request` (`EntryContext`, ver "Nodos de entrada" más arriba) dentro de su `run()`.
 
 Para la respuesta, `ctx.set_response_status(code)` / `ctx.set_response_header(name, value)` (en `ExecContext`) fijan el status/headers HTTP reales de la respuesta — viven en el `RunContext` de la ejecución (no en `flow.outputs`), así que **no aparecen** en el resultado que ve un caller no-HTTP (`run_flow`/`test_flow` de MCP, `execute()` directo). Sin llamarlos, el default es 200 sin headers extra. Cuidado con `Parallel`: si dos ramas verdaderamente paralelas llaman `set_response_status` a la vez, gana la última escritura — solo una rama de un fork debería fijarlos.
 
@@ -482,7 +488,7 @@ stop(graph_id, event_names)
 - El matching del `EventBroker` es **exacto por string** (incluyendo namespace, p.ej. `"ventas/order_created"`).
 - Si nadie está suscrito al evento, se pierde — no hay persistencia.
 - Un flow de eventos debe declarar los eventos en su campo `events` y tener nodo `OnEvent`.
-- Un flow tiene **exactamente un** nodo de entrada (`is_entry = True`, ver "Nodos de entrada" en Sistema de nodos) — declarar `OnStart` y `OnEvent` a la vez es un error de build, no una coexistencia silenciosa.
+- Un flow tiene **exactamente un** nodo de entrada (decorado con `@entry_node`, ver "Nodos de entrada" en Sistema de nodos) — declarar `OnStart` y `OnEvent` a la vez es un error de build, no una coexistencia silenciosa.
 
 ### Triggers por cambio de variable (`OnVariableChange`)
 
@@ -495,8 +501,8 @@ Set escribe variable vigilada → GraphState.set_variable
             └─ engine.execute(payload_como_flow_inputs, queue, run_id)  # OnVariableChange expone value/old
 ```
 
-- **`OnVariableChange`** (nodo de entrada, `events.py`) declara `variable` y `source` (flow dueño; vacío = el propio). Sus outputs `value`/`old` los inyecta el engine. Es un punto de entrada genérico: declara `is_entry = True` (reconocido por `_find_entry` vía `meta.is_entry`, no por nombre) — a diferencia de `OnStart`/`OnEvent`, no declara `exposes_flow_inputs`, porque sus outputs son pines estáticos propios, no derivados de `flow.inputs`.
-- El registro de vigilancia de variables (`serve_events` suscribiendo `var:{source}/{var}` + `gs.watch_variable`) es **específico de `OnVariableChange`**, no algo que un nodo custom con `is_entry = True` obtenga gratis solo por declarar el flag — necesitaría su propio mecanismo de opt-in.
+- **`OnVariableChange`** (nodo de entrada, `events.py`, decorado con `@entry_node`) declara `variable` y `source` (flow dueño; vacío = el propio) como `Input` de config, más `value`/`old` como `Input` que el engine puebla desde el evento — al no definir `run()`, el auto-passthrough los espeja como outputs. Es un entry genérico más, reconocido por `_find_entry` vía `meta.is_entry` (no por nombre) igual que `OnStart`/`OnEvent`/`ChatTrigger`.
+- El registro de vigilancia de variables (`serve_events` suscribiendo `var:{source}/{var}` + `gs.watch_variable`) es **específico de `OnVariableChange`**, no algo que un nodo custom decorado con `@entry_node` obtenga gratis — necesitaría su propio mecanismo de opt-in.
 - El registro lo hace `serve_events`: suscribe el flow vigía al evento sintético `var:{source}/{var}` **y** marca la variable como vigilada en el `GraphState` del flow fuente (`gs.watch_variable`). Solo las variables vigiladas publican (sin amplificación sobre el resto).
 - `GraphState.set_variable` **solo publica si el valor cambió** (compara viejo vs nuevo, resolviendo `ObjectRef`). Escribir el mismo valor no dispara.
 - **Orden de carga**: el flow fuente debe estar cargado antes que el vigía (su `gs_{source}` debe existir al registrar). Por eso `LoadedFlow.load` ahora **espera** a que el engine termine `__init__` (`ray.get(engine.get_graph_id.remote())`) antes de devolver: garantiza que `gs_{flow}` sea localizable por nombre apenas `load()` retorna.
