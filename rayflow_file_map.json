@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 145,
+  "file_count": 146,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -13,6 +13,15 @@
         ".claude/hooks/session_orientation.py",
         ".claude/hooks/stale_reminder.py",
         ".claude/hooks/staleness_guard.py",
+        ".claude/hooks/ty_diff_post.py",
+        ".claude/hooks/ty_diff_pre.py"
+      ],
+      "system": "hooks-infra"
+    },
+    ".claude/hooks/_ty_check.py": {
+      "description": "Shared helper (not a hook itself) for the ty_diff_pre.py/ty_diff_post.py pair: runs `ty check` (Astral's Rust type checker) on a single .py file via subprocess, parses its concise-format output into diagnostic dicts, and provides a line/col-independent key for diffing diagnostics across an edit.",
+      "depends_on": [],
+      "dependents": [
         ".claude/hooks/ty_diff_post.py",
         ".claude/hooks/ty_diff_pre.py"
       ],
@@ -50,10 +59,45 @@
       "dependents": [],
       "system": "hooks-infra"
     },
+    ".claude/hooks/stale_reminder.py": {
+      "description": "Stop hook: scans the session transcript for Edit/Write calls made since the last check; if any touched a mapped file, blocks once (decision:block, guarded by stop_hook_active) to remind the model to verify/update that file's description in rayflow_file_map.json before ending the turn, and to hint (same block) when the edit touches a system referenced in rayflow_scenarios.json's end-to-end narratives. On the very first Stop fire of a session it only records a baseline offset and reports nothing, instead of scanning the whole prior transcript.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py",
+        "rayflow_scenarios.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
     ".claude/hooks/staleness_guard.py": {
       "description": "PostToolUse hook (Write|Bash): heuristically flags when rayflow_file_map.json may be out of date — a new file was written that isn't in the map, or a shell command looks like it deletes a file that is.",
       "depends_on": [
         ".claude/hooks/_file_map.py"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/hooks/ty_diff_post.py": {
+      "description": "PostToolUse hook (Edit|Write, .py files): re-runs ty on the file just edited and diffs it against the pre-edit snapshot from ty_diff_pre.py, surfacing only newly introduced diagnostics as additionalContext. Diffing cancels out ty's known false positives on Ray's @ray.remote-decorated code (present in both snapshots), leaving genuine regressions. Advisory only, never blocks.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py",
+        ".claude/hooks/_ty_check.py"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/hooks/ty_diff_pre.py": {
+      "description": "PreToolUse hook (Edit|Write, .py files): snapshots ty's type diagnostics for a file before it's touched, storing them in a per-session temp file so the paired PostToolUse hook can report only diagnostics newly introduced by the edit. Advisory only; no-ops if ty isn't installed.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py",
+        ".claude/hooks/_ty_check.py"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/hooks/workflow_hints.py": {
+      "description": "UserPromptSubmit hook: matches the prompt against trigger phrases in rayflow_workflows.json and surfaces the matching workflow's checklist as additionalContext — the coarse-grained counterpart to prompt_file_hints.py's per-file matching.",
+      "depends_on": [
+        "rayflow_workflows.json"
       ],
       "dependents": [],
       "system": "hooks-infra"
@@ -203,9 +247,9 @@
         "rayflow/engine/executor.py",
         "rayflow/events/bus.py",
         "rayflow/nodes/registry.py",
+        "rayflow/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/workspace.py",
-        "rayflow/registry.py"
+        "rayflow/workspace.py"
       ],
       "dependents": [
         "rayflow/__init__.py",
@@ -246,6 +290,36 @@
       ],
       "system": "build"
     },
+    "rayflow/claude_tools/__init__.py": {
+      "description": "Marks claude_tools as a package so setuptools' packages.find (include=['rayflow*']) picks it up automatically; no code, just the template assets `rayflow install claude-tools` copies.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/agents/rayflow-debugger.md": {
+      "description": "Installable Claude Code subagent (end-user template): diagnoses why a user's flow fails/misbehaves. Deliberately restricted to read-only tools (Read/Grep/Glob + diagnostic-only MCP tools, no create_flow/update_flow/Write) so it can only report a diagnosis, never silently modify the flow it's investigating.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/mcp.json": {
+      "description": "Template copied to <cwd>/.mcp.json by `rayflow install claude-tools`, identical in shape to this repo's own .mcp.json — registers the local rayflow MCP server at http://localhost:8000/mcp/. Only written if the destination doesn't already have one.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/skills/rayflow-flow/SKILL.md": {
+      "description": "Installable Claude Code skill (end-user template): the MCP tool loop for building/editing/testing a flow (get_guide -> list_nodes -> validate_flow iterate -> create_flow/update_flow -> test_flow/run_flow), CallFlow composition, event-reactive flows, and the HTTP request/response mechanism (OnStart's headers/query/body/method, ctx.set_response_status/set_response_header) for flows served via rayflow serve.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
+    "rayflow/claude_tools/skills/rayflow-node/SKILL.md": {
+      "description": "Installable Claude Code skill (end-user template, not for this repo's own dev process): how to create/edit a custom Rayflow node in a user's own project — decorator choice, pin contract, create_custom_node/update_custom_node_source MCP tools, hot reload.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "cli"
+    },
     "rayflow/cli/__init__.py": {
       "description": "Re-exports the click CLI group as `main`.",
       "depends_on": [
@@ -282,6 +356,7 @@
         "rayflow/workspace.py"
       ],
       "dependents": [
+        "rayflow/mcp/server.py",
         "rayflow/server.py"
       ],
       "system": "editor-api"
@@ -746,12 +821,11 @@
         "rayflow/build/validator.py",
         "rayflow/editor/guide.py",
         "rayflow/editor/storage.py",
-        "rayflow/engine/executor.py",
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/registry.py",
+        "rayflow/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/types.py",
-        "rayflow/registry.py"
+        "rayflow/types.py"
       ],
       "dependents": [
         "rayflow/mcp/server.py",
@@ -759,13 +833,13 @@
       ],
       "system": "editor-api"
     },
-    "rayflow/editor/static/dist/assets/index-Bm5bdrF_.css": {
+    "rayflow/editor/static/dist/assets/index-6WRTMIkd.js": {
       "description": "Generated build artifact (hashed bundle output of `npm run build`); not hand-edited.",
       "depends_on": [],
       "dependents": [],
       "system": "packaging"
     },
-    "rayflow/editor/static/dist/assets/index-CZ4DCm3O.js": {
+    "rayflow/editor/static/dist/assets/index-Bm5bdrF_.css": {
       "description": "Generated build artifact (hashed bundle output of `npm run build`); not hand-edited.",
       "depends_on": [],
       "dependents": [],
@@ -799,7 +873,8 @@
         "rayflow/editor/routes.py",
         "rayflow/mcp/server.py",
         "tests/test_editor.py",
-        "tests/test_mcp.py"
+        "tests/test_mcp.py",
+        "tests/test_server.py"
       ],
       "system": "editor-api"
     },
@@ -821,8 +896,8 @@
       ],
       "dependents": [
         "rayflow/api.py",
-        "rayflow/editor/routes.py",
-        "rayflow/engine/__init__.py"
+        "rayflow/engine/__init__.py",
+        "rayflow/server.py"
       ],
       "system": "engine"
     },
@@ -862,13 +937,13 @@
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
+        "rayflow/editor/custom_nodes_routes.py",
         "rayflow/editor/guide.py",
         "rayflow/editor/routes.py",
         "rayflow/editor/storage.py",
         "rayflow/nodes/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/types.py",
-        "rayflow/registry.py"
+        "rayflow/types.py"
       ],
       "dependents": [
         "rayflow/mcp/__init__.py",
@@ -904,6 +979,12 @@
       "dependents": [
         "rayflow/nodes/registry.py"
       ],
+      "system": "nodes"
+    },
+    "rayflow/nodes/builtin/chat_trigger_frontend/index.html": {
+      "description": "Static chat UI bundle for the built-in ChatTrigger entry node (declares frontend = \"chat_trigger_frontend\"); mounted at GET /flows/{name}/ui for any served flow whose entry is ChatTrigger. Self-contained HTML/CSS/JS that POSTs {message: ...} to /flows/{name}/run and renders the response — no build step, no separate transport.",
+      "depends_on": [],
+      "dependents": [],
       "system": "nodes"
     },
     "rayflow/nodes/builtin/compare.py": {
@@ -988,9 +1069,12 @@
         "rayflow/nodes/builtin/variables.py",
         "rayflow/nodes/loader.py",
         "rayflow/nodes/registry.py",
+        "rayflow/server.py",
+        "tests/helpers.py",
         "tests/test_build.py",
         "tests/test_executor.py",
-        "tests/test_nodes.py"
+        "tests/test_nodes.py",
+        "tests/test_server.py"
       ],
       "system": "nodes"
     },
@@ -1029,6 +1113,7 @@
         "rayflow/mcp/server.py",
         "rayflow/nodes/builtin/control.py",
         "rayflow/server.py",
+        "tests/helpers.py",
         "tests/test_build.py",
         "tests/test_callflow.py",
         "tests/test_custom_nodes.py",
@@ -1040,6 +1125,21 @@
         "tests/test_server.py"
       ],
       "system": "nodes"
+    },
+    "rayflow/registry.py": {
+      "description": "Process-wide registry of served flows — the single source of truth for 'which flows are currently served'. ServedFlow.interface() derives the public inputs from the entry node's declared Input pins (meta.inputs) instead of the removed flow.inputs field.",
+      "depends_on": [
+        "rayflow/build/validator.py",
+        "rayflow/engine/executor.py",
+        "rayflow/schema/models.py"
+      ],
+      "dependents": [
+        "rayflow/api.py",
+        "rayflow/editor/routes.py",
+        "rayflow/server.py",
+        "tests/test_server.py"
+      ],
+      "system": "server"
     },
     "rayflow/schema/__init__.py": {
       "description": "Re-exports the schema dataclasses (PinKind, PinDef, NodeDef, FlowDef, VariableDef) and load_flow.",
@@ -1062,6 +1162,7 @@
         "rayflow/mcp/server.py",
         "rayflow/schema/__init__.py",
         "rayflow/server.py",
+        "tests/helpers.py",
         "tests/test_build.py",
         "tests/test_schema.py"
       ],
@@ -1088,11 +1189,13 @@
         "rayflow/build/validator.py",
         "rayflow/editor/custom_nodes_routes.py",
         "rayflow/editor/routes.py",
+        "rayflow/engine/executor.py",
         "rayflow/mcp/server.py",
+        "rayflow/nodes/decorators.py",
         "rayflow/nodes/registry.py",
+        "rayflow/registry.py",
         "rayflow/schema/loader.py",
-        "rayflow/schema/models.py",
-        "rayflow/registry.py"
+        "rayflow/schema/models.py"
       ],
       "dependents": [
         "rayflow/cli/main.py",
@@ -1158,6 +1261,22 @@
       "dependents": [],
       "system": "docs"
     },
+    "rayflow_scenarios.json": {
+      "description": "End-to-end scenario narratives describing how systems cooperate to accomplish something a user or LLM agent actually cares about (running a flow from the editor, an agent authoring via MCP, event-reactive flows, custom-node hot reload, CallFlow subflow splicing). Unlike depends_on_systems/dependents_systems, these can't be derived mechanically — they require an LLM to understand intent, and have no automated correctness check.",
+      "depends_on": [],
+      "dependents": [
+        ".claude/hooks/stale_reminder.py"
+      ],
+      "system": "docs"
+    },
+    "rayflow_workflows.json": {
+      "description": "Task-shaped checklists for recurring multi-file changes (adding a node type, changing the SSE event schema, adding an MCP tool, etc.), keyed by trigger phrases. Surfaced by workflow_hints.py when a user prompt matches, so the checklist arrives before the first edit rather than being discovered file-by-file.",
+      "depends_on": [],
+      "dependents": [
+        ".claude/hooks/workflow_hints.py"
+      ],
+      "system": "docs"
+    },
     "signatures/cla.json": {
       "description": "Generated file (written by the CLA Assistant GitHub Action) recording which external contributors have signed the CLA.",
       "depends_on": [],
@@ -1168,6 +1287,36 @@
       "description": "Empty package marker for the test suite.",
       "depends_on": [],
       "dependents": [],
+      "system": "tests"
+    },
+    "tests/entry_fixtures.py": {
+      "description": "Test-only @entry_node fixtures (EntryXY/EntryX/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool) with register() to add them to the process-wide NodeCatalog. Re-homed here from rayflow/nodes/builtin/control.py so they never ship in the real catalog a `pip install rayflow` user sees; called from each test file's ray_init fixture right after reset_catalog(), since a catalog reset wipes anything outside rayflow.nodes.builtin.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": [
+        "tests/test_callflow.py",
+        "tests/test_editor.py",
+        "tests/test_mcp.py",
+        "tests/test_server.py"
+      ],
+      "system": "tests"
+    },
+    "tests/helpers.py": {
+      "description": "Test-only helper (run_once) replacing the removed rayflow.api.run(): loads, executes, and unconditionally unloads a flow — the always-fresh-reload behavior many tests rely on (reusing generic throwaway flow names like \"parent\"/\"counter\" across unrelated test functions), scoped to test code now that it's no longer part of the public API.",
+      "depends_on": [
+        "rayflow/__init__.py",
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py",
+        "rayflow/schema/loader.py"
+      ],
+      "dependents": [
+        "tests/test_callflow.py",
+        "tests/test_custom_nodes.py",
+        "tests/test_events.py",
+        "tests/test_executor.py"
+      ],
       "system": "tests"
     },
     "tests/test_build.py": {
@@ -1186,7 +1335,16 @@
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/nodes/registry.py",
+        "tests/entry_fixtures.py",
         "tests/helpers.py"
+      ],
+      "dependents": [],
+      "system": "tests"
+    },
+    "tests/test_cli.py": {
+      "description": "Tests for `rayflow install claude-tools` via Click's CliRunner: fresh install writes skills/agent/.mcp.json, idempotency without --force, and --force overwriting skills/agent but never .mcp.json.",
+      "depends_on": [
+        "rayflow/cli/main.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1209,7 +1367,8 @@
         "rayflow/api.py",
         "rayflow/editor/storage.py",
         "rayflow/nodes/registry.py",
-        "rayflow/server.py"
+        "rayflow/server.py",
+        "tests/entry_fixtures.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1242,7 +1401,8 @@
       "depends_on": [
         "rayflow/editor/storage.py",
         "rayflow/mcp/server.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "tests/entry_fixtures.py"
       ],
       "dependents": [],
       "system": "tests"
@@ -1269,149 +1429,14 @@
     "tests/test_server.py": {
       "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, duplicate-name validation, GraphState persistence across requests, OnStart's fixed headers/query/body/method outputs, ctx.set_response_status()/set_response_header() reaching the real HTTP response (including header isolation between separate requests), and POST /flows/{name}/run falling back to an editor-managed flow (loaded into Ray on demand) when the name isn't in the served set.",
       "depends_on": [
-        "rayflow/nodes/registry.py",
-        "rayflow/server.py"
-      ],
-      "dependents": [],
-      "system": "tests"
-    },
-    ".claude/hooks/stale_reminder.py": {
-      "description": "Stop hook: scans the session transcript for Edit/Write calls made since the last check; if any touched a mapped file, blocks once (decision:block, guarded by stop_hook_active) to remind the model to verify/update that file's description in rayflow_file_map.json before ending the turn, and to hint (same block) when the edit touches a system referenced in rayflow_scenarios.json's end-to-end narratives. On the very first Stop fire of a session it only records a baseline offset and reports nothing, instead of scanning the whole prior transcript.",
-      "depends_on": [
-        ".claude/hooks/_file_map.py",
-        "rayflow_scenarios.json"
-      ],
-      "dependents": [],
-      "system": "hooks-infra"
-    },
-    ".claude/hooks/_ty_check.py": {
-      "description": "Shared helper (not a hook itself) for the ty_diff_pre.py/ty_diff_post.py pair: runs `ty check` (Astral's Rust type checker) on a single .py file via subprocess, parses its concise-format output into diagnostic dicts, and provides a line/col-independent key for diffing diagnostics across an edit.",
-      "depends_on": [],
-      "dependents": [
-        ".claude/hooks/ty_diff_post.py",
-        ".claude/hooks/ty_diff_pre.py"
-      ],
-      "system": "hooks-infra"
-    },
-    ".claude/hooks/ty_diff_pre.py": {
-      "description": "PreToolUse hook (Edit|Write, .py files): snapshots ty's type diagnostics for a file before it's touched, storing them in a per-session temp file so the paired PostToolUse hook can report only diagnostics newly introduced by the edit. Advisory only; no-ops if ty isn't installed.",
-      "depends_on": [
-        ".claude/hooks/_file_map.py",
-        ".claude/hooks/_ty_check.py"
-      ],
-      "dependents": [],
-      "system": "hooks-infra"
-    },
-    ".claude/hooks/ty_diff_post.py": {
-      "description": "PostToolUse hook (Edit|Write, .py files): re-runs ty on the file just edited and diffs it against the pre-edit snapshot from ty_diff_pre.py, surfacing only newly introduced diagnostics as additionalContext. Diffing cancels out ty's known false positives on Ray's @ray.remote-decorated code (present in both snapshots), leaving genuine regressions. Advisory only, never blocks.",
-      "depends_on": [
-        ".claude/hooks/_file_map.py",
-        ".claude/hooks/_ty_check.py"
-      ],
-      "dependents": [],
-      "system": "hooks-infra"
-    },
-    "rayflow_workflows.json": {
-      "description": "Task-shaped checklists for recurring multi-file changes (adding a node type, changing the SSE event schema, adding an MCP tool, etc.), keyed by trigger phrases. Surfaced by workflow_hints.py when a user prompt matches, so the checklist arrives before the first edit rather than being discovered file-by-file.",
-      "depends_on": [],
-      "dependents": [
-        ".claude/hooks/workflow_hints.py"
-      ],
-      "system": "docs"
-    },
-    ".claude/hooks/workflow_hints.py": {
-      "description": "UserPromptSubmit hook: matches the prompt against trigger phrases in rayflow_workflows.json and surfaces the matching workflow's checklist as additionalContext — the coarse-grained counterpart to prompt_file_hints.py's per-file matching.",
-      "depends_on": [
-        "rayflow_workflows.json"
-      ],
-      "dependents": [],
-      "system": "hooks-infra"
-    },
-    "rayflow_scenarios.json": {
-      "description": "End-to-end scenario narratives describing how systems cooperate to accomplish something a user or LLM agent actually cares about (running a flow from the editor, an agent authoring via MCP, event-reactive flows, custom-node hot reload, CallFlow subflow splicing). Unlike depends_on_systems/dependents_systems, these can't be derived mechanically — they require an LLM to understand intent, and have no automated correctness check.",
-      "depends_on": [],
-      "dependents": [
-        ".claude/hooks/stale_reminder.py"
-      ],
-      "system": "docs"
-    },
-    "rayflow/claude_tools/__init__.py": {
-      "description": "Marks claude_tools as a package so setuptools' packages.find (include=['rayflow*']) picks it up automatically; no code, just the template assets `rayflow install claude-tools` copies.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "cli"
-    },
-    "rayflow/claude_tools/mcp.json": {
-      "description": "Template copied to <cwd>/.mcp.json by `rayflow install claude-tools`, identical in shape to this repo's own .mcp.json — registers the local rayflow MCP server at http://localhost:8000/mcp/. Only written if the destination doesn't already have one.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "cli"
-    },
-    "rayflow/claude_tools/skills/rayflow-node/SKILL.md": {
-      "description": "Installable Claude Code skill (end-user template, not for this repo's own dev process): how to create/edit a custom Rayflow node in a user's own project — decorator choice, pin contract, create_custom_node/update_custom_node_source MCP tools, hot reload.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "cli"
-    },
-    "rayflow/claude_tools/skills/rayflow-flow/SKILL.md": {
-      "description": "Installable Claude Code skill (end-user template): the MCP tool loop for building/editing/testing a flow (get_guide -> list_nodes -> validate_flow iterate -> create_flow/update_flow -> test_flow/run_flow), CallFlow composition, event-reactive flows, and the HTTP request/response mechanism (OnStart's headers/query/body/method, ctx.set_response_status/set_response_header) for flows served via rayflow serve.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "cli"
-    },
-    "rayflow/claude_tools/agents/rayflow-debugger.md": {
-      "description": "Installable Claude Code subagent (end-user template): diagnoses why a user's flow fails/misbehaves. Deliberately restricted to read-only tools (Read/Grep/Glob + diagnostic-only MCP tools, no create_flow/update_flow/Write) so it can only report a diagnosis, never silently modify the flow it's investigating.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "cli"
-    },
-    "tests/test_cli.py": {
-      "description": "Tests for `rayflow install claude-tools` via Click's CliRunner: fresh install writes skills/agent/.mcp.json, idempotency without --force, and --force overwriting skills/agent but never .mcp.json.",
-      "depends_on": [
-        "rayflow/cli/main.py"
-      ],
-      "dependents": [],
-      "system": "tests"
-    },
-    "tests/helpers.py": {
-      "description": "Test-only helper (run_once) replacing the removed rayflow.api.run(): loads, executes, and unconditionally unloads a flow — the always-fresh-reload behavior many tests rely on (reusing generic throwaway flow names like \"parent\"/\"counter\" across unrelated test functions), scoped to test code now that it's no longer part of the public API.",
-      "depends_on": [
-        "rayflow/__init__.py"
-      ],
-      "dependents": [
-        "tests/test_executor.py",
-        "tests/test_callflow.py",
-        "tests/test_events.py",
-        "tests/test_custom_nodes.py"
-      ],
-      "system": "tests"
-    },
-    "rayflow/registry.py": {
-      "description": "Process-wide registry of served flows — the single source of truth for 'which flows are currently served'. ServedFlow.interface() derives the public inputs from the entry node's declared Input pins (meta.inputs) instead of the removed flow.inputs field.",
-      "depends_on": [
-        "rayflow/build/validator.py",
-        "rayflow/engine/executor.py",
-        "rayflow/schema/models.py"
-      ],
-      "dependents": [
-        "rayflow/api.py",
-        "rayflow/editor/routes.py",
-        "rayflow/mcp/server.py",
-        "rayflow/server.py"
-      ]
-    },
-    "tests/entry_fixtures.py": {
-      "description": "Test-only @entry_node fixtures (EntryXY/EntryX/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool) with register() to add them to the process-wide NodeCatalog. Re-homed here from rayflow/nodes/builtin/control.py so they never ship in the real catalog a `pip install rayflow` user sees; called from each test file's ray_init fixture right after reset_catalog(), since a catalog reset wipes anything outside rayflow.nodes.builtin.",
-      "depends_on": [
+        "rayflow/editor/storage.py",
         "rayflow/nodes/decorators.py",
-        "rayflow/nodes/registry.py"
+        "rayflow/nodes/registry.py",
+        "rayflow/registry.py",
+        "rayflow/server.py",
+        "tests/entry_fixtures.py"
       ],
-      "dependents": [
-        "tests/test_callflow.py",
-        "tests/test_editor.py",
-        "tests/test_mcp.py",
-        "tests/test_server.py"
-      ],
+      "dependents": [],
       "system": "tests"
     }
   },
@@ -1496,7 +1521,6 @@
       ],
       "depends_on_systems": [
         "build",
-        "engine",
         "nodes",
         "schema",
         "server"
@@ -1519,7 +1543,6 @@
         "state"
       ],
       "dependents_systems": [
-        "editor-api",
         "server"
       ]
     },
@@ -1700,6 +1723,7 @@
         "rayflow/nodes/__init__.py",
         "rayflow/nodes/builtin/__init__.py",
         "rayflow/nodes/builtin/cast.py",
+        "rayflow/nodes/builtin/chat_trigger_frontend/index.html",
         "rayflow/nodes/builtin/compare.py",
         "rayflow/nodes/builtin/control.py",
         "rayflow/nodes/builtin/events.py",
@@ -1729,8 +1753,8 @@
       "files": [
         "MANIFEST.in",
         "pyproject.toml",
+        "rayflow/editor/static/dist/assets/index-6WRTMIkd.js",
         "rayflow/editor/static/dist/assets/index-Bm5bdrF_.css",
-        "rayflow/editor/static/dist/assets/index-CZ4DCm3O.js",
         "rayflow/editor/static/dist/favicon.svg",
         "rayflow/editor/static/dist/icons.svg",
         "rayflow/editor/static/dist/index.html"
@@ -1762,6 +1786,7 @@
         "rayflow/__init__.py",
         "rayflow/__main__.py",
         "rayflow/api.py",
+        "rayflow/registry.py",
         "rayflow/server.py",
         "rayflow/workspace.py"
       ],
@@ -1802,6 +1827,7 @@
       "description": "The pytest suite covering build/validation, the engine/executor, the editor REST API, custom nodes, events, CallFlow subflows, MCP tools, node behavior, and schema parsing.",
       "files": [
         "tests/__init__.py",
+        "tests/entry_fixtures.py",
         "tests/helpers.py",
         "tests/test_build.py",
         "tests/test_callflow.py",
