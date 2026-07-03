@@ -27,7 +27,7 @@ function NewFlowDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (
     setErr('')
     if (!name.trim()) { setErr('El nombre es requerido'); return }
     try {
-      const flow = await createFlow({ name: name.trim(), version: '1', inputs: {}, outputs: {}, variables: [], events: [], nodes: [] })
+      const flow = await createFlow({ name: name.trim(), version: '1', outputs: {}, variables: [], events: [], nodes: [] })
       onCreate(flow)
       onClose()
     } catch (e) { setErr((e as Error).message) }
@@ -52,7 +52,7 @@ function NewFlowDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (
             />
           </div>
           <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
-            Los inputs y outputs se configuran después con ⚙ Flow settings.
+            Los outputs se configuran después con ⚙ Flow settings.
           </div>
           {err && <div style={{ fontSize: 12, color: '#fca5a5' }}>{err}</div>}
         </div>
@@ -115,11 +115,9 @@ export default function App() {
         useFlowStore.setState(s => ({
           tabs: s.tabs.map(tab => {
             if (tab.kind !== 'flow' || !tab.flowDef) return tab
-            const fiMeta = {
-              ...(m['OnStart'] ?? { type: 'OnStart', decorator: 'engine_node', is_exec_node: true, has_exec_in: false, has_exec_out: true, is_parallel: false, exec_outputs: ['exec_out'] }),
-              outputs: Object.entries(tab.flowDef.inputs || {}).map(([name, type]) => ({ name, type, kind: 'output' as const, required: false })),
-              inputs: [],
-            }
+            // Entry nodes (OnStart, ChatTrigger, custom @entry_node, ...)
+            // keep their real catalog meta as-is — their pins are static,
+            // declared on the class, not derived from a flow-level field.
             const foMeta = {
               ...(m['FlowOutput'] ?? { type: 'FlowOutput', decorator: 'engine_node', is_exec_node: true, has_exec_in: true, has_exec_out: false, is_parallel: false, exec_outputs: [] }),
               inputs: Object.entries(tab.flowDef.outputs || {}).map(([name, type]) => ({ name, type, kind: 'input' as const, required: false })),
@@ -129,7 +127,6 @@ export default function App() {
               ...tab,
               nodes: tab.nodes.map(n => {
                 const nodeType = (n.data as { nodeType: string }).nodeType
-                if (nodeType === 'OnStart') return { ...n, data: { ...n.data, meta: fiMeta } }
                 if (nodeType === 'FlowOutput') return { ...n, data: { ...n.data, meta: foMeta } }
                 return { ...n, data: { ...n.data, meta: m[nodeType] ?? (n.data as { meta: unknown }).meta } }
               }),
@@ -160,7 +157,7 @@ export default function App() {
     // Validar primero
     const fd = rfToFlowDef(nodes, edges, {
       name: flowDef.name, version: flowDef.version || '1',
-      inputs: flowDef.inputs || {}, outputs: flowDef.outputs || {},
+      outputs: flowDef.outputs || {},
       variables: flowDef.variables || [], events: flowDef.events || [],
     })
     let valid = false
@@ -213,7 +210,6 @@ export default function App() {
       const flowDef = rfToFlowDef(tab.nodes, tab.edges, {
         name: tab.flowDef.name,
         version: tab.flowDef.version || '1',
-        inputs: tab.flowDef.inputs || {},
         outputs: tab.flowDef.outputs || {},
         variables: tab.flowDef.variables || [],
         events: tab.flowDef.events || [],
@@ -233,7 +229,7 @@ export default function App() {
     try {
       const flowDef = rfToFlowDef(tab.nodes, tab.edges, {
         name: tab.flowDef.name, version: tab.flowDef.version || '1',
-        inputs: tab.flowDef.inputs || {}, outputs: tab.flowDef.outputs || {},
+        outputs: tab.flowDef.outputs || {},
         variables: tab.flowDef.variables || [], events: tab.flowDef.events || [],
       })
       const result = await validateFlow(flowDef)
@@ -271,18 +267,13 @@ export default function App() {
     await autoLoadFlow(tab.flowDef, tab.nodes, tab.edges)
   }
 
-  function handleSaveSettings(inputs: Record<string, string>, outputs: Record<string, string>) {
+  function handleSaveSettings(outputs: Record<string, string>) {
     const tab = selectActiveTab(useFlowStore.getState())
     if (!tab?.flowDef) return
-    const prevInputNames = new Set(Object.keys(tab.flowDef.inputs || {}))
-    const removed = [...prevInputNames].filter(n => !Object.keys(inputs).includes(n))
 
-    // Meta sintética para FlowInput y FlowOutput con los nuevos pines
-    const newFlowInputMeta = {
-      ...(catalog['OnStart'] ?? { type: 'OnStart', decorator: 'engine_node', is_exec_node: true, has_exec_in: false, has_exec_out: true, is_parallel: false, exec_outputs: ['exec_out'] }),
-      outputs: Object.entries(inputs).map(([name, type]) => ({ name, type, kind: 'output' as const, required: false })),
-      inputs: [],
-    }
+    // Meta sintética para FlowOutput con los nuevos pines. El entry node
+    // (OnStart, ChatTrigger, ...) no se toca: sus pines son estáticos, no
+    // derivados de un campo del flow.
     const newFlowOutputMeta = {
       ...(catalog['FlowOutput'] ?? { type: 'FlowOutput', decorator: 'engine_node', is_exec_node: true, has_exec_in: true, has_exec_out: false, is_parallel: false, exec_outputs: [] }),
       inputs: Object.entries(outputs).map(([name, type]) => ({ name, type, kind: 'input' as const, required: false })),
@@ -292,10 +283,9 @@ export default function App() {
     useFlowStore.setState(s => ({
       tabs: s.tabs.map(t => t.name !== tab.name || t.kind !== 'flow' ? t : {
         ...t,
-        flowDef: { ...t.flowDef!, inputs, outputs },
+        flowDef: { ...t.flowDef!, outputs },
         nodes: t.nodes.map(n => {
           const nodeType = (n.data as { nodeType: string }).nodeType
-          if (nodeType === 'OnStart') return { ...n, data: { ...n.data, meta: newFlowInputMeta } }
           if (nodeType === 'FlowOutput') return { ...n, data: { ...n.data, meta: newFlowOutputMeta } }
           return n
         }),
@@ -303,11 +293,7 @@ export default function App() {
       }),
     }))
 
-    if (removed.length) {
-      addToast(`Inputs eliminados: ${removed.join(', ')} — revisa conexiones huérfanas`, 'info')
-    } else {
-      addToast('Flow settings guardados', 'success')
-    }
+    addToast('Flow settings guardados', 'success')
   }
 
   async function handleDelete() {
@@ -595,7 +581,6 @@ export default function App() {
       {/* Flow settings */}
       {showSettings && tab?.flowDef && (
         <FlowSettingsDialog
-          inputs={tab.flowDef.inputs || {}}
           outputs={tab.flowDef.outputs || {}}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
@@ -609,7 +594,7 @@ export default function App() {
           onCreate={flow => {
             setFlowList([...flowList, {
               name: flow.name, version: flow.version,
-              inputs: flow.inputs, outputs: flow.outputs,
+              outputs: flow.outputs,
             }])
             const { nodes, edges } = flowDefToRF(flow, catalog)
             openTab(flow, nodes, edges)

@@ -501,7 +501,7 @@
       "system": "frontend-canvas"
     },
     "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx": {
-      "description": "Modal dialog for editing flow input/output pins with type selection and duplicate name validation.",
+      "description": "Modal dialog for editing the flow's declared output pins (type selection, duplicate name validation). No input pins here — a flow's inputs live on its entry node (OnStart, ChatTrigger, a custom @entry_node, ...), not on the flow itself; that's a Python-level concern, not something this JSON-shaped dialog edits.",
       "depends_on": [
         "rayflow/editor/frontend/src/components/ui/button.tsx",
         "rayflow/editor/frontend/src/components/ui/dialog.tsx",
@@ -833,13 +833,13 @@
       ],
       "system": "editor-api"
     },
-    "rayflow/editor/static/dist/assets/index-6WRTMIkd.js": {
+    "rayflow/editor/static/dist/assets/index-CvkE1x42.css": {
       "description": "Generated build artifact (hashed bundle output of `npm run build`); not hand-edited.",
       "depends_on": [],
       "dependents": [],
       "system": "packaging"
     },
-    "rayflow/editor/static/dist/assets/index-Bm5bdrF_.css": {
+    "rayflow/editor/static/dist/assets/index-DtPeFQWl.js": {
       "description": "Generated build artifact (hashed bundle output of `npm run build`); not hand-edited.",
       "depends_on": [],
       "dependents": [],
@@ -1753,8 +1753,8 @@
       "files": [
         "MANIFEST.in",
         "pyproject.toml",
-        "rayflow/editor/static/dist/assets/index-6WRTMIkd.js",
-        "rayflow/editor/static/dist/assets/index-Bm5bdrF_.css",
+        "rayflow/editor/static/dist/assets/index-CvkE1x42.css",
+        "rayflow/editor/static/dist/assets/index-DtPeFQWl.js",
         "rayflow/editor/static/dist/favicon.svg",
         "rayflow/editor/static/dist/icons.svg",
         "rayflow/editor/static/dist/index.html"
