@@ -21,3 +21,18 @@ repos:
         entry: python3 scripts/check_sot_commit_message.py
         language: system
         stages: [commit-msg]
+      - id: sot-audit
+        name: Audit SOT claims affected by this commit's staged diff
+        description: >
+          See docs/issues_system.md §6.2 and scripts/run_sot_audit.py. Scopes
+          RAYFLOW_SOURCE_OF_TRUTH.json claims to the staged diff via
+          .claude/hooks/_sot_scope.py (no-op, no LLM call, if nothing in
+          scope), then runs the rayflow-auditor subagent
+          (.claude/agents/rayflow-auditor.md) via `claude -p --agent`. Blocks
+          the commit only if the auditor writes new content to
+          rayflow_issues.json — infra failures (claude missing, timeout) fail
+          open and just warn.
+        entry: python3 scripts/run_sot_audit.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false

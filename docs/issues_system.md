@@ -40,7 +40,7 @@ que alguien se acuerde de releerlo.
 | `rayflow_issues.json` | Cola de discrepancias abiertas entre una afirmación y la realidad del repo. | **Hecho.** Archivo creado en la raíz, con `ISSUE-0001` (el caso de `FlowSettingsDialog.tsx`, ver §5). |
 | `rayflow_file_map.json` | Ya existente, sin cambios de rol: mapa mecánico archivo→{descripción, depends_on, dependents}. | Sin cambios — ver §3 por qué no se fusiona con lo anterior. |
 | Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | **Hecho y confirmado.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Invocación real vía `claude -p --agent rayflow-auditor "..."` probada end-to-end (ver §6.1) — funciona, detecta el claim de evidencia vacía por búsqueda activa, reconoce `ISSUE-0001` y no duplica. |
-| Hook pre-commit | Dispara el agente auditor (y otras herramientas) antes de cada commit; usa `claude -p` en modo headless. | Mecanismo confirmado (§6.2), falta el wiring: el script que arma el prompt con el scope y lo llama, más la entrada en `.pre-commit-config.yaml`. |
+| Hook pre-commit | Dispara el agente auditor antes de cada commit; usa `claude -p` en modo headless. | **Hecho.** `scripts/run_sot_audit.py`, stage `pre-commit` de `.pre-commit-config.yaml` — sin scope, exit inmediato sin costo de LLM; con scope, corre el auditor y bloquea el commit (exit 1) solo si escribió en `rayflow_issues.json` (ver §6.2). Validado end-to-end. |
 | Bloqueo de edición directa | Impide que `RAYFLOW_SOURCE_OF_TRUTH.json` se edite casualmente, para "garantizar" (mayúsculas del nombre del archivo) que nunca quede desactualizado por accidente. | **Hecho.** Dos capas: `.claude/hooks/sot_guard.py` (PreToolUse, rápida) + `scripts/check_sot_commit_message.py` (commit-msg, la garantía real) — ver §6.3. Validado end-to-end. |
 
 ## 3. Por qué tres archivos separados, no uno fusionado
@@ -229,38 +229,58 @@ instruido), confirmó que `ISSUE-0001` ya lo cubre, y no tocó
 después de la corrida). Esto es exactamente el mecanismo que necesita el
 hook de pre-commit (§6.2) — confirmado, no solo hipotético.
 
-### 6.2. Hook de pre-commit para el auditor — mecanismo confirmado, wiring pendiente
+### 6.2. Hook de pre-commit para el auditor — implementado, bloqueante
 
-Lo confirmado:
+`scripts/run_sot_audit.py`, wireado en `.pre-commit-config.yaml` en el
+stage `pre-commit` (id `sot-audit`):
 
-- `claude -p --agent rayflow-auditor "<prompt>"` es un proceso nuevo por
-  invocación — no depende de si el agente existía antes de que arrancara
-  la sesión que lo llama, así que un pre-commit hook puede invocarlo sin
-  preocuparse por el hallazgo de §6.1.
+1. Calcula los archivos staged (`git diff --cached --name-only`).
+2. Los pasa por `.claude/hooks/_sot_scope.py` para obtener los `claim_ids`
+   afectados. Si no hay ninguno, sale inmediatamente (exit 0) **sin llamar
+   al LLM** — la mayoría de los commits no tocan evidence de ningún claim,
+   y ese es el caso que tiene que ser gratis.
+3. Si hay scope, arma un prompt con esos `claim_ids` (más un
+   `detected_by.run_id` con timestamp y `trigger: "pre-commit"`) y corre
+   `claude -p --agent rayflow-auditor "<prompt>"` (confirmado en §6.1;
+   timeout de 300s).
+4. Compara el contenido de `rayflow_issues.json` antes y después de la
+   corrida. Si cambió, **bloquea el commit** (exit 1) con un mensaje
+   pidiendo revisar el/los issue(s) nuevos y volver a `git add
+   rayflow_issues.json` antes de re-commitear. Si no cambió, deja pasar el
+   commit (exit 0) — el auditor corrió, no encontró nada, no hay nada que
+   revisar.
 
-Lo que falta (wiring, no diseño conceptual):
+**Decisión: bloqueante, no asincrónico/informativo.** La alternativa (un
+paso de fondo que solo avisa) tiende a llegar tarde — el resultado aparece
+después del commit que debería haber marcado, y es fácil terminar
+entrenando a todos a ignorarlo. El costo de latencia de LLM se paga solo
+en los commits que efectivamente tocan evidence de algún claim (paso 2),
+no en cada commit.
 
-- Un hook de **pre-commit** (framework `pre-commit`, ya instalado y
-  activo en este repo — ver §6.3) que arme el prompt con el scope real
-  (`git diff --cached --name-only | python3 .claude/hooks/_sot_scope.py`)
-  y llame a `claude -p --agent rayflow-auditor "<prompt con ese scope>"`.
-  El script en sí (`.claude/hooks/_sot_scope.py`) y el agente
-  (`.claude/agents/rayflow-auditor.md`) ya existen — falta el script que
-  los une y la entrada en `.pre-commit-config.yaml`.
-- Decidir si corre en `pre-commit` stage (bloquea el commit si el auditor
-  encuentra algo, agregando latencia de LLM a cada commit relevante) o
-  como un paso asincrónico/informativo que no bloquea — el auditor solo
-  *reporta* (crea issues), no exige que se resuelvan antes de commitear,
-  así que bloquear el commit por esto no tiene el mismo fundamento que
-  bloquearlo por el trailer de §6.3 (ahí sí hay una regla clara:
-  "trailer presente o no"; acá sería "¿el LLM encontró algo?", más
-  ambiguo y más lento).
-- Si encuentra una divergencia, escribe/actualiza `rayflow_issues.json`.
-- Pensado para correr 100% local (versionado con git normal), sin depender
-  de GitHub/GitLab ni de sus mecanismos de CI/PR.
+**Fail-open en problemas de infraestructura, fail-closed en contenido.**
+Si `claude` no está en el PATH, si hace timeout, o si termina con exit
+code no-cero pero sin escribir nada en `rayflow_issues.json`, el hook
+**no bloquea** — solo imprime un warning a stderr. Bloquear el repo entero
+por una falla de infraestructura (el binario no está instalado, la red
+falló) sería peor que el problema que este mecanismo intenta resolver. La
+única señal que bloquea de verdad es "el auditor corrió y escribió algo
+nuevo en `rayflow_issues.json`" — eso sí implica una divergencia real que
+alguien tiene que mirar antes de que el commit entre.
+
+Es el contrapunto directo de `scripts/check_sot_commit_message.py`
+(§6.3, Capa 2): ese guarda **ediciones al SOT mismo**; este guarda
+**cambios de código que invalidan en silencio lo que el SOT ya afirma**.
+
+**Validado**: una corrida real contra un cambio trivial (un comentario en
+`rayflow/editor/storage.py`, que sí cae en el scope de un claim) tardó
+~60s, terminó en exit 0 y no tocó `rayflow_issues.json` — comportamiento
+correcto, no había ninguna divergencia real que reportar. La rama de
+bloqueo (exit 1 cuando `rayflow_issues.json` cambia) se validó simulando
+la llamada a `subprocess.run` y la escritura del archivo, sin gastar una
+corrida real de LLM en forzar una contradicción artificial.
 
 El bloqueo de edición directa del SOT (que originalmente iba a resolverse
-acá también) ya tiene mecanismo propio, ver §6.3.
+acá también) tiene su propio mecanismo, ver §6.3.
 
 ### 6.3. Bloqueo de edición directa del SOT — implementado
 
@@ -314,10 +334,16 @@ seteada, no interviene en archivos que no son el SOT.
       rayflow-auditor` (el tool `Task`/`Agent` in-session falla con "Agent
       type not found" hasta una sesión nueva, pero `claude -p` no depende
       de eso — ver §6.1).
-- [ ] Escribir el script que arma el prompt con el scope del diff
+- [x] Escribir el script que arma el prompt con el scope del diff
       (`_sot_scope.py`) y llama a `claude -p --agent rayflow-auditor`, y
       agregar la entrada correspondiente en `.pre-commit-config.yaml`
-      (§6.2 — mecanismo confirmado, falta el wiring).
-- [ ] Decidir si el bloqueo/auditor corren en cada commit o solo cuando el
-      diff toca archivos relevantes (para no pagar el costo de invocar
-      `claude -p` en cada commit trivial).
+      (§6.2 — `scripts/run_sot_audit.py`, id `sot-audit`, stage
+      `pre-commit`). Decisión: **bloqueante** — sale gratis (exit 0, sin
+      LLM) si el diff no toca evidence de ningún claim; si toca, corre el
+      auditor y bloquea el commit solo si escribió en
+      `rayflow_issues.json`; fail-open en problemas de infraestructura
+      (`claude` ausente, timeout). Validado end-to-end (corrida real sin
+      hallazgos + rama de bloqueo simulada).
+- [ ] Probar el hook `sot-audit` disparando una divergencia real (no
+      simulada) para confirmar el mensaje de bloqueo tal como lo va a ver
+      un committer de verdad, no solo la lógica interna del script.

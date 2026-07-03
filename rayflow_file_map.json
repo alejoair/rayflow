@@ -8,7 +8,9 @@
       "depends_on": [
         ".claude/hooks/_sot_scope.py"
       ],
-      "dependents": [],
+      "dependents": [
+        "scripts/run_sot_audit.py"
+      ],
       "system": "hooks-infra"
     },
     ".claude/hooks/_file_map.py": {
@@ -31,7 +33,8 @@
       "description": "Shared helper (not a hook itself): given a list of changed file paths, returns which RAYFLOW_SOURCE_OF_TRUTH.json claims are potentially affected (claims whose evidence array references one of those files), and via affected_docs()/--docs, the union of those claims' docs arrays — other documentation files (never CLAUDE.md, which is slated to become a generated rendering of the SOT) that duplicate the same fact and might need a look. Used to scope the audit agent to a commit's actual diff instead of re-checking all ~215 claims every time. CLI mode reads paths from argv or stdin (one per line); pipeable from `git diff --name-only`.",
       "depends_on": [],
       "dependents": [
-        ".claude/agents/rayflow-auditor.md"
+        ".claude/agents/rayflow-auditor.md",
+        "scripts/run_sot_audit.py"
       ],
       "system": "hooks-infra"
     },
@@ -170,9 +173,10 @@
       "system": "mcp"
     },
     ".pre-commit-config.yaml": {
-      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/check_sot_commit_message.py at the commit-msg stage. default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
+      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/check_sot_commit_message.py at the commit-msg stage (Layer 2 of SOT edit-blocking, §6.3) and scripts/run_sot_audit.py at the pre-commit stage (scoped auditor invocation, §6.2 — blocks the commit if the auditor finds a divergence). default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
       "depends_on": [
-        "scripts/check_sot_commit_message.py"
+        "scripts/check_sot_commit_message.py",
+        "scripts/run_sot_audit.py"
       ],
       "dependents": [],
       "system": "hooks-infra"
@@ -238,7 +242,7 @@
       "system": "docs"
     },
     "docs/issues_system.md": {
-      "description": "Design doc (in Spanish, self-contained) for a documentation-audit system. RAYFLOW_SOURCE_OF_TRUTH.json (v2, implemented: claims as {id, text, evidence, docs} — evidence links code, docs links OTHER documentation that duplicates the fact, CLAUDE.md deliberately excluded since it's slated to become a generated rendering of the SOT) and rayflow_issues.json (v1, implemented: open-issues-only queue, no resolved history in-file — git log is the log) linked by stable ids. The audit agent (.claude/agents/rayflow-auditor.md) is implemented and confirmed working end-to-end via `claude -p --agent rayflow-auditor` (in-session Task/Agent dispatch fails with \"Agent type not found\" until a fresh session — claude -p sidesteps that since each invocation is a new process reading .claude/agents/ from disk; §6.1). SOT direct-edit blocking is implemented as two layers: .claude/hooks/sot_guard.py (PreToolUse, session-scoped, bypassable via RAYFLOW_SOT_UNLOCK=1) and scripts/check_sot_commit_message.py (pre-commit commit-msg stage, requires a Sot-Change trailer, no bypass — §6.3). Still missing: the pre-commit script that assembles the audit prompt from the diff scope and calls `claude -p --agent rayflow-auditor`, plus its .pre-commit-config.yaml entry (§6.2 — mechanism confirmed, wiring pending). Explains why these stay separate files rather than merging with rayflow_file_map.json.",
+      "description": "Design doc (in Spanish, self-contained) for a documentation-audit system. RAYFLOW_SOURCE_OF_TRUTH.json (v2, implemented: claims as {id, text, evidence, docs} — evidence links code, docs links OTHER documentation that duplicates the fact, CLAUDE.md deliberately excluded since it's slated to become a generated rendering of the SOT) and rayflow_issues.json (v1, implemented: open-issues-only queue, no resolved history in-file — git log is the log) linked by stable ids. The audit agent (.claude/agents/rayflow-auditor.md) is implemented and confirmed working end-to-end via `claude -p --agent rayflow-auditor` (§6.1). SOT direct-edit blocking is two layers: .claude/hooks/sot_guard.py (PreToolUse, session-scoped, bypassable) and scripts/check_sot_commit_message.py (pre-commit commit-msg stage, Sot-Change trailer, no bypass — §6.3). The pre-commit wiring for the auditor itself is also implemented: scripts/run_sot_audit.py (pre-commit stage, id sot-audit) scopes the staged diff via _sot_scope.py (exits free if nothing in scope), runs the auditor, and blocks the commit (exit 1) only if it wrote to rayflow_issues.json — fails open on infra problems (claude missing, timeout), never on the LLM simply finding nothing (§6.2). Explains why these stay separate files rather than merging with rayflow_file_map.json.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
@@ -1503,6 +1507,17 @@
       ],
       "dependents": [],
       "system": "tests"
+    },
+    "scripts/run_sot_audit.py": {
+      "description": "pre-commit stage hook (framework `pre-commit`, wired via .pre-commit-config.yaml): scopes RAYFLOW_SOURCE_OF_TRUTH.json claims to this commit's staged diff via .claude/hooks/_sot_scope.py (exits immediately, no LLM call, if no claim's evidence overlaps the diff), then runs the rayflow-auditor subagent via `claude -p --agent rayflow-auditor \"<prompt>\"`. Blocks the commit (exit 1) only if the auditor writes new content to rayflow_issues.json — that's the one signal that means a real divergence was found, vs. the auditor simply failing to run (claude binary missing, timeout, non-zero exit with no file write), which fails open with a stderr warning instead of blocking on infra flakiness. Task #4 of docs/issues_system.md §6.2 — the counterpart to scripts/check_sot_commit_message.py: that one guards edits *to* the SOT, this one guards code changes that silently invalidate what the SOT already claims. Validated end-to-end: a real `claude -p --agent rayflow-auditor` run against a trivial, non-contradicting change exits 0 with no writes; the blocking branch (exit 1 on a rayflow_issues.json write) validated by simulating the subprocess call and file mutation.",
+      "depends_on": [
+        ".claude/hooks/_sot_scope.py",
+        ".claude/agents/rayflow-auditor.md"
+      ],
+      "dependents": [
+        ".pre-commit-config.yaml"
+      ],
+      "system": "hooks-infra"
     }
   },
   "systems": {
@@ -1767,7 +1782,8 @@
         ".claude/settings.json",
         ".claude/settings.local.json",
         ".pre-commit-config.yaml",
-        "scripts/check_sot_commit_message.py"
+        "scripts/check_sot_commit_message.py",
+        "scripts/run_sot_audit.py"
       ],
       "depends_on_systems": [],
       "dependents_systems": []
