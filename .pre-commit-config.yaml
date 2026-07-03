@@ -26,6 +26,22 @@ repos:
         language: system
         stages: [pre-commit]
         pass_filenames: false
+      - id: agents-generate
+        name: Regenerate per-system specialist subagents (.claude/agents/)
+        description: >
+          See rayflow_agents_system.md and scripts/generate_specialist_agents.py.
+          One .claude/agents/rayflow-<system>-specialist.md per system in
+          rayflow_file_map.json.systems, with real content (file
+          descriptions, inter-system dependencies, the SOT claims whose
+          evidence falls in that system, open issues that mention it) — not
+          just pointers, since regenerating on every commit (same mechanism
+          as claude-md-generate) removes the staleness risk that motivated
+          avoiding embedded content in the first place. Deterministic, no
+          LLM. Never blocks.
+        entry: python3 scripts/generate_specialist_agents.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
       - id: sot-commit-guard
         name: Require a Sot-Change trailer when editing RAYFLOW_SOURCE_OF_TRUTH.json
         description: >

@@ -5,6 +5,39 @@
 > como se planteó, la opinión/recomendación que se discutió sobre el
 > mecanismo concreto, y qué queda pendiente de decidir.
 
+> **Actualización — implementado, revirtiendo la recomendación de §2/§3.**
+> Los agentes especialistas están generados: `scripts/generate_specialist_agents.py`
+> produce un `.claude/agents/rayflow-<system>-specialist.md` por cada uno de
+> los 21 sistemas de `rayflow_file_map.json`, wireado como hook
+> `agents-generate` en `.pre-commit-config.yaml` (stage `pre-commit`, mismo
+> mecanismo que `claude-md-generate` — ver `docs/claude_md_generation.md`).
+>
+> La diferencia con lo que proponían §2/§3 originalmente: **sí llevan
+> contenido embebido** (descripciones de archivos, dependencias entre
+> sistemas, los claims de la SOT cuya evidencia cae en ese sistema —texto +
+> evidencia, no solo el id—, e issues abiertos que lo mencionan), no solo
+> punteros a "andá a leer tal archivo". La razón para revertir: el riesgo
+> que motivaba §2 (un snapshot de código pegado a mano queda mintiendo en
+> cuanto alguien toca el original) se neutraliza por completo si el
+> contenido se regenera y re-stagea en cada commit — exactamente el mismo
+> argumento que ya se aplicó a `CLAUDE.md`. No hace falta elegir entre
+> "contenido rico" y "nunca stale": regenerar automáticamente da las dos
+> cosas. La preocupación de §2.2 ("no compensa el riesgo de correctitud")
+> ya no aplica porque no hay snapshot manual, hay una función pura de
+> `rayflow_file_map.json` + `RAYFLOW_SOURCE_OF_TRUTH.json` +
+> `rayflow_issues.json` corriendo en cada commit.
+>
+> El criterio de curación de §5 quedó resuelto por omisión: se genera un
+> especialista por **cada** sistema, sin selección manual — es la opción
+> más mecánica (nada que decidir a mano) y, como el contenido de la SOT no
+> es proporcional a la cantidad de archivos de un sistema (`events` tiene 2
+> archivos pero 17 claims relevantes en la SOT), un sistema "chico" en
+> archivos igual puede tener un especialista con contenido sustancial.
+>
+> Ver el detalle completo de la implementación en §9bis, al final de este
+> documento — el resto del documento (§1 a §9) se deja tal cual quedó
+> planteado originalmente, como registro de la discusión.
+
 ## 1. La idea
 
 `rayflow_file_map.json` ya agrupa los 148 archivos del repo en 20 **sistemas**
@@ -169,19 +202,83 @@ antes de diseñar desde cero.
 
 ## 9. Pendientes
 
-- [ ] Definir el criterio de curación de qué sistemas ameritan agente propio
-      (§5).
-- [ ] Escribir el script que genera/actualiza los `.md` en `.claude/agents/`
-      a partir de `rayflow_file_map.json.systems` (formato de referencia en
-      §3, sin contenido embebido).
-- [ ] Decidir el trigger de regeneración (§6) — ¿parte del mismo pre-commit
-      de `docs/issues_system.md`, o script aparte con su propio disparador?
+- [x] Definir el criterio de curación de qué sistemas ameritan agente propio
+      (§5) — decisión: sin curación, un especialista por cada sistema de
+      `rayflow_file_map.json.systems` (21 al momento de implementar). Ver
+      §9bis.
+- [x] Escribir el script que genera/actualiza los `.md` en `.claude/agents/`
+      a partir de `rayflow_file_map.json.systems` — `scripts/
+      generate_specialist_agents.py`. A diferencia de §3, **sí lleva
+      contenido embebido** (ver nota al principio del documento y §9bis).
+- [x] Decidir el trigger de regeneración (§6) — hook de `pre-commit` propio
+      (`agents-generate`), mismo mecanismo que `claude-md-generate` de
+      `docs/claude_md_generation.md`, no el pre-commit del auditor de
+      `docs/issues_system.md` (ese es un mecanismo distinto: bloqueante,
+      basado en LLM, scopeado al diff — este es determinístico y siempre
+      regenera todo).
 - [ ] Decidir el nivel de acceso a tools de cada especialista (¿todos con
       `Read, Grep, Glob, Edit` como en la plantilla, o varía según el
       sistema — por ejemplo, sistemas más sensibles con menos permisos, al
-      estilo `rayflow-debugger.md` siendo deliberadamente read-only?).
-- [ ] Prototipar un primer especialista (candidato natural: `engine`, dado
-      que ya se identificó como ejemplo motivador) y probarlo contra un
-      issue real de `rayflow_issues.json`.
+      estilo `rayflow-debugger.md` siendo deliberadamente read-only?). Por
+      ahora los 21 generados usan el mismo default uniforme (`Read, Grep,
+      Glob, Edit`) — sigue abierto.
+- [x] Prototipar un primer especialista (candidato natural: `engine`, dado
+      que ya se identificó como ejemplo motivador) — hecho, junto con los
+      otros 20 (no se prototipó uno solo porque el generador no distingue
+      entre sistemas). Falta probarlo contra un issue real de
+      `rayflow_issues.json` — ninguno de los issues abiertos hoy referencia
+      todavía a un sistema con evidencia suficiente para un caso de prueba
+      significativo.
 - [ ] Retomar el diseño de "meets" (§8) una vez que la delegación secuencial
       esté probada y se vea si hace falta algo más.
+
+## 9bis. Implementación (generación con contenido embebido)
+
+`scripts/generate_specialist_agents.py` — determinístico, sin LLM, sin red,
+mismo espíritu que `scripts/generate_claude_md.py`
+(`docs/claude_md_generation.md`). Por cada sistema en
+`rayflow_file_map.json.systems` genera
+`.claude/agents/rayflow-<system>-specialist.md` con:
+
+- Frontmatter (`name`, `description`, `tools: Read, Grep, Glob, Edit`,
+  `model: inherit`) — el `description` va serializado con `json.dumps()`
+  (no como escalar YAML plano) porque las descripciones de sistema del
+  file map habitualmente contienen `:`, que rompería el parseo de YAML si
+  se escribiera sin comillas.
+- La descripción del sistema (`systems.<system>.description`).
+- Tabla de archivos del sistema con su descripción individual
+  (`files.<path>.description`) — con `|` y saltos de línea escapados, por
+  la misma razón que el frontmatter: son tablas Markdown reales, no texto
+  libre.
+- `depends_on_systems`/`dependents_systems` del sistema.
+- Los claims de `RAYFLOW_SOURCE_OF_TRUTH.json` cuya `evidence` cae en
+  algún archivo del sistema (reutilizando
+  `_sot_scope.affected_claims()`, la misma función que scopea al agente
+  auditor a un diff — acá se le pasa la lista completa de archivos del
+  sistema en vez de un diff), agrupados por sección de la SOT, mostrando
+  texto completo + evidencia (no solo el id del claim).
+- Issues abiertos de `rayflow_issues.json` cuyo `files` o `claim_ids` se
+  cruza con el sistema.
+
+Wireado como hook `agents-generate` en `.pre-commit-config.yaml`, stage
+`pre-commit`: en cada commit regenera los 21 archivos, compara contra lo
+que hay en disco, y solo sobreescribe + `git add` los que cambiaron. Nunca
+bloquea. Corre después de `claude-md-generate` en el mismo stage — si un
+commit cambia `rayflow_file_map.json` (p.ej. agrega un archivo a un
+sistema), ambos generadores necesitan correr para converger: se probó
+corriendo los dos en un loop hasta un punto fijo (3 pasadas, sin más
+cambios en la segunda) antes de wirearlos, para confirmar que no quedan
+oscilando entre sí — no debería pasar en uso normal porque `pre-commit`
+corre cada hook una sola vez por commit, pero valía la pena confirmarlo
+antes de asumirlo.
+
+**Bug real encontrado y corregido durante la implementación**: la primera
+versión escribía el `description` del frontmatter como escalar YAML plano
+(`description: texto con : en el medio`) — cualquier descripción de
+sistema con `:` (la mayoría) rompía el parseo YAML del frontmatter
+completo. Se corrigió serializando con `json.dumps()` (subconjunto válido
+de YAML de comillas dobles). Se encontró y corrigió también un caso
+análogo en las tablas de archivos: descripciones con `|` literal rompían
+las filas de la tabla Markdown — se agregó escape de `|` y de saltos de
+línea. Validado corriendo `yaml.safe_load()` sobre el frontmatter de los
+21 archivos generados después del fix.

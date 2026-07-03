@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 155,
+  "file_count": 181,
   "files": {
     ".claude/agents/rayflow-auditor.md": {
       "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids.",
@@ -173,9 +173,10 @@
       "system": "mcp"
     },
     ".pre-commit-config.yaml": {
-      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/generate_claude_md.py at the pre-commit stage (id claude-md-generate — regenerates and re-stages CLAUDE.md from rayflow_system_prompt.md + SOT/file-map indices on every commit, never blocks), scripts/check_sot_commit_message.py at the commit-msg stage (Layer 2 of SOT edit-blocking, §6.3 of docs/issues_system.md), and scripts/run_sot_audit.py at the pre-commit stage (scoped auditor invocation, §6.2 — blocks the commit if the auditor finds a divergence). default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
+      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/generate_claude_md.py at the pre-commit stage (id claude-md-generate — regenerates and re-stages CLAUDE.md), scripts/generate_specialist_agents.py at the pre-commit stage (id agents-generate — regenerates and re-stages the 21 .claude/agents/rayflow-<system>-specialist.md files), scripts/check_sot_commit_message.py at the commit-msg stage (Layer 2 of SOT edit-blocking, §6.3 of docs/issues_system.md), and scripts/run_sot_audit.py at the pre-commit stage (scoped auditor invocation, §6.2 — blocks the commit if the auditor finds a divergence). default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
       "depends_on": [
         "scripts/generate_claude_md.py",
+        "scripts/generate_specialist_agents.py",
         "scripts/check_sot_commit_message.py",
         "scripts/run_sot_audit.py"
       ],
@@ -1311,7 +1312,7 @@
       "system": "server"
     },
     "rayflow_agents_system.md": {
-      "description": "Design proposal (in Spanish, self-contained) for programmatically generated per-system specialist subagents in .claude/agents/, routed via rayflow_file_map.json's systems object. Recommends against embedding file-content snapshots in the agent .md (same staleness risk the SOT/issues system was built to avoid) in favor of pointing at live sources (file map, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json); distinguishes this repo-dev tooling (.claude/agents/) from the shipped rayflow-debugger.md product template (rayflow/claude_tools/agents/); frames synchronous multi-agent 'meetings' as an explicitly deferred future direction.",
+      "description": "Design doc (in Spanish, self-contained) for programmatically generated per-system specialist subagents in .claude/agents/. IMPLEMENTED: scripts/generate_specialist_agents.py (pre-commit hook `agents-generate`) produces one rayflow-<system>-specialist.md per system in rayflow_file_map.json.systems (21, no curation), WITH embedded content (file descriptions, inter-system deps, relevant SOT claims text+evidence, open issues) — reversing the doc's original §2/§3 recommendation against embedding, since regenerating on every commit (same mechanism as CLAUDE.md, docs/claude_md_generation.md) removes the staleness risk that motivated it. Distinguishes this repo-dev tooling (.claude/agents/) from the shipped rayflow-debugger.md product template (rayflow/claude_tools/agents/). Frames synchronous multi-agent 'meetings' as an explicitly deferred future direction (§8). Open: per-specialist tool-access levels (§9).",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
@@ -1548,6 +1549,229 @@
       "depends_on": [],
       "dependents": [],
       "system": "docs"
+    },
+    "scripts/generate_specialist_agents.py": {
+      "description": "pre-commit stage hook (framework `pre-commit`, wired via .pre-commit-config.yaml, id `agents-generate`): regenerates one .claude/agents/rayflow-<system>-specialist.md per system in rayflow_file_map.json.systems, with real embedded content — file descriptions, depends_on_systems/dependents_systems, the RAYFLOW_SOURCE_OF_TRUTH.json claims whose evidence falls in that system's files (grouped by SOT section, text + evidence), and open rayflow_issues.json issues that mention the system. Deterministic, no LLM. Re-stages any file whose content changed so it rides along in the current commit. Never blocks. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json",
+        ".claude/hooks/_sot_scope.py"
+      ],
+      "dependents": [
+        ".pre-commit-config.yaml"
+      ],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-build-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `build` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-ci-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `ci` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-cli-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `cli` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-docs-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `docs` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-editor-api-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `editor-api` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-engine-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `engine` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-events-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `events` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-frontend-app-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `frontend-app` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-frontend-build-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `frontend-build` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-frontend-canvas-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `frontend-canvas` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-frontend-panels-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `frontend-panels` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-frontend-state-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `frontend-state` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-frontend-ui-kit-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `frontend-ui-kit` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-hooks-infra-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `hooks-infra` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-mcp-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `mcp` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-nodes-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `nodes` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-packaging-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `packaging` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-schema-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `schema` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-server-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `server` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-state-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `state` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-tests-specialist.md": {
+      "description": "GENERATED FILE (scripts/generate_specialist_agents.py, pre-commit hook `agents-generate` — never edit by hand, overwritten on the next commit if stale). Claude Code subagent specialized in the `tests` system: file descriptions, inter-system dependencies, relevant SOT claims, and open issues, all pulled live from rayflow_file_map.json / RAYFLOW_SOURCE_OF_TRUTH.json / rayflow_issues.json at generation time. See rayflow_agents_system.md.",
+      "depends_on": [
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json",
+        "rayflow_issues.json"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
     }
   },
   "systems": {
@@ -1798,6 +2022,27 @@
       "description": "Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose.",
       "files": [
         ".claude/agents/rayflow-auditor.md",
+        ".claude/agents/rayflow-build-specialist.md",
+        ".claude/agents/rayflow-ci-specialist.md",
+        ".claude/agents/rayflow-cli-specialist.md",
+        ".claude/agents/rayflow-docs-specialist.md",
+        ".claude/agents/rayflow-editor-api-specialist.md",
+        ".claude/agents/rayflow-engine-specialist.md",
+        ".claude/agents/rayflow-events-specialist.md",
+        ".claude/agents/rayflow-frontend-app-specialist.md",
+        ".claude/agents/rayflow-frontend-build-specialist.md",
+        ".claude/agents/rayflow-frontend-canvas-specialist.md",
+        ".claude/agents/rayflow-frontend-panels-specialist.md",
+        ".claude/agents/rayflow-frontend-state-specialist.md",
+        ".claude/agents/rayflow-frontend-ui-kit-specialist.md",
+        ".claude/agents/rayflow-hooks-infra-specialist.md",
+        ".claude/agents/rayflow-mcp-specialist.md",
+        ".claude/agents/rayflow-nodes-specialist.md",
+        ".claude/agents/rayflow-packaging-specialist.md",
+        ".claude/agents/rayflow-schema-specialist.md",
+        ".claude/agents/rayflow-server-specialist.md",
+        ".claude/agents/rayflow-state-specialist.md",
+        ".claude/agents/rayflow-tests-specialist.md",
         ".claude/hooks/_file_map.py",
         ".claude/hooks/_sot_scope.py",
         ".claude/hooks/_ty_check.py",
@@ -1816,6 +2061,7 @@
         ".pre-commit-config.yaml",
         "scripts/check_sot_commit_message.py",
         "scripts/generate_claude_md.py",
+        "scripts/generate_specialist_agents.py",
         "scripts/run_sot_audit.py"
       ],
       "depends_on_systems": [],
