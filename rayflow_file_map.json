@@ -197,7 +197,7 @@
       "system": "packaging"
     },
     "RAYFLOW_SOURCE_OF_TRUTH.json": {
-      "description": "Structured breakdown of every claim CLAUDE.md makes about the rayflow codebase (schema_version 2) — one section per CLAUDE.md heading, each claim an object {id, text, evidence}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative paths (optionally '#symbol') supporting the claim; empty means 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the (planned) audit agent and by hand.",
+      "description": "Structured breakdown of every claim CLAUDE.md makes about the rayflow codebase (schema_version 2) — one section per CLAUDE.md heading, each claim an object {id, text, evidence}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative paths (optionally '#symbol') supporting the claim; empty means 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the audit agent (.claude/agents/rayflow-auditor.md) and by hand.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
@@ -221,7 +221,7 @@
       "system": "docs"
     },
     "docs/issues_system.md": {
-      "description": "Design proposal (in Spanish, self-contained) for a documentation-audit system: RAYFLOW_SOURCE_OF_TRUTH.json (CLAUDE.md claims as structured objects with evidence file references) and rayflow_issues.json (an open-issues-only queue, no resolved history kept in-file — git log is the log) linked by stable ids, plus a not-yet-designed pre-commit hook that runs an audit agent via `claude -p`. Explains why these stay separate files rather than merging with rayflow_file_map.json.",
+      "description": "Design doc (in Spanish, self-contained) for a documentation-audit system. RAYFLOW_SOURCE_OF_TRUTH.json (v2, implemented: claims as {id, text, evidence}) and rayflow_issues.json (v1, implemented: open-issues-only queue, no resolved history in-file — git log is the log) linked by stable ids. The audit agent (.claude/agents/rayflow-auditor.md) is implemented and its method manually validated, though invoking it via the Agent/Task tool failed in the same session that created the file (§6.1 — project subagents seem to need a fresh session to be discovered, unconfirmed). Still undesigned: the pre-commit hook that would run it via `claude -p` (§6.2), and the mechanism to block direct edits to the SOT. Explains why these stay separate files rather than merging with rayflow_file_map.json.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
