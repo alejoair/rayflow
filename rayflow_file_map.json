@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 148,
+  "file_count": 149,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can), and system_context() renders a file's architectural \"system\" (name, description, depends_on_systems/dependents_systems) aggregated from the systems object.",
@@ -1267,6 +1267,12 @@
       ],
       "system": "server"
     },
+    "rayflow_agents_system.md": {
+      "description": "Design proposal (in Spanish, self-contained) for programmatically generated per-system specialist subagents in .claude/agents/, routed via rayflow_file_map.json's systems object. Recommends against embedding file-content snapshots in the agent .md (same staleness risk the SOT/issues system was built to avoid) in favor of pointing at live sources (file map, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json); distinguishes this repo-dev tooling (.claude/agents/) from the shipped rayflow-debugger.md product template (rayflow/claude_tools/agents/); frames synchronous multi-agent 'meetings' as an explicitly deferred future direction.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "docs"
+    },
     "rayflow_file_map.json": {
       "description": "Generated flat map of every tracked repo file to a short English description plus depends_on/dependents edges (computed from real imports). Not shipped in the PyPI package. Consumed by the .claude/hooks/*.py scripts to give Claude Code per-file context automatically.",
       "depends_on": [],
@@ -1516,6 +1522,7 @@
         "docs/issues_system.md",
         "docs/propuesta-runcontext.md",
         "docs/rayflow.md",
+        "rayflow_agents_system.md",
         "rayflow_file_map.json",
         "rayflow_scenarios.json",
         "rayflow_workflows.json",
