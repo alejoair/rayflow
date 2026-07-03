@@ -4,7 +4,7 @@
   "file_count": 146,
   "files": {
     ".claude/hooks/_file_map.py": {
-      "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
+      "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can), and system_context() renders a file's architectural \"system\" (name, description, depends_on_systems/dependents_systems) aggregated from the systems object.",
       "depends_on": [],
       "dependents": [
         ".claude/hooks/dependents_reminder.py",
@@ -36,7 +36,7 @@
       "system": "hooks-infra"
     },
     ".claude/hooks/file_map_context.py": {
-      "description": "PreToolUse hook (Read|Edit|Write): before Claude touches a mapped file, surfaces its description plus depends_on/dependents from rayflow_file_map.json, and for .py files also lists real function/class signatures extracted live via ast — always accurate regardless of whether the JSON description itself is stale.",
+      "description": "PreToolUse hook (Read|Edit|Write): before Claude touches a mapped file, surfaces its description plus depends_on/dependents from rayflow_file_map.json, the file's architectural \"system\" and which other systems depend on it (via _file_map.system_context), and for .py files also lists real function/class signatures extracted live via ast — always accurate regardless of whether the JSON description itself is stale.",
       "depends_on": [
         ".claude/hooks/_file_map.py"
       ],
@@ -175,7 +175,7 @@
       "system": "docs"
     },
     "MANIFEST.in": {
-      "description": "setuptools sdist manifest: excludes CLAUDE.md and docs/ from the published PyPI package.",
+      "description": "setuptools sdist manifest: excludes CLAUDE.md, docs/, and the three generated LLM-orientation JSONs (rayflow_file_map.json, rayflow_workflows.json, rayflow_scenarios.json) from the published PyPI package — all internal tooling artifacts, not user docs.",
       "depends_on": [],
       "dependents": [],
       "system": "packaging"
@@ -1361,7 +1361,7 @@
       "system": "tests"
     },
     "tests/test_editor.py": {
-      "description": "Tests for the /editor/* FastAPI routes: node catalog, types, validation (including multi-error collection and warnings), flow CRUD, custom nodes, concurrency isolation, events, and the self-verification /test endpoint. Also covers POST /flows/{name}/run (rayflow/server.py) from the editor-managed-flow side — auto-load on demand, 404 on unknown flow, SSE vs. JSON via the Accept header — since that endpoint is shared with served flows rather than living under /editor. The packaged-examples tests were removed along with that feature.",
+      "description": "Tests for the /editor/* FastAPI routes: node catalog, types, validation (including multi-error collection and warnings), flow CRUD, custom nodes, concurrency isolation, events, and the self-verification /test endpoint. Also covers POST /flows/{name}/run (rayflow/server.py) from the editor-managed-flow side — requires an explicit POST /editor/flows/{name}/load first (no auto-load on demand: 'served' = 'explicitly loaded'), 404 if not served, SSE vs. JSON via the Accept header — since that endpoint is shared with served flows rather than living under /editor. The packaged-examples tests were removed along with that feature.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
@@ -1427,7 +1427,7 @@
       "system": "tests"
     },
     "tests/test_server.py": {
-      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, duplicate-name validation, GraphState persistence across requests, OnStart's fixed headers/query/body/method outputs, ctx.set_response_status()/set_response_header() reaching the real HTTP response (including header isolation between separate requests), and POST /flows/{name}/run falling back to an editor-managed flow (loaded into Ray on demand) when the name isn't in the served set.",
+      "description": "Tests for the REST API used by `rayflow serve` (rayflow/server.py): served-flow listing, running, duplicate-name validation, GraphState persistence across requests, OnStart's fixed headers/query/body/method outputs, ctx.set_response_status()/set_response_header() reaching the real HTTP response (including header isolation between separate requests), POST /flows/{name}/run returning 404 for an editor-managed flow that hasn't been explicitly served via POST /editor/flows/{name}/load (no on-demand auto-load — 'served' = 'explicitly loaded'), and the /flows/{name}/ui bundle (ChatTrigger end-to-end, 404 when the entry declares no frontend, UI disappearing after unload).",
       "depends_on": [
         "rayflow/editor/storage.py",
         "rayflow/nodes/decorators.py",
@@ -1763,7 +1763,7 @@
       "dependents_systems": []
     },
     "schema": {
-      "description": "Flow JSON schema (FlowDef/NodeDef Pydantic models) and the canonical data-pin type system (int/str/list[T]/dict[str,V]/Any) with compatibility rules. Foundational — almost every other backend system imports from here.",
+      "description": "Flow JSON schema (FlowDef/NodeDef plain stdlib @dataclass models, not Pydantic — no pydantic dependency exists in this project) and the canonical data-pin type system (int/str/list[T]/dict[str,V]/Any) with compatibility rules. Foundational — almost every other backend system imports from here.",
       "files": [
         "rayflow/schema/__init__.py",
         "rayflow/schema/loader.py",
