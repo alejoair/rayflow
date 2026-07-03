@@ -197,7 +197,7 @@
       "system": "packaging"
     },
     "RAYFLOW_SOURCE_OF_TRUTH.json": {
-      "description": "Structured breakdown of every claim CLAUDE.md makes about the rayflow codebase (schema_version 2) — one section per CLAUDE.md heading, each claim an object {id, text, evidence}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative paths (optionally '#symbol') supporting the claim; empty means 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the audit agent (.claude/agents/rayflow-auditor.md) and by hand.",
+      "description": "Structured, section-organized claims about the rayflow codebase (schema_version 2), each claim an object {id, text, evidence}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative paths (optionally '#symbol') supporting the claim; empty means 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the audit agent (.claude/agents/rayflow-auditor.md) and by hand.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
