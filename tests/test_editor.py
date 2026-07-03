@@ -38,10 +38,9 @@ def client(flows_dir):
 # Reusable example flows
 SUMA = {
     "name": "suma",
-    "inputs": {"x": "int", "y": "int"},
     "outputs": {"resultado": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "EntryXY"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.x", "b": "entry.y"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -60,12 +59,11 @@ MINIMAL = {
 INVALID_TYPES = {
     "name": "bad_types",
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "OnStart"},
         {"id": "exit", "type": "FlowOutput", "exec_in": "entry",
-         "inputs": {"x": "entry.x"}},
+         "inputs": {"x": 5}},  # FlowOutput.x expects int; this is fine
     ],
-    "inputs": {"x": "INVALID_TYPE"},
-    "outputs": {"x": "int"},
+    "outputs": {"x": "INVALID_TYPE"},  # invalid type in flow.outputs
 }
 
 
@@ -274,7 +272,8 @@ def test_get_flow_existing(client):
     assert r.status_code == 200
     data = r.json()
     assert data["name"] == "suma"
-    assert data["inputs"] == {"x": "int", "y": "int"}
+    # flow.inputs was removed — entry nodes declare their own Input pins now.
+    assert "inputs" not in data or data["inputs"] in (None, {})
 
 
 def test_get_flow_nonexistent(client):
@@ -415,11 +414,10 @@ class Duplicate:
 
 DUPLICATE_FLOW = {
     "name": "duplicate_flow",
-    "inputs": {"n": "int"},
     "outputs": {"result": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
-        {"id": "dup", "type": "Duplicate", "exec_in": "entry", "inputs": {"value": "entry.n"}},
+        {"id": "entry", "type": "EntryX"},
+        {"id": "dup", "type": "Duplicate", "exec_in": "entry", "inputs": {"value": "entry.x"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "dup", "inputs": {"result": "dup.doubled"}},
     ],
 }
@@ -471,7 +469,7 @@ def test_custom_engine_node_runs(client_with_custom_node):
     client_with_custom_node.post("/editor/flows/duplicate_flow/load")
     r = client_with_custom_node.post(
         "/flows/duplicate_flow/run",
-        json={"n": 7},
+        json={"x": 7},
         headers={"Accept": "text/event-stream"},
     )
     assert r.status_code == 200
@@ -611,9 +609,14 @@ def test_validate_warnings_unknown_key(client):
 # ---------------------------------------------------------------------------
 
 def test_node_spec_includes_dynamic(client):
-    r = client.get("/editor/nodes/OnStart")
+    # Entry nodes (OnStart, ChatTrigger, etc.) no longer carry `dynamic` —
+    # their pins are statically declared on the class. FlowOutput still does.
+    r = client.get("/editor/nodes/FlowOutput")
     assert "dynamic" in r.json()
-    assert r.json()["dynamic"]["outputs_from"] == "flow.inputs"
+    assert r.json()["dynamic"]["inputs_from"] == "flow.outputs"
+    # And entry nodes no longer expose `dynamic`:
+    r_onstart = client.get("/editor/nodes/OnStart")
+    assert "dynamic" not in r_onstart.json()
 
 
 def test_flow_catalog_resolves_dynamic_pins(client):
@@ -622,7 +625,7 @@ def test_flow_catalog_resolves_dynamic_pins(client):
     assert r.status_code == 200
     nodes = {n["id"]: n for n in r.json()["nodes"]}
     entry_outputs = {p["name"] for p in nodes["entry"]["outputs"]}
-    assert {"x", "y"}.issubset(entry_outputs)  # FlowInput's dynamic outputs
+    assert {"x", "y"}.issubset(entry_outputs)  # EntryXY's auto-passthrough outputs
     exit_inputs = {p["name"] for p in nodes["exit"]["inputs"]}
     assert "resultado" in exit_inputs  # FlowOutput's dynamic input
 

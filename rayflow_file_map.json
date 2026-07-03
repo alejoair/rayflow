@@ -233,7 +233,7 @@
       "system": "server"
     },
     "rayflow/api.py": {
-      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray. load() pre-validates (build) before spawning any actor, then constructs a ServedFlow and registers it in rayflow.registry. is_flow_loaded/get_loaded_flow remain as thin aliases over the registry for legacy callers. reconnect_async returns clean human-readable error messages (not raw Ray stacktraces) when a run_id is unknown or already closed.",
+      "description": "High-level Python API: load/unload/execute/execute_async/reconnect_async/serve_events/stop — the functions used by the CLI, the REST routes, and the MCP tools to drive flows in and out of Ray. execute/execute_async take an optional `request` (RequestData envelope) forwarded to the entry node's ctx.request. load() pre-validates (build) before spawning any actor.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/engine/executor.py",
@@ -263,7 +263,7 @@
       "system": "build"
     },
     "rayflow/build/validator.py": {
-      "description": "Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one namespace, checks type/wiring/cycle correctness, and either raises on the first error (build()) or collects every error in one pass (validate_all()) for editor/MCP clients. _find_entry() picks the flow's sole node with meta.is_entry = True (build error if zero or more than one) — generic, not a hardcoded OnStart/OnEvent/OnVariableChange name list. _with_dynamic_pins() adds fixed headers/query/body/method outputs, alongside the flow's declared inputs, to any node with meta.exposes_flow_inputs = True (OnStart/OnEvent are the built-in examples; OnVariableChange is an entry but doesn't set this flag). CallFlow subflow splicing (_splice_subflow) still matches OnStart/OnEvent by literal type name — deliberately not generalized, since subflows are invoked inline by their parent, not independently triggered.",
+      "description": "Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one namespace, checks type/wiring/cycle correctness, and either raises on first error (build()) or collects every error in one pass (validate_all()) for editor/MCP clients. _find_entry() picks the flow's sole @entry_node (meta.is_entry). _with_dynamic_pins() no longer injects flow.inputs as outputs — entries declare their own Input/Output; for entries without run() it mirrors each Input as a same-named Output (passthrough). _splice_subflow identifies the subflow's entry generically via catalog meta.is_entry (not by name) and re-exposes the entry's declared Inputs as the subflow boundary.",
       "depends_on": [
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/loader.py",
@@ -359,7 +359,7 @@
       "system": "examples"
     },
     "rayflow/editor/examples/suma.json": {
-      "description": "Packaged copy of examples/suma.json, served via GET /editor/examples and the MCP get_example tool.",
+      "description": "Packaged example: a flow using EntryXY (an @entry_node declaring x and y as int Inputs) wired to Add and FlowOutput. Served via GET /editor/examples and the MCP get_example tool.",
       "depends_on": [],
       "dependents": [],
       "system": "examples"
@@ -809,7 +809,7 @@
       "system": "frontend-build"
     },
     "rayflow/editor/guide.py": {
-      "description": "Curated markdown guide to Rayflow's flow model, served by GET /editor/guide and the MCP get_guide tool as the semantic contract an LLM agent needs to build flows. Documents OnStart/OnEvent's fixed headers/query/body/method outputs, ctx.set_response_status()/set_response_header() for flows served over HTTP, and points agents at POST /flows/{name}/run (rayflow/server.py) to execute a flow, loading it into Ray on demand.",
+      "description": "Curated markdown guide to Rayflow's flow model, served by GET /editor/guide and the MCP get_guide tool as the semantic contract an LLM agent needs to build flows. Documents @entry_node (declares its own Input/Output pins, gets EntryContext with .request), auto-passthrough for entries without run(), ctx.set_response_status()/set_response_header() for flows served over HTTP.",
       "depends_on": [],
       "dependents": [
         "rayflow/editor/routes.py",
@@ -818,7 +818,7 @@
       "system": "editor-api"
     },
     "rayflow/editor/routes.py": {
-      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/test endpoints, guide/examples, and event subscription — the same logic the MCP tools reuse. _node_spec() surfaces meta.is_entry. Flow execution itself (POST /flows/{name}/run, GET /flows/{name}/run/{run_id}/stream) lives in rayflow/server.py, not here — but run_flow_response/wants_stream, the content-negotiation helpers that pick SSE vs. a single JSON response (Accept: text/event-stream), are defined here and imported by server.py so that logic isn't duplicated between served and editor-managed flows. POST /editor/flows/{name}/load now pre-validates (build) and returns 400 on BuildError; list_loaded_flows reads from rayflow.registry.",
+      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/test endpoints, guide/examples, and event subscription. _node_spec() surfaces meta.is_entry. The _DYNAMIC_PINS table no longer includes OnStart/FlowInput/OnEvent — those nodes declare their pins statically now; only FlowOutput/Parallel/CallFlow remain as dynamic. run_flow_response accepts an optional `request` RequestData.",
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
@@ -868,7 +868,7 @@
       "system": "packaging"
     },
     "rayflow/editor/storage.py": {
-      "description": "Flow persistence: reads/writes flow JSON files under the workspace's flows/ directory and serializes a FlowDef back to a JSON-safe dict.",
+      "description": "Flow persistence: reads/writes flow JSON files under the workspace's flows/ directory and serializes a FlowDef back to a JSON-safe dict (no `inputs` field — entries declare their own Input pins).",
       "depends_on": [
         "rayflow/schema/models.py",
         "rayflow/workspace.py"
@@ -890,7 +890,7 @@
       "system": "engine"
     },
     "rayflow/engine/executor.py": {
-      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (the lifecycle of a flow's actors in Ray). The previous process-wide registry of loaded flows (_loaded_flows, load_flow_into_ray, unload_flow_from_ray, get_loaded_flow, is_flow_loaded) has moved to rayflow/registry.py, which is now the single source of truth for served flows. LoadedFlow stays here as a pure constructor/wrapper of live Ray actors — the registry holds ServedFlow instances that reference a LoadedFlow via the .loaded field.",
+      "description": "The core execution engine: the FlowEngine Ray actor (runs a BuiltFlow node-by-node, dispatching @ray_node/@engine_node/CallFlow nodes, resolving data pins, emitting SSE events) and LoadedFlow (lifecycle of a flow's actors in Ray). The entry node is no longer short-circuited: it runs the normal _fire_engine_node path, constructs an EntryContext (with .request) for the root entry only, and _resolve_inputs pulls the root entry's inputs from RunContext.flow_inputs (the HTTP body). Entries without run() get auto-passthrough (mirror Input→Output) and auto-fire exec_out if run() didn't fire. RunContext now carries flow_inputs + request; execute() takes a request arg.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/nodes/decorators.py",
@@ -995,7 +995,7 @@
       "system": "nodes"
     },
     "rayflow/nodes/builtin/control.py": {
-      "description": "Builtin control-flow nodes: OnStart (is_entry=True, exposes_flow_inputs=True), FlowOutput, Branch, Sequence, Parallel (fork/join), ForEach, While, and Map.",
+      "description": "Builtin control-flow nodes: OnStart (entry, @entry_node, declares body/headers/query/method from the HTTP envelope as Inputs with empty defaults — auto-passthrough since no run()), ChatTrigger (entry with frontend bundle, declares message Input + message_out Output + run() that forwards), FlowOutput, Branch, Sequence, Parallel (fork/join), ForEach, While, Map. Plus a handful of convenience entries (EntryX/EntryXY/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool) used by tests/examples.",
       "depends_on": [
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/registry.py"
@@ -1006,7 +1006,7 @@
       "system": "nodes"
     },
     "rayflow/nodes/builtin/events.py": {
-      "description": "Builtin event nodes: OnEvent (entry point triggered by the event bus; is_entry=True, exposes_flow_inputs=True), OnVariableChange (entry point triggered by a watched variable; is_entry=True only — its value/old outputs are static pins, not flow.inputs-derived), and EmitEvent.",
+      "description": "Builtin event nodes: OnEvent (@entry_node triggered by the event bus; declares event_name config Input + payload Input, auto-passthrough), OnVariableChange (@entry_node triggered by a watched variable; declares variable/source config + value/old Inputs, auto-passthrough), and EmitEvent (@engine_node, publishes to the bus).",
       "depends_on": [
         "rayflow/nodes/decorators.py"
       ],
@@ -1047,7 +1047,7 @@
       "system": "nodes"
     },
     "rayflow/nodes/decorators.py": {
-      "description": "Defines the node-authoring contract: the Input/Output/ExecInput/ExecOutput pin descriptors, the @ray_node/@engine_node/@parallel_node decorators, NodeMeta/PinSpec metadata, and the unified ExecContext used by every node's run(). NodeMeta.is_entry (can be a flow's entry point) and .exposes_flow_inputs (gets flow.inputs + headers/query/body/method injected as dynamic outputs) are read from class attributes in _extract_meta, same convention as `category` — consumed generically by build/validator.py and engine/executor.py instead of hardcoding OnStart/OnEvent/OnVariableChange by name. _extract_meta rejects is_entry=True combined with a declared exec_in; ray_node() additionally rejects is_entry=True (the entry short-circuit lives in FlowEngine._fire_engine_node and never calls a @ray_node's run()). ExecContext.set_response_status()/set_response_header() set this run's HTTP response metadata (RunContext-scoped) using the same dual local-closure (engine_node)/RPC (ray_node) pattern as fire()/set_output(), avoiding a blocking self-call when the caller is running inside the engine's own actor.",
+      "description": "Defines the node-authoring contract: the Input/Output/ExecInput/ExecOutput pin descriptors, the @ray_node/@engine_node/@parallel_node/@entry_node decorators, NodeMeta/PinSpec metadata, the unified ExecContext used by every node's run(), and EntryContext (subclass with .request) used only by @entry_node classes. @entry_node marks a flow's entry point — sets NodeMeta.is_entry (read by _find_entry), rejects exec_in and missing ExecOutput, and is the only path to EntryContext/RequestData. NodeMeta.is_entry is set ONLY by @entry_node (no longer a class attribute authors set). The old exposes_flow_inputs flag is gone.",
       "depends_on": [
         "rayflow/events/bus.py",
         "rayflow/types.py"
@@ -1129,7 +1129,7 @@
       "system": "schema"
     },
     "rayflow/schema/loader.py": {
-      "description": "Parses a flow JSON (file, path, or dict) into a FlowDef, and detects unknown/typo'd schema keys to surface as validation warnings.",
+      "description": "Parses a flow JSON (file, path, or dict) into a FlowDef (no `inputs` field — entries declare their own Input pins), and detects unknown/typo'd schema keys to surface as validation warnings. `inputs` is no longer a recognized top-level key.",
       "depends_on": [
         "rayflow/schema/models.py"
       ],
@@ -1146,7 +1146,7 @@
       "system": "schema"
     },
     "rayflow/schema/models.py": {
-      "description": "The flow JSON schema's dataclasses: NodeDef, FlowDef, VariableDef, PinDef/PinKind, including the internal fields flatten() uses to track CallFlow splicing.",
+      "description": "The flow JSON schema's dataclasses: NodeDef, FlowDef (no longer has an `inputs` field — inputs live on the entry node's declared Input pins), VariableDef, PinDef/PinKind, including the internal fields flatten() uses to track CallFlow splicing.",
       "depends_on": [],
       "dependents": [
         "rayflow/build/validator.py",
@@ -1159,7 +1159,7 @@
       "system": "schema"
     },
     "rayflow/server.py": {
-      "description": "FastAPI app factory for `rayflow serve`: builds the REST API, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. Served flows are tracked in rayflow.registry — POST /flows/{name}/run, GET /flows/{name}/ui, GET /flows all consult that registry in runtime, so flows added later via POST /editor/flows/{name}/load are visible without rebuilding the app. /run returns 404 if the flow isn't served (no implicit on-demand loading anymore — 'served' = 'explicitly loaded'). /ui is served dynamically by a per-request FileResponse that resolves the entry node's `frontend` bundle from the catalog; it 404s automatically when the flow is unloaded. GET /flows/{name}/run/{run_id}/stream reconnects to an active run.",
+      "description": "FastAPI app factory for `rayflow serve`: builds the REST API, mounts the editor router, the custom-nodes router, the MCP server at /mcp, and the static editor frontend. POST /flows/{name}/run builds a RequestData from the HTTP request and fuses it with the body into flow_inputs (so the entry's declared Input for `headers`/`query`/`body`/`method` is populated), forwarding both as the request envelope to the entry's ctx.request.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
@@ -1465,7 +1465,7 @@
       "system": "tests"
     },
     "rayflow/registry.py": {
-      "description": "Process-wide registry of served flows — the single source of truth for 'which flows are currently served' (have live Ray actors and can receive requests). A neutral module-level dict with typed accessors (register_served/unregister_served/get_served/all_served/is_served/clear_served). Defines the ServedFlow class (source, flow_def, built, loaded: LoadedFlow). Consulted by rayflow.api (load/unload mutate it), rayflow.server (the /run, /ui, /flows endpoints read it), rayflow.editor.routes (the editor's /load, /unload, CRUD endpoints), and rayflow.mcp.server. Replaces the previous _loaded_flows module-level dict that lived in engine/executor.py — the fragmentation caused bugs like ChatTrigger's /ui bundle only being served for --file flows, not editor-loaded ones.",
+      "description": "Process-wide registry of served flows — the single source of truth for 'which flows are currently served'. ServedFlow.interface() derives the public inputs from the entry node's declared Input pins (meta.inputs) instead of the removed flow.inputs field.",
       "depends_on": [
         "rayflow/build/validator.py",
         "rayflow/engine/executor.py",

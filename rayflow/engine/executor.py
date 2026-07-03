@@ -9,7 +9,7 @@ import uuid
 import ray
 
 from rayflow.build.validator import BuiltFlow, ResolvedNode
-from rayflow.nodes.decorators import ExecContext
+from rayflow.nodes.decorators import EntryContext, ExecContext
 from rayflow.state.actor import GraphState
 
 
@@ -34,6 +34,13 @@ class RunContext:
     output_refs: dict[str, Any] = field(default_factory=dict)              # result accumulator
     response_status: int = 200                          # set via ctx.set_response_status()
     response_headers: dict[str, str] = field(default_factory=dict)         # set via ctx.set_response_header()
+    # Inputs from the HTTP caller (body) — the entry node's declared `Input`s
+    # are populated from here by _resolve_inputs. None for runs not triggered
+    # by an HTTP request (MCP, execute() direct).
+    flow_inputs: dict[str, Any] = field(default_factory=dict)
+    # HTTP request envelope for entry nodes — available via ctx.request.
+    # None when the run wasn't triggered by an HTTP request.
+    request: Any = None
 
 
 def _var_key(state_path: str | None, var_name: str) -> str:
@@ -98,22 +105,38 @@ class FlowEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    async def execute(self, flow_inputs: dict[str, Any], queue_ref: Any, run_id: str) -> dict[str, Any]:
+    async def execute(
+        self,
+        flow_inputs: dict[str, Any],
+        queue_ref: Any,
+        run_id: str,
+        request: Any = None,
+    ) -> dict[str, Any]:
         """Executes the flow with the given inputs, emitting events to queue_ref.
 
         All of a run's scratch state lives in a local RunContext (not in
         self), threaded through the internal methods. No lock: two
         concurrent execute() calls are isolated by their own RunContext and
         the async actor can interleave them.
+
+        `flow_inputs` is the dict of values from the HTTP caller (the body);
+        the entry node's declared `Input`s are populated from it by
+        _resolve_inputs. `request` is an optional RequestData envelope
+        exposed to entry nodes via ctx.request; None for runs not triggered
+        by an HTTP request.
         """
-        run = RunContext(run_id=run_id, queue=queue_ref)
+        run = RunContext(
+            run_id=run_id,
+            queue=queue_ref,
+            flow_inputs=dict(flow_inputs),
+            request=request,
+        )
         for node_id, rnode in self._built.nodes.items():
             if rnode.exec_join == "and" and len(rnode.exec_sources) > 1:
                 run.exec_arrivals[node_id] = set()
         self._runs[run_id] = run
 
         try:
-            await self._write_node_outputs(run, self._built.entry_node_id, dict(flow_inputs))
             await self._run_loop(run, self._built.entry_node_id)
             result = _resolve_refs(run.output_refs)
             await queue_ref.push.remote(run_id, {
@@ -255,19 +278,25 @@ class FlowEngine:
                 run.output_refs.update(inputs)
             return []
 
-        if rnode.meta.is_entry:
-            await self._write_node_outputs(run, node_id, inputs)
-            targets = rnode.exec_targets.get("exec_out", [])
-            if len(targets) > 1:
-                await asyncio.gather(*[self._run_loop(run, t, node_id) for t in targets])
-            elif targets:
-                await self._run_loop(run, targets[0], node_id)
-            return []
-
         graph_id = self._get_graph_id()
-        ctx = ExecContext(node_id, graph_id, rnode.state_path)
+
+        # The flow's root entry receives an EntryContext (subclass of
+        # ExecContext with `.request`). Splicedeado subflow entries and
+        # regular nodes receive a plain ExecContext — they have no access
+        # to the HTTP request envelope, by construction.
+        if rnode.meta.is_entry and rnode.node_def.subflow_of is None:
+            ctx = EntryContext(node_id, graph_id, rnode.state_path, request=run.request)
+        else:
+            ctx = ExecContext(node_id, graph_id, rnode.state_path)
+
+        # Tracks whether the node's run() called ctx.fire() at least once.
+        # Used by the entry-node safety net: if an entry's run() doesn't fire
+        # exec_out, the engine fires it automatically to avoid stuck flows.
+        fired = False
 
         async def _engine_fire(pin: str) -> None:
+            nonlocal fired
+            fired = True
             # Flushes accumulated outputs to the RunContext only if there are
             # successor nodes that can read them. Avoids writes on every
             # iteration of a loop whose pin (e.g. loop_body) has no direct
@@ -300,6 +329,13 @@ class FlowEngine:
         if run_fn is not None:
             instance = rnode.meta.py_class()
             await instance.run(ctx, **inputs)
+        elif rnode.meta.is_entry:
+            # Entry without run(): auto-passthrough — mirror each declared
+            # Input as an output of the same name. Covers the "dumb trigger"
+            # case (e.g. OnStart) where the author doesn't want to write a
+            # trivial run() just to forward the inputs.
+            for pin_name, value in inputs.items():
+                ctx._pending_outputs[pin_name] = value
 
         if ctx._pending_outputs:
             await self._write_node_outputs(run, node_id, ctx._pending_outputs)
@@ -308,6 +344,13 @@ class FlowEngine:
         duration_ms = (time.time() - started_at) * 1000
         await self._write_node_outputs(run, node_id, {"meta": self._build_meta(node_id, rnode, started_at, duration_ms)})
         await self._emit_node_done(run, node_id, rnode, duration_ms)
+
+        # For entry nodes, auto-fire exec_out if run() didn't fire anything.
+        # The entry is the bridge between the outside world and the graph;
+        # if nothing fired, the flow is stuck. This is a safety net, not the
+        # main path — well-behaved entries fire exec_out explicitly.
+        if rnode.meta.is_entry and not fired:
+            await self._local_fire(run, node_id, rnode, "exec_out")
         return []
 
     # ------------------------------------------------------------------
@@ -367,6 +410,22 @@ class FlowEngine:
     # ------------------------------------------------------------------
 
     async def _resolve_inputs(self, run: RunContext, rnode: ResolvedNode) -> dict[str, Any]:
+        # The flow's ROOT entry node has no predecessors — its inputs come
+        # from the run's `flow_inputs` (populated by the server from the
+        # HTTP body). Splicedeado subflow entries (subflow_of is not None)
+        # are fed by the CallFlow via wired nd.inputs, so they take the
+        # normal path like any other node.
+        if rnode.meta.is_entry and rnode.node_def.subflow_of is None:
+            result: dict[str, Any] = {}
+            for pin in rnode.meta.inputs:
+                if pin.name in run.flow_inputs:
+                    val = run.flow_inputs[pin.name]
+                elif pin.has_default:
+                    val = pin.default
+                else:
+                    val = None
+                result[pin.name] = ray.put(val)
+            return result
         return {
             pin_name: await self._resolve_pin(run, rnode, pin_name)
             for pin_name in rnode.resolved_inputs
@@ -506,9 +565,9 @@ class LoadedFlow:
 
         return cls(graph_id, engine, actors, queue, flow_def=built.flow_def)
 
-    def execute(self, flow_inputs: dict[str, Any], run_id: str) -> Any:
+    def execute(self, flow_inputs: dict[str, Any], run_id: str, request: Any = None) -> Any:
         """Dispatches execute() on the engine and returns the ObjectRef (non-blocking)."""
-        return self._engine.execute.remote(flow_inputs, self._queue, run_id)
+        return self._engine.execute.remote(flow_inputs, self._queue, run_id, request)
 
     def unload(self) -> None:
         """Destroys every actor belonging to the flow."""

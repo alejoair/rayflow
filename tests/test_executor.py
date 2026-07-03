@@ -482,12 +482,11 @@ def test_outputs_not_stale_between_runs():
     """
     flow = {
         "name": "stale_check",
-        "inputs": {"cond": "bool"},
         "outputs": {"via_producer": "int", "via_reader": "int"},
         "nodes": [
             {"id": "entry", "type": "OnStart"},
             {"id": "br", "type": "Branch", "exec_in": "entry",
-             "inputs": {"condition": "entry.cond"}},
+             "inputs": {"condition": "entry.body"}},
             # true branch: produces 100
             {"id": "producer", "type": "Add", "exec_in": "br.true",
              "inputs": {"a": 100, "b": 0}},
@@ -504,14 +503,15 @@ def test_outputs_not_stale_between_runs():
     rayflow.load(flow)
     try:
         # Run 1: cond=True → producer fires, leaves result=100 in the state
-        r1 = _execute_collect("stale_check", {"cond": True})
+        r1 = _execute_collect("stale_check", {"body": {"cond": True}})
         assert r1["via_producer"] == 100  # producer really ran
 
         # Run 2: cond=False → reader runs and reads producer.result.
         # Without per-run isolation it would read 100 (stale); with
-        # RunContext it falls back to the default 0.
-        r2 = _execute_collect("stale_check", {"cond": False})
-        assert r2["via_reader"] == 0, (
+        # RunContext the producer's output isn't in node_outputs, so the
+        # reader's input resolves to None (Add.a's default).
+        r2 = _execute_collect("stale_check", {"body": {"cond": False}})
+        assert r2["via_reader"] is None, (
             f"reader read {r2['via_reader']} — stale output from the previous run"
         )
     finally:
@@ -538,12 +538,10 @@ def _execute_flow_done_event(name: str, inputs: dict) -> dict:
 
 def test_onstart_request_pins_default_when_not_triggered_over_http():
     """Calling execute() directly (no server.py involved) never supplies
-    headers/query/body/method in flow_inputs — a node wiring from
-    entry.headers falls back to its own Input's declared default, per
-    _resolve_pin's fallback chain (node_outputs miss -> not a pure node ->
-    consumer's default). Uses a custom node with an explicit {} default
-    rather than wiring straight into FlowOutput, whose auto-generated
-    dynamic pins always default to None regardless of declared type."""
+    headers/query/body/method in flow_inputs — an entry's declared Input
+    for `headers` falls back to its default, since flow_inputs has no such
+    key. Uses OnStart (which declares the four HTTP envelope pins) wired
+    into an EchoHeaders node."""
     from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput, Input, Output
     from rayflow.nodes.registry import get_catalog
 
@@ -571,6 +569,8 @@ def test_onstart_request_pins_default_when_not_triggered_over_http():
     }
     rayflow.load(flow)
     try:
+        # No HTTP caller: flow_inputs={} → entry.headers resolves to its
+        # declared default ({}) via _resolve_inputs's fallback chain.
         result = _execute_collect("no_http_context", {})
         assert result["headers"] == {}
     finally:
@@ -578,20 +578,20 @@ def test_onstart_request_pins_default_when_not_triggered_over_http():
 
 
 def test_custom_entry_node_runs_like_onstart():
-    """Any node with is_entry=True works as a flow's entry point: flow_inputs
-    are written as its outputs and exec_out fires, exactly like OnStart."""
-    from rayflow.nodes.decorators import engine_node, ExecOutput, Output
+    """A custom @entry_node with declared Inputs runs as a flow's entry:
+    the inputs are populated from flow_inputs (HTTP body) and auto-
+    passthrough mirrors them as outputs, so the subgraph can cable them."""
+    from rayflow.nodes.decorators import entry_node, ExecOutput, Input
     from rayflow.nodes.registry import get_catalog
 
-    @engine_node
+    @entry_node
     class MyTrigger:
-        is_entry = True
+        value = Input("int")
         exec_out = ExecOutput()
-        value = Output("int")
 
     get_catalog().register(MyTrigger)
 
-    result = run_once({
+    flow = {
         "name": "custom_entry_run",
         "outputs": {"result": "int"},
         "nodes": [
@@ -599,20 +599,28 @@ def test_custom_entry_node_runs_like_onstart():
             {"id": "exit", "type": "FlowOutput", "exec_in": "trig",
              "inputs": {"result": "trig.value"}},
         ],
-    }, value=42)
-    assert result["result"] == 42
+    }
+    rayflow.load(flow)
+    try:
+        result = _execute_collect("custom_entry_run", {"value": 42})
+        assert result["result"] == 42
+    finally:
+        rayflow.unload("custom_entry_run")
 
 
-def test_custom_entry_node_with_exposes_flow_inputs():
-    """exposes_flow_inputs=True injects flow.inputs + the fixed request pins
-    as dynamic outputs, exactly like OnStart/OnEvent do."""
-    from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput, Input, Output
+def test_custom_entry_node_with_http_pins():
+    """A custom @entry_node can declare the HTTP envelope inputs it wants
+    (headers/query/body/method). The engine populates them from
+    flow_inputs (the request body), or from defaults if not provided."""
+    from rayflow.nodes.decorators import (
+        entry_node, engine_node, ExecContext, ExecInput, ExecOutput, Input, Output,
+    )
     from rayflow.nodes.registry import get_catalog
 
-    @engine_node
+    @entry_node
     class MyHttpTrigger:
-        is_entry = True
-        exposes_flow_inputs = True
+        x = Input("int")
+        headers = Input("dict[str, str]", default={})
         exec_out = ExecOutput()
 
     @engine_node
@@ -631,7 +639,6 @@ def test_custom_entry_node_with_exposes_flow_inputs():
 
     flow = {
         "name": "custom_http_trigger",
-        "inputs": {"x": "int"},
         "outputs": {"x": "int", "headers": "dict"},
         "nodes": [
             {"id": "entry", "type": "MyHttpTrigger"},

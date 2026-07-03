@@ -1,10 +1,6 @@
 {
   "name": "showcase",
   "version": "1",
-  "inputs": {
-    "numbers": "list",
-    "threshold": "int"
-  },
   "outputs": {
     "total": "int",
     "above_count": "int",
@@ -16,7 +12,7 @@
   ],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "EntryNumbersThreshold" },
 
     { "id": "par", "type": "Parallel", "exec_in": "entry" },
 

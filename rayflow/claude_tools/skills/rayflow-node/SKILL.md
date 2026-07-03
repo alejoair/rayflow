@@ -79,20 +79,33 @@ rather than inventing new casing/language for the same concept).
 
 ## Frontend bundle (optional, entry nodes only)
 
-A node with `is_entry = True` may declare `frontend = "<dir_name>"` — the
-name of a directory of static assets (HTML/JS/CSS) sibling to the node's
-`.py` file. When a **served** flow's entry node declares it (`rayflow serve
---file`, not editor-managed flows), the server mounts that directory at
-`GET /flows/{flow_name}/ui` so the flow ships with its own UI.
+A node declared with `@entry_node` may also declare `frontend = "<dir_name>"`
+— the name of a directory of static assets (HTML/JS/CSS) sibling to the
+node's `.py` file. When a **served** flow's entry node declares it
+(`rayflow serve --file`, not editor-managed flows), the server mounts that
+directory at `GET /flows/{flow_name}/ui` so the flow ships with its own UI.
 
 ```python
-@engine_node
+@entry_node
 class MyTrigger:
-    is_entry = True
-    exposes_flow_inputs = True
-    frontend = "my_trigger_ui"   # → custom_nodes/my_trigger_ui/index.html
+    message = Input("str")              # populated from the request body
+    message_out = Output("str")         # produced by run()
+    frontend = "my_trigger_ui"          # → custom_nodes/my_trigger_ui/index.html
     exec_out = ExecOutput()
+
+    async def run(self, ctx: EntryContext, message: str) -> None:
+        # ctx.request is available here — body/headers/query/method.
+        ctx.set_output("message_out", message)
+        await ctx.fire("exec_out")
 ```
+
+Entry nodes (any `@entry_node`) are the flow's trigger. They declare their
+own `Input`/`Output` pins like any other node; the engine populates the
+inputs from the request body (POST `{"message": "..."}` → entry's `message`
+Input). If an entry doesn't define `run()`, the engine auto-mirrors each
+declared Input as an output of the same name, so downstream nodes can
+cable `entry.x`. Entries also have access to `ctx.request`
+(`body`/`headers`/`query`/`method`) via the `EntryContext` they receive.
 
 The bundle lives next to the source file: for a custom node in
 `custom_nodes/my_trigger.py`, the bundle goes in

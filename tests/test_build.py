@@ -67,14 +67,13 @@ def test_build_more_than_one_entry_node():
 
 
 def test_build_custom_entry_node():
-    """Any node with is_entry=True can be a flow's entry point, not just the builtins."""
-    from rayflow.nodes.decorators import engine_node, ExecOutput, Output
+    """Any node declared with @entry_node can be a flow's entry point, not just the builtins."""
+    from rayflow.nodes.decorators import entry_node, ExecOutput, Input
 
-    @engine_node
+    @entry_node
     class MyTrigger:
-        is_entry = True
+        message = Input("str")
         exec_out = ExecOutput()
-        value = Output("int")
 
     reset_catalog()
     catalog = get_catalog()
@@ -92,26 +91,29 @@ def test_build_custom_entry_node():
 
 
 def test_build_ray_node_with_is_entry_rejected():
-    """is_entry=True nodes must be @engine_node/@parallel_node — the entry
-    short-circuit lives in _fire_engine_node and never calls a @ray_node's run()."""
-    from rayflow.nodes.decorators import ray_node, ExecOutput
+    """A class marked as entry (via @entry_node) cannot also be @ray_node —
+    entries run inside the engine and use EntryContext, not a Ray actor."""
+    from rayflow.nodes.decorators import ray_node, entry_node, ExecOutput, get_node_meta
 
-    with pytest.raises(ValueError, match="is_entry"):
-        @ray_node
-        class BadRayEntry:
-            is_entry = True
-            exec_out = ExecOutput()
+    # Build a normal @entry_node, then attempt to re-apply @ray_node on the
+    # same class. The is_entry flag is already set on the meta; @ray_node
+    # refuses it.
+    @entry_node
+    class Entry:
+        exec_out = ExecOutput()
+
+    with pytest.raises(ValueError, match="@entry_node"):
+        ray_node(Entry)
 
 
 def test_build_entry_node_with_exec_in_rejected():
-    """An is_entry=True node must not declare exec_in — nothing inside the
-    graph should be able to fire an entry node."""
-    from rayflow.nodes.decorators import engine_node, ExecInput, ExecOutput
+    """An @entry_node must not declare exec_in — nothing inside the graph
+    should be able to fire an entry node."""
+    from rayflow.nodes.decorators import entry_node, ExecInput, ExecOutput
 
     with pytest.raises(ValueError, match="exec_in"):
-        @engine_node
+        @entry_node
         class BadWiredEntry:
-            is_entry = True
             exec_in = ExecInput()
             exec_out = ExecOutput()
 

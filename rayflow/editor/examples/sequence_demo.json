@@ -1,11 +1,6 @@
 {
   "name": "sequence_demo",
   "version": "1",
-  "inputs": {
-    "a": "int",
-    "b": "int",
-    "c": "int"
-  },
   "outputs": {
     "total": "int"
   },
@@ -14,7 +9,7 @@
   ],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "EntryABC" },
     {
       "id": "seq",
       "type": "Sequence",

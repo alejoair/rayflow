@@ -18,7 +18,6 @@ def flow_to_dict(flow: FlowDef) -> dict[str, Any]:
     return {
         "name": flow.name,
         "version": flow.version,
-        "inputs": flow.inputs,
         "outputs": flow.outputs,
         "variables": [
             {"name": v.name, "type": v.type, "default": v.default}

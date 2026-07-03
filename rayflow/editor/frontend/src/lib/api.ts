@@ -38,7 +38,10 @@ export interface NodeSpec {
 export interface FlowMeta {
   name: string
   version: string
-  inputs: Record<string, string>
+  // NOTE: `inputs` was removed from the backend FlowDef — entry nodes now
+  // declare their own Input pins. Kept here as optional for compatibility
+  // with saved flows that may still carry the field; the backend ignores it.
+  inputs?: Record<string, string>
   outputs: Record<string, string>
 }
 

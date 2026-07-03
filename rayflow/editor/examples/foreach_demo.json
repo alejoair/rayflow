@@ -1,9 +1,6 @@
 {
   "name": "foreach_demo",
   "version": "1",
-  "inputs": {
-    "items": "list"
-  },
   "outputs": {
     "count": "int"
   },
@@ -12,7 +9,7 @@
   ],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "EntryItems" },
     {
       "id": "loop",
       "type": "ForEach",

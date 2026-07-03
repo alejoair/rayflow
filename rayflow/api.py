@@ -70,11 +70,18 @@ def is_flow_loaded(name: str) -> bool:
     return is_served(name)
 
 
-def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[dict, None, None]:
+def execute(
+    name: str,
+    flow_inputs: dict[str, Any] | None = None,
+    request: Any = None,
+) -> Generator[dict, None, None]:
     """Executes an already-loaded flow and streams its events.
 
     Yields event dicts: node_start, node_done, edge_fire, flow_done, flow_error.
     If the flow isn't loaded, it's loaded automatically first.
+
+    `request` is an optional RequestData envelope (body/headers/query/method)
+    forwarded to the entry node's ctx.request. None for non-HTTP callers.
     """
     if not is_flow_loaded(name):
         load(name)
@@ -84,7 +91,7 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
     queue = lf._queue
 
     ray.get(queue.create_run.remote(run_id))
-    lf.execute(flow_inputs or {}, run_id)
+    lf.execute(flow_inputs or {}, run_id, request)
 
     # get() blocks on the actor until each event arrives — no polling, no sleep.
     try:
@@ -97,11 +104,18 @@ def execute(name: str, flow_inputs: dict[str, Any] | None = None) -> Generator[d
         ray.get(queue.close_run.remote(run_id))
 
 
-async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) -> AsyncGenerator[dict, None]:
+async def execute_async(
+    name: str,
+    flow_inputs: dict[str, Any] | None = None,
+    request: Any = None,
+) -> AsyncGenerator[dict, None]:
     """Async version of execute() — uses await instead of a blocking ray.get.
 
     Designed to be used from an async context (a FastAPI async generator),
     avoiding the run_in_executor overhead of the sync generator.
+
+    `request` is an optional RequestData envelope (body/headers/query/method)
+    forwarded to the entry node's ctx.request. None for non-HTTP callers.
     """
     import time as _time
 
@@ -125,7 +139,7 @@ async def execute_async(name: str, flow_inputs: dict[str, Any] | None = None) ->
 
     yield {"event": "run_start", "run_id": run_id, "ts": 0}
 
-    lf.execute(flow_inputs or {}, run_id)
+    lf.execute(flow_inputs or {}, run_id, request)
     _ts("execute dispatched", t0)
 
     try:

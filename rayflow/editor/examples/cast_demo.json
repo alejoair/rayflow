@@ -1,9 +1,6 @@
 {
   "name": "cast_demo",
   "version": "1",
-  "inputs": {
-    "n": "int"
-  },
   "outputs": {
     "texto": "str"
   },
@@ -12,14 +9,14 @@
   "nodes": [
     {
       "id": "entry",
-      "type": "FlowInput"
+      "type": "EntryX"
     },
     {
       "id": "to_str",
       "type": "ToStr",
       "exec_in": "entry",
       "inputs": {
-        "value": "entry.n"
+        "value": "entry.x"
       }
     },
     {

@@ -189,18 +189,35 @@ def create_app(served: dict[str, ServedFlow] | None = None):
                 status_code=400, detail="Body must be a JSON object of inputs"
             )
 
-        # Every flow's trigger IS this HTTP request — OnStart always exposes
-        # headers/query/body/method (see _with_dynamic_pins in
-        # build/validator.py), alongside whatever named inputs the flow
-        # declares from the body. Reserved names win on collision.
+        # The HTTP request envelope is forwarded to the entry node two ways:
+        #   1. ctx.request (the RequestData object) — for entries that want
+        #      raw access to body/headers/query/method in run().
+        #   2. flow_inputs — fused with headers/query/body/method so that an
+        #      entry declaring e.g. `headers = Input("dict[str, str]")` has
+        #      the pin populated from the request envelope. Keys present in
+        #      the body win over the envelope on collision (reserved names
+        #      like "headers"/"body"/"query"/"method" are explicit opt-in).
+        from rayflow.nodes.decorators import RequestData
+
+        headers = dict(request.headers)
+        query = dict(request.query_params)
+        method = request.method
+        request_data = RequestData(
+            body=inputs, headers=headers, query=query, method=method,
+        )
         flow_inputs = {
             **inputs,
-            "headers": dict(request.headers),
-            "query": dict(request.query_params),
+            "headers": headers,
+            "query": query,
             "body": inputs,
-            "method": request.method,
+            "method": method,
         }
-        return await run_flow_response(name, flow_inputs, stream=wants_stream(request))
+        return await run_flow_response(
+            name,
+            flow_inputs=flow_inputs,
+            request=request_data,
+            stream=wants_stream(request),
+        )
 
     @app.get("/flows/{name}/run/{run_id}/stream")
     async def reconnect_flow_run(name: str, run_id: str):

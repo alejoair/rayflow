@@ -17,12 +17,11 @@ A flow is a graph of nodes connected by two kinds of wire:
 {
   "name": "my_flow",
   "version": "1",
-  "inputs":  { "x": "int" },
   "outputs": { "result": "int" },
   "variables": [{ "name": "counter", "type": "int", "default": 0 }],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "OnStart" },
+    { "id": "entry", "type": "EntryX" },
     { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
   ]
@@ -31,16 +30,25 @@ A flow is a graph of nodes connected by two kinds of wire:
 
 ## Wiring rules
 
-- **Every flow needs exactly one entry node** — a node type declaring
-  `is_entry = True`. The built-ins are `OnStart` (direct execution),
-  `OnEvent` (event-triggered), `OnVariableChange` (variable change), and
-  `ChatTrigger` (`OnStart` + a built-in chat UI served at
-  `/flows/{name}/ui`); a custom node can declare the same flag. Declaring
-  more than one entry node in the same flow is a build error. Any entry
-  node may optionally declare `frontend = "<dir>"` to serve a static UI
-  bundle at `/flows/{name}/ui` when the flow is served (`rayflow serve
+- **Every flow needs exactly one entry node** — a node declared with the
+  `@entry_node` decorator. Built-ins: `OnStart` (declares `body`/`headers`/
+  `query`/`method` from the HTTP envelope), `OnEvent` (event-triggered),
+  `OnVariableChange` (variable change), and `ChatTrigger` (built-in chat UI
+  served at `/flows/{name}/ui`); a custom node can use the same decorator.
+  Declaring more than one entry node in the same flow is a build error. Any
+  entry node may optionally declare `frontend = "<dir>"` to serve a static
+  UI bundle at `/flows/{name}/ui` when the flow is served (`rayflow serve
   --file`) — the bundle's JS talks to the flow over the normal
   `/flows/{name}/run` endpoint.
+- **Entry nodes declare their own `Input` pins** like any other node. The
+  engine populates them from the request body (POST `{name: value, ...}`
+  → entry's `Input` of that name). When an entry doesn't define `run()`,
+  the engine auto-mirrors each declared Input as an output of the same
+  name, so downstream nodes can cable `entry.x`. When it does define
+  `run()`, the author calls `ctx.set_output(...)` explicitly (see
+  `ChatTrigger` for an example). Entries also have access to
+  `ctx.request` (`body`/`headers`/`query`/`method`) for things they don't
+  want to declare as pins.
 - **Exec edges**: declared FROM the consumer with `exec_in`:
   - `"exec_in": "node_id"` -> the source node's default exec output.
   - `"exec_in": "node_id.pin"` -> a specific exec output (`branch.true`, `seq.then_0`).
@@ -52,22 +60,19 @@ A flow is a graph of nodes connected by two kinds of wire:
 
 ## Dynamic pins (don't appear in the static /editor/nodes)
 
-- Any entry node with `exposes_flow_inputs = True` (built-in: `OnStart`/
-  `FlowInput`, `OnEvent`) expose **one data output per input of the
-  flow**. If the flow declares `inputs: {x: int}`, you can read `entry.x`.
-  They ALSO always expose 4 fixed outputs — `headers`/`query` (`dict[str, str]`),
-  `body` (`Any`), `method` (`str`) — since a served flow's trigger is an HTTP
-  request. Wire from these like any other pin; outside HTTP they default to
-  whatever the consuming `Input` declares. To set the response's real HTTP
-  status/headers, call `ctx.set_response_status(code)` /
-  `ctx.set_response_header(name, value)` from any node's `run()` — this is
-  invisible to non-HTTP callers (MCP's `run_flow`/`test_flow`), since it
-  lives outside `flow.outputs`.
 - `FlowOutput`: has **one required data input per output of the flow**.
 - `Parallel`: its branches `branch_0`, `branch_1`, … are discovered from the
   wiring (nodes whose `exec_in` is `parallel_id.branch_N`); `joined` fires
   once they're all done.
 - `CallFlow`: accepts arbitrary inputs mapped to the subflow.
+
+Entry nodes (`@entry_node` like `OnStart`, `OnEvent`, `ChatTrigger`, …) used
+to carry dynamic pins derived from `flow.inputs`; they now declare their
+own `Input`/`Output` statically. To set the response's real HTTP
+status/headers, call `ctx.set_response_status(code)` /
+`ctx.set_response_header(name, value)` from any node's `run()` — this is
+invisible to non-HTTP callers (MCP's `run_flow`/`test_flow`), since it
+lives outside `flow.outputs`.
 
 Check `GET /editor/flows/{name}/catalog` to see the already-resolved pins
 of a specific flow.

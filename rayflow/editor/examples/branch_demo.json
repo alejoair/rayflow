@@ -1,16 +1,12 @@
 {
   "name": "branch_demo",
   "version": "1",
-  "inputs": {
-    "x": "int",
-    "use_positive": "bool"
-  },
   "outputs": {
     "result": "int"
   },
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "FlowInput" },
+    { "id": "entry", "type": "EntryXBool" },
     {
       "id": "branch",
       "type": "Branch",

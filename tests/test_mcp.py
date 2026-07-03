@@ -45,10 +45,9 @@ def mcp():
 
 SUMA = {
     "name": "suma",
-    "inputs": {"x": "int", "y": "int"},
     "outputs": {"resultado": "int"},
     "nodes": [
-        {"id": "entry", "type": "FlowInput"},
+        {"id": "entry", "type": "EntryXY"},
         {"id": "add", "type": "Add", "exec_in": "entry",
          "inputs": {"a": "entry.x", "b": "entry.y"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "add",
@@ -83,7 +82,10 @@ async def test_list_nodes_incluye_dynamic(mcp):
     async with Client(mcp) as c:
         r = await c.call_tool("list_nodes", {})
     by_type = {n["type"]: n for n in r.data}
-    assert by_type["OnStart"]["dynamic"]["outputs_from"] == "flow.inputs"
+    # FlowOutput, Parallel, and CallFlow still expose dynamic pin metadata;
+    # OnStart no longer does (its pins are statically declared now).
+    assert by_type["FlowOutput"]["dynamic"]["inputs_from"] == "flow.outputs"
+    assert by_type["Parallel"]["dynamic"]["exec_outputs_pattern"] == "branch_N"
 
 
 async def test_crud_y_flow_catalog(mcp, flows_dir):
@@ -131,10 +133,9 @@ DOUBLE_SRC = (
 
 DOUBLE_FLOW: dict[str, Any] = {
     "name": "double_flow",
-    "inputs": {"x": "int"},
     "outputs": {"y": "int"},
     "nodes": [
-        {"id": "entry", "type": "OnStart"},
+        {"id": "entry", "type": "EntryX"},
         {"id": "d", "type": "DoubleIt", "exec_in": "entry", "inputs": {"value": "entry.x"}},
         {"id": "exit", "type": "FlowOutput", "exec_in": "d", "inputs": {"y": "d.result"}},
     ],
