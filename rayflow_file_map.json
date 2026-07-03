@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 147,
+  "file_count": 148,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can), and system_context() renders a file's architectural \"system\" (name, description, depends_on_systems/dependents_systems) aggregated from the systems object.",
@@ -200,6 +200,12 @@
     },
     "docs/frontend.md": {
       "description": "Quick-reference (in Spanish) inventory of the editor frontend's tech stack and component responsibilities.",
+      "depends_on": [],
+      "dependents": [],
+      "system": "docs"
+    },
+    "docs/issues_system.md": {
+      "description": "Design proposal (in Spanish, self-contained) for a documentation-audit system: RAYFLOW_SOURCE_OF_TRUTH.json (CLAUDE.md claims as structured objects with evidence file references) and rayflow_issues.json (an open-issues-only queue, no resolved history kept in-file — git log is the log) linked by stable ids, plus a not-yet-designed pre-commit hook that runs an audit agent via `claude -p`. Explains why these stay separate files rather than merging with rayflow_file_map.json.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
@@ -1507,6 +1513,7 @@
         "README.md",
         "docs/analisis-conceptual.md",
         "docs/frontend.md",
+        "docs/issues_system.md",
         "docs/propuesta-runcontext.md",
         "docs/rayflow.md",
         "rayflow_file_map.json",
