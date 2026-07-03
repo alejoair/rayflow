@@ -39,8 +39,8 @@ que alguien se acuerde de releerlo.
 | `RAYFLOW_SOURCE_OF_TRUTH.json` | Cada afirmación de `CLAUDE.md`, estructurada, con evidencia de dónde se sostiene en el código. | **Hecho.** Schema v2 aplicado a los 215 claims (ver §4). |
 | `rayflow_issues.json` | Cola de discrepancias abiertas entre una afirmación y la realidad del repo. | **Hecho.** Archivo creado en la raíz, con `ISSUE-0001` (el caso de `FlowSettingsDialog.tsx`, ver §5). |
 | `rayflow_file_map.json` | Ya existente, sin cambios de rol: mapa mecánico archivo→{descripción, depends_on, dependents}. | Sin cambios — ver §3 por qué no se fusiona con lo anterior. |
-| Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | **Definido.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Método validado a mano (ver §6.1) — la invocación real vía `Task`/`Agent` **no** se pudo probar en la misma sesión que creó el archivo (ver §6.1, hallazgo de descubrimiento de subagentes). |
-| Hook pre-commit | Dispara el agente auditor (y otras herramientas) antes de cada commit; usa `claude -p` en modo headless. | No implementado. `pre-commit` (framework) ya está instalado en el entorno de trabajo. |
+| Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | **Hecho y confirmado.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Invocación real vía `claude -p --agent rayflow-auditor "..."` probada end-to-end (ver §6.1) — funciona, detecta el claim de evidencia vacía por búsqueda activa, reconoce `ISSUE-0001` y no duplica. |
+| Hook pre-commit | Dispara el agente auditor (y otras herramientas) antes de cada commit; usa `claude -p` en modo headless. | Mecanismo confirmado (§6.2), falta el wiring: el script que arma el prompt con el scope y lo llama, más la entrada en `.pre-commit-config.yaml`. |
 | Bloqueo de edición directa | Impide que `RAYFLOW_SOURCE_OF_TRUTH.json` se edite casualmente, para "garantizar" (mayúsculas del nombre del archivo) que nunca quede desactualizado por accidente. | **Hecho.** Dos capas: `.claude/hooks/sot_guard.py` (PreToolUse, rápida) + `scripts/check_sot_commit_message.py` (commit-msg, la garantía real) — ver §6.3. Validado end-to-end. |
 
 ## 3. Por qué tres archivos separados, no uno fusionado
@@ -188,7 +188,7 @@ resuelva al menos uno primero).
 
 ## 6. Flujo previsto (agente auditor + pre-commit)
 
-### 6.1. Agente auditor — implementado, invocación real sin probar
+### 6.1. Agente auditor — implementado y confirmado
 
 `.claude/agents/rayflow-auditor.md` es el agente: verifica claims del SOT
 contra el código real y escribe issues en `rayflow_issues.json`. Diseño:
@@ -213,40 +213,54 @@ contra el código real y escribe issues en `rayflow_issues.json`. Diseño:
   una búsqueda activa por texto sí lo encuentra, y ya existe `ISSUE-0001`
   para ese `claim_id` — el flujo de deduplicación funciona como se diseñó.
 
-**Hallazgo pendiente de confirmar**: intentar invocar `rayflow-auditor` vía
-el tool `Agent`/`Task` en la misma sesión que creó el archivo
-`.claude/agents/rayflow-auditor.md` devolvió "Agent type not found" — el
-descubrimiento de subagentes de proyecto parece resolverse al arrancar la
-sesión, no en caliente. Falta confirmar en una sesión nueva que el agente
-efectivamente aparece disponible después de reiniciar. Si esto se confirma,
-tiene una implicancia directa para el hook de pre-commit (§6.2): no puede
-asumir que un agente recién creado/editado en el mismo proceso ya está
-activo.
+**Hallazgo — confirmado en una sesión posterior**: invocar
+`rayflow-auditor` vía el tool `Agent`/`Task` en la misma sesión que creó
+`.claude/agents/rayflow-auditor.md` devuelve "Agent type not found" — el
+descubrimiento de subagentes de proyecto vía ese tool sí requiere una
+sesión nueva (no se resuelve en caliente). Pero **`claude -p --agent
+rayflow-auditor "<prompt>"` funciona sin problema, en la misma sesión que
+creó el archivo** — cada invocación de `claude -p` es un proceso nuevo que
+lee `.claude/agents/` del disco al arrancar, así que no hereda la lista de
+agentes ya cargada por la sesión padre. Probado end-to-end con el mismo
+caso de `FlowSettingsDialog.tsx`: escaneó los 18 claims en scope, encontró
+el claim de evidencia vacía por búsqueda activa (tal como estaba
+instruido), confirmó que `ISSUE-0001` ya lo cubre, y no tocó
+`rayflow_issues.json` ni ningún otro archivo (verificado con `git status`
+después de la corrida). Esto es exactamente el mecanismo que necesita el
+hook de pre-commit (§6.2) — confirmado, no solo hipotético.
 
-### 6.2. Hook de pre-commit — sin diseño detallado todavía
+### 6.2. Hook de pre-commit para el auditor — mecanismo confirmado, wiring pendiente
 
-Lo discutido hasta ahora, a nivel de intención, no de mecanismo concreto:
+Lo confirmado:
 
-- Un hook de **pre-commit** (usando el framework `pre-commit`, ya instalado)
-  dispara el agente auditor antes de cada commit, junto con otras
-  herramientas (linters, type-check, etc. — no especificado).
-- El auditor se invoca como `claude -p` (modo headless/print) — a diferencia
-  de invocarlo como subagente vía `Task`/`Agent` (que vive dentro de una
-  sesión interactiva), `claude -p` es un proceso nuevo por invocación, así
-  que el hallazgo de §6.1 (descubrimiento de subagentes al arrancar) no
-  debería aplicar acá de la misma forma — cada invocación de `claude -p` YA
-  es un arranque nuevo. Falta confirmar esto también.
-- Debería pasarle el scope (`git diff --cached --name-only`) al prompt, para
-  que el auditor no re-audite los 215 claims en cada commit — ya resuelto a
-  nivel de mecanismo (`_sot_scope.py`), falta engancharlo al hook en sí.
+- `claude -p --agent rayflow-auditor "<prompt>"` es un proceso nuevo por
+  invocación — no depende de si el agente existía antes de que arrancara
+  la sesión que lo llama, así que un pre-commit hook puede invocarlo sin
+  preocuparse por el hallazgo de §6.1.
+
+Lo que falta (wiring, no diseño conceptual):
+
+- Un hook de **pre-commit** (framework `pre-commit`, ya instalado y
+  activo en este repo — ver §6.3) que arme el prompt con el scope real
+  (`git diff --cached --name-only | python3 .claude/hooks/_sot_scope.py`)
+  y llame a `claude -p --agent rayflow-auditor "<prompt con ese scope>"`.
+  El script en sí (`.claude/hooks/_sot_scope.py`) y el agente
+  (`.claude/agents/rayflow-auditor.md`) ya existen — falta el script que
+  los une y la entrada en `.pre-commit-config.yaml`.
+- Decidir si corre en `pre-commit` stage (bloquea el commit si el auditor
+  encuentra algo, agregando latencia de LLM a cada commit relevante) o
+  como un paso asincrónico/informativo que no bloquea — el auditor solo
+  *reporta* (crea issues), no exige que se resuelvan antes de commitear,
+  así que bloquear el commit por esto no tiene el mismo fundamento que
+  bloquearlo por el trailer de §6.3 (ahí sí hay una regla clara:
+  "trailer presente o no"; acá sería "¿el LLM encontró algo?", más
+  ambiguo y más lento).
 - Si encuentra una divergencia, escribe/actualiza `rayflow_issues.json`.
 - Pensado para correr 100% local (versionado con git normal), sin depender
   de GitHub/GitLab ni de sus mecanismos de CI/PR.
 
-Este punto (la invocación del auditor desde pre-commit en sí) queda abierto
-para la próxima sesión de diseño. El bloqueo de edición directa del SOT
-(que originalmente iba a resolverse acá también) ya tiene mecanismo propio,
-ver §6.3.
+El bloqueo de edición directa del SOT (que originalmente iba a resolverse
+acá también) ya tiene mecanismo propio, ver §6.3.
 
 ### 6.3. Bloqueo de edición directa del SOT — implementado
 
@@ -296,10 +310,14 @@ seteada, no interviene en archivos que no son el SOT.
       validadas end-to-end (§6.3).
 - [x] Diseñar el prompt/alcance del agente auditor — `.claude/agents/
       rayflow-auditor.md` + `.claude/hooks/_sot_scope.py` (§6.1). Método
-      validado a mano; invocación real vía `Task`/`Agent` sin confirmar
-      todavía (falta probarlo en una sesión nueva).
-- [ ] Configurar `.pre-commit-config.yaml` para disparar el auditor y
-      cualquier otra herramienta que se sume.
+      validado a mano; invocación real confirmada vía `claude -p --agent
+      rayflow-auditor` (el tool `Task`/`Agent` in-session falla con "Agent
+      type not found" hasta una sesión nueva, pero `claude -p` no depende
+      de eso — ver §6.1).
+- [ ] Escribir el script que arma el prompt con el scope del diff
+      (`_sot_scope.py`) y llama a `claude -p --agent rayflow-auditor`, y
+      agregar la entrada correspondiente en `.pre-commit-config.yaml`
+      (§6.2 — mecanismo confirmado, falta el wiring).
 - [ ] Decidir si el bloqueo/auditor corren en cada commit o solo cuando el
       diff toca archivos relevantes (para no pagar el costo de invocar
       `claude -p` en cada commit trivial).
