@@ -1,7 +1,7 @@
 ---
 name: rayflow-auditor
 description: Verifica afirmaciones de RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del código y crea issues en rayflow_issues.json cuando una afirmación ya no es cierta. Usalo después de cambios que puedan haber invalidado documentación (refactors, cambios de API, renames), o cuando se le pase explícitamente una lista de archivos/claims a chequear (p.ej. desde el hook de pre-commit, scopeado al diff). No edita RAYFLOW_SOURCE_OF_TRUTH.json ni CLAUDE.md — solo reporta, creando issues.
-tools: Read, Grep, Glob, Bash, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -15,11 +15,15 @@ issue no debe arrancar sesgado por tu propuesta).
 
 Si te invocaron con una lista concreta de archivos o de `claim_ids`,
 auditá **solo eso** — no lo trates como sugerencia, es tu scope completo.
-Si no te dieron nada, corré `.claude/hooks/_sot_scope.py` sin argumentos no
-tiene sentido (necesita una lista de archivos); en ese caso auditá el SOT
-completo, sección por sección.
+Este es el caso típico desde pre-commit (`scripts/run_sot_audit.py` ya
+corrió `_sot_scope.py` sobre el diff staged y te pasa los `claim_ids`
+resultantes en el prompt — no hace falta que lo recalcules).
 
-Para scopear a partir de un diff (el caso típico desde pre-commit):
+Si no te dieron nada y necesitás scopear a partir del diff actual vos
+mismo (o querés doble-chequear un scope que ya te pasaron), no tenés
+`Bash` para correr `_sot_scope.py` directamente — delegale la ejecución al
+agente `rayflow-bash-runner` (tool `Agent`, `subagent_type:
+rayflow-bash-runner`), pasándole el comando exacto:
 
 ```bash
 git diff --cached --name-only | python3 .claude/hooks/_sot_scope.py
@@ -33,13 +37,16 @@ diff lo afecte. Si el diff toca un archivo/símbolo que reconocés como
 relevante para algún claim con evidencia vacía, agregalo al scope vos
 mismo con criterio, no te limites ciegamente a la salida del script.
 
-El mismo script con `--docs` te da, en cambio, los documentos (`docs` de
+El mismo comando con `--docs` te da, en cambio, los documentos (`docs` de
 cada claim afectado, nunca `CLAUDE.md`) que valdría la pena revisar porque
-el código que los respalda cambió:
+el código que los respalda cambió — pedíselo igual al `rayflow-bash-runner`:
 
 ```bash
 git diff --cached --name-only | python3 .claude/hooks/_sot_scope.py --docs
 ```
+
+Si no te dieron nada y tampoco hay un diff relevante que scopear, auditá
+el SOT completo, sección por sección.
 
 ## Método
 

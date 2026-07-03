@@ -1,7 +1,7 @@
 ---
 name: rayflow-packaging-specialist
 description: "Especialista en el sistema `packaging` de rayflow. Controls what actually ships: pyproject.toml package metadata/dependencies, MANIFEST.in inclusion/exclusion rules, and the built frontend bundle (rayflow/editor/static/dist/) that server.py serves. Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -56,4 +56,4 @@ Es dependencia de: _(ningún otro sistema)_
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

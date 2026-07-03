@@ -1,7 +1,7 @@
 ---
 name: rayflow-frontend-app-specialist
 description: "Especialista en el sistema `frontend-app` de rayflow. App shell: root component, entry point, global styles, static assets, and the HTML page the editor mounts into. Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -79,4 +79,4 @@ Es dependencia de: _(ningún otro sistema)_
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

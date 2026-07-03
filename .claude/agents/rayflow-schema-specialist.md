@@ -1,7 +1,7 @@
 ---
 name: rayflow-schema-specialist
 description: "Especialista en el sistema `schema` de rayflow. Flow JSON schema (FlowDef/NodeDef plain stdlib @dataclass models, not Pydantic — no pydantic dependency exists in this project) and the canonical data-pin type system (int/str/list[T]/dict[str,V]/Any) with... Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -60,4 +60,4 @@ Es dependencia de: `build`, `editor-api`, `mcp`, `nodes`, `server`, `tests`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

@@ -1,7 +1,7 @@
 ---
 name: rayflow-tests-specialist
 description: "Especialista en el sistema `tests` de rayflow. The pytest suite covering build/validation, the engine/executor, the editor REST API, custom nodes, events, CallFlow subflows, MCP tools, node behavior, and schema parsing. Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -56,4 +56,4 @@ Es dependencia de: _(ningún otro sistema)_
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

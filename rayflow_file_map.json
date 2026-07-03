@@ -1,16 +1,22 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 181,
+  "file_count": 182,
   "files": {
     ".claude/agents/rayflow-auditor.md": {
-      "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids.",
+      "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids. No longer has Bash — delegates any shell command it needs (e.g. running _sot_scope.py itself for an unscoped/manual run) to rayflow-bash-runner via the Agent tool.",
       "depends_on": [
         ".claude/hooks/_sot_scope.py"
       ],
       "dependents": [
         "scripts/run_sot_audit.py"
       ],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow_bash_runner.md": {
+      "description": "Repo-dev subagent: the only agent in this repo with Bash in its frontmatter. Every other rayflow-* subagent (the 21 rayflow-<system>-specialist agents plus rayflow-auditor) has Agent + SendMessage instead of Bash, and delegates shell command execution to this agent — spawn via Agent for the first command, then SendMessage to the same agent id/name to keep running more commands in the same conversation without losing context. Deliberately narrow tool surface (Bash only): executes exactly what it's asked and reports command + exit code + output, doesn't decide what to run.",
+      "depends_on": [],
+      "dependents": [],
       "system": "hooks-infra"
     },
     ".claude/hooks/_file_map.py": {
@@ -2022,6 +2028,7 @@
       "description": "Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose.",
       "files": [
         ".claude/agents/rayflow-auditor.md",
+        ".claude/agents/rayflow_bash_runner.md",
         ".claude/agents/rayflow-build-specialist.md",
         ".claude/agents/rayflow-ci-specialist.md",
         ".claude/agents/rayflow-cli-specialist.md",

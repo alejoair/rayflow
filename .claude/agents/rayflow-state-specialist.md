@@ -1,7 +1,7 @@
 ---
 name: rayflow-state-specialist
 description: "Especialista en el sistema `state` de rayflow. Two detached Ray actors that persist across executions of a loaded flow: GraphState (variables + watch_variable for change-triggered flows) and RunQueue (per-run SSE event sub-queues consumed by FastAPI). Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -70,4 +70,4 @@ Es dependencia de: `engine`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

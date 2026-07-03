@@ -169,7 +169,7 @@ def generate_one(system: str, info: dict, file_map: dict, sot: dict, issues: dic
         # bare/plain YAML scalar would parse as a new mapping key and break
         # the frontmatter.
         f"description: {json.dumps(frontmatter_desc, ensure_ascii=False)}",
-        "tools: Read, Grep, Glob, Edit",
+        "tools: Read, Grep, Glob, Edit, Agent, SendMessage",
         "model: inherit",
         "---",
         "",

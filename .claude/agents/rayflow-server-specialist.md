@@ -1,7 +1,7 @@
 ---
 name: rayflow-server-specialist
 description: "Especialista en el sistema `server` de rayflow. Top-level app wiring and the public Python API: FastAPI app assembly (rayflow/server.py), and rayflow.api's load()/execute()/execute_async()/serve_events()/stop() functions that everything else (CLI, tests, external... Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -137,4 +137,4 @@ Es dependencia de: `cli`, `editor-api`, `events`, `mcp`, `nodes`, `tests`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

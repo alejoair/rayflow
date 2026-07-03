@@ -1,7 +1,7 @@
 ---
 name: rayflow-frontend-panels-specialist
 description: "Especialista en el sistema `frontend-panels` de rayflow. Sidebar/footer editor panels: node palette, variables panel, custom-nodes CodeMirror editor, properties panel, runs panel, and the flow settings dialog. Usar para tareas/issues que el file map o rayflow_issues.json marcan como pertenecientes a este sistema."
-tools: Read, Grep, Glob, Edit
+tools: Read, Grep, Glob, Edit, Agent, SendMessage
 model: inherit
 ---
 
@@ -64,4 +64,4 @@ Es dependencia de: `frontend-app`
 - **ISSUE-0001** (low): FlowSettingsDialog.tsx ya no edita inputs del flow, pero CLAUDE.md sigue afirmando que sí
 
 ---
-_Generado desde el commit `0dc69be`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ba34e98`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
