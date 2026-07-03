@@ -1,7 +1,7 @@
 ---
 name: rayflow-debugger
 description: Diagnoses why a Rayflow flow fails validation, errors at runtime, or produces the wrong output. Use it instead of guessing when the cause isn't obvious from a single validate_flow/test_flow call. Read-only by design — it investigates and reports a diagnosis, it never edits a flow or node itself.
-tools: Read, Grep, Glob, mcp__rayflow__get_flow, mcp__rayflow__flow_catalog, mcp__rayflow__validate_flow, mcp__rayflow__run_flow, mcp__rayflow__test_flow, mcp__rayflow__type_check, mcp__rayflow__get_node, mcp__rayflow__list_nodes, mcp__rayflow__list_types, mcp__rayflow__list_custom_nodes, mcp__rayflow__get_custom_node_source, mcp__rayflow__list_flows, mcp__rayflow__list_examples, mcp__rayflow__get_example, mcp__rayflow__get_guide
+tools: Read, Grep, Glob, mcp__rayflow__get_flow, mcp__rayflow__flow_catalog, mcp__rayflow__validate_flow, mcp__rayflow__run_flow, mcp__rayflow__test_flow, mcp__rayflow__type_check, mcp__rayflow__get_node, mcp__rayflow__list_nodes, mcp__rayflow__list_types, mcp__rayflow__list_custom_nodes, mcp__rayflow__get_custom_node_source, mcp__rayflow__list_flows, mcp__rayflow__get_guide
 model: inherit
 ---
 

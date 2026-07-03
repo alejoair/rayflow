@@ -4,6 +4,7 @@ import ray
 import rayflow
 from rayflow.nodes.registry import reset_catalog
 from tests.helpers import run_once
+from tests import entry_fixtures
 
 
 @pytest.fixture(autouse=True)
@@ -11,6 +12,7 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     yield
 
 

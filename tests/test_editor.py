@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from rayflow.nodes.registry import reset_catalog
 from rayflow.server import load_served_flows, create_app
+from tests import entry_fixtures
 
 
 # ---------------------------------------------------------------------------
@@ -18,6 +19,7 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     yield
 
 
@@ -434,6 +436,7 @@ def client_with_custom_node(tmp_path, monkeypatch):
     (node_dir / "my_nodes.py").write_text(CUSTOM_NODE_SRC, encoding="utf-8")
 
     reset_catalog()
+    entry_fixtures.register()
     served = load_served_flows([], extra_node_dirs=[str(node_dir)])
     return TestClient(create_app(served))
 
@@ -638,34 +641,13 @@ def test_descriptions_complete_in_catalog(client):
 
 
 # ---------------------------------------------------------------------------
-# Guide and examples
+# Guide
 # ---------------------------------------------------------------------------
 
 def test_guide_endpoint(client):
     r = client.get("/editor/guide")
     assert r.status_code == 200
     assert "flow" in r.json()["guide"].lower()
-
-
-def test_list_examples(client):
-    r = client.get("/editor/examples")
-    assert r.status_code == 200
-    names = {e["name"] for e in r.json()["examples"]}
-    assert "branch_demo" in names
-
-
-def test_get_example_complete(client):
-    r = client.get("/editor/examples/suma")
-    assert r.status_code == 200
-    assert r.json()["name"] == "suma"
-    # a bundled example must validate against the current catalog
-    v = client.post("/editor/validate", json=r.json())
-    assert v.json()["valid"] is True
-
-
-def test_get_example_nonexistent(client):
-    r = client.get("/editor/examples/noexiste")
-    assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------

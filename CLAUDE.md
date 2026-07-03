@@ -253,8 +253,6 @@ El servidor carga nodos desde:
 | `GET` | `/editor/types` | Tipos canónicos y reglas de compatibilidad |
 | `POST` | `/editor/type-check` | Verificar compatibilidad entre dos tipos |
 | `GET` | `/editor/guide` | Guía curada del modelo de Rayflow (markdown) para construir flows |
-| `GET` | `/editor/examples` | Lista los flows de ejemplo incluidos en el paquete |
-| `GET` | `/editor/examples/{name}` | JSON completo de un flow de ejemplo (plantilla few-shot) |
 | `GET` | `/editor/flows` | Lista flows en `flows/` |
 | `GET` | `/editor/flows/{name}` | Flow JSON |
 | `GET` | `/editor/flows/{name}/catalog` | Catálogo resuelto del flow: cada nodo con sus pins dinámicos ya expandidos |
@@ -296,13 +294,12 @@ Tools:
 - **Custom nodes**: `list_custom_nodes`, `get_custom_node_source`, `create_custom_node`, `update_custom_node_source`, `delete_custom_node`, `reload_custom_nodes`
 - **Events**: `serve_flow_events`, `stop_flow_events`
 - **Execution**: `run_flow`, `test_flow`, `unload_flow`
-- **Examples**: `list_examples`, `get_example`
 
-Loop típico de un agente: `get_guide` → `list_nodes` → (`get_example`) → `validate_flow` (itera hasta `valid:true`) → `create_flow`/`update_flow` → `test_flow`/`run_flow`. `validate_flow` devuelve **todos** los errores de una pasada (ver `validate_all` en `build/validator.py`), cerrando el loop de feedback con pocos round-trips.
+Loop típico de un agente: `get_guide` → `list_nodes` → `validate_flow` (itera hasta `valid:true`) → `create_flow`/`update_flow` → `test_flow`/`run_flow`. `validate_flow` devuelve **todos** los errores de una pasada (ver `validate_all` en `build/validator.py`), cerrando el loop de feedback con pocos round-trips.
 
 `update_flow`/`delete_flow` descargan el flow de Ray si ya estaba cargado (p.ej. por un `run_flow`/`test_flow` previo) — si no, la siguiente ejecución reusaría en silencio el grafo viejo, porque `run_flow`/`test_flow` evitan recargar un flow ya cargado como optimización. `unload_flow` expone esa descarga explícitamente. `create_custom_node`/`update_custom_node_source`/`delete_custom_node` hacen hot-reload del catálogo automáticamente (mismo mecanismo que el endpoint REST), así que `list_nodes`/`validate_flow` ven el nodo custom sin reiniciar el servidor. `run_flow`/`test_flow` aceptan `trace=True` para devolver los eventos `node_start`/`node_done`/`edge_fire` en orden — útil para localizar qué nodo produjo un valor inesperado, ya que el resultado final por sí solo no lo indica.
 
-`fastmcp` es dependencia core. Los flows de ejemplo se empaquetan en `rayflow/editor/examples/*.json` (package-data) para que estén disponibles aunque se instale por pip.
+`fastmcp` es dependencia core.
 
 ### `rayflow install claude-tools` (para usuarios finales de `pip install rayflow`)
 

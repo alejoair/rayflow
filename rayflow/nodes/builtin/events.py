@@ -21,6 +21,7 @@ class OnEvent:
     node's input (flow_inputs["payload"]), and auto-passthrough mirrors it
     as an output so the subgraph can consume it as "<id>.payload".
     """
+    category = "Trigger"
     event_name = Input("str", default="")
     payload = Input("Any")
     exec_out = ExecOutput()
@@ -44,7 +45,7 @@ class OnVariableChange:
     GraphState exists when the watch is registered. Delivery is
     fire-and-forget with no order guarantee (same as the rest of the bus).
     """
-    category = "Events"
+    category = "Trigger"
     variable = Input("str", default="")
     source   = Input("str", default="")
     value    = Input("Any")

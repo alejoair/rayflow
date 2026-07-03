@@ -5,7 +5,7 @@ execution) instead of reimplementing it, exposing it as tools designed for
 an LLM: clear names, descriptions of when to use them, and input formats.
 
 An agent's typical loop:
-    get_guide -> list_nodes -> [get_example] -> validate_flow (iterate) ->
+    get_guide -> list_nodes -> validate_flow (iterate) ->
     create_flow/update_flow -> test_flow / run_flow.
 
 update_flow/delete_flow unload the flow from Ray if it was already loaded
@@ -15,8 +15,6 @@ a flow that's already loaded as a performance shortcut.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 
@@ -418,36 +416,5 @@ def create_mcp():
         if trace:
             result["trace"] = out["trace"]
         return result
-
-    # ----- Examples -----
-
-    def _examples_dir() -> Path:
-        return Path(__file__).parent.parent / "editor" / "examples"
-
-    @mcp.tool
-    def list_examples() -> list[dict[str, Any]]:
-        """Lists the bundled example flows (few-shot templates)."""
-        out = []
-        d = _examples_dir()
-        if d.exists():
-            for path in sorted(d.glob("*.json")):
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                out.append({"name": path.stem, "flow_name": data.get("name"),
-                            "inputs": data.get("inputs", {}), "outputs": data.get("outputs", {})})
-        return out
-
-    @mcp.tool
-    def get_example(name: str) -> dict[str, Any]:
-        """Returns the full JSON of an example flow (use it as a template)."""
-        path = _examples_dir() / f"{name}.json"
-        if not path.exists():
-            return {"error": f"Example '{name}' not found"}
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:
-            return {"error": str(e)}
 
     return mcp

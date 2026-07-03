@@ -8,6 +8,7 @@ from fastmcp import Client
 
 from rayflow.nodes.registry import reset_catalog
 from rayflow.mcp.server import create_mcp
+from tests import entry_fixtures
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +16,7 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     yield
 
 
@@ -60,7 +62,7 @@ async def test_lista_tools_curadas(mcp):
     async with Client(mcp) as c:
         names = {t.name for t in await c.list_tools()}
     for expected in ("get_guide", "list_nodes", "validate_flow", "create_flow",
-                     "run_flow", "test_flow", "list_examples", "flow_catalog"):
+                     "run_flow", "test_flow", "flow_catalog"):
         assert expected in names
 
 
@@ -107,14 +109,6 @@ async def test_test_flow_verifica_outputs(mcp, flows_dir):
             "expected_outputs": {"resultado": 5},
         })
     assert r.data["passed"] is True
-
-
-async def test_examples_disponibles(mcp):
-    async with Client(mcp) as c:
-        ex = (await c.call_tool("list_examples", {})).data
-        assert any(e["name"] == "branch_demo" for e in ex)
-        full = (await c.call_tool("get_example", {"name": "suma"})).data
-        assert full["name"] == "suma"
 
 
 DOUBLE_SRC = (
@@ -190,6 +184,11 @@ async def test_update_flow_unloads_stale_loaded_graph(mcp, flows_dir, custom_nod
     skip reloading a flow that's already loaded."""
     async with Client(mcp) as c:
         await c.call_tool("create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC})
+        # create_custom_node hot-reloads the catalog (reset_catalog() + a fresh
+        # get_catalog() inside _reload_catalog), which wipes the test-only entry
+        # fixtures registered by the ray_init autouse fixture — re-register them
+        # before wiring DOUBLE_FLOW's "EntryX" entry.
+        entry_fixtures.register()
         await c.call_tool("create_flow", {"flow": DOUBLE_FLOW})
 
         first = (await c.call_tool("run_flow", {"name": "double_flow", "inputs": {"x": 5}})).data

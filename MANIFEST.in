@@ -2,7 +2,6 @@
 # CLAUDE.md is internal tooling guidance for the Claude Code agent, not user docs.
 exclude CLAUDE.md
 prune docs
-prune examples
 
 # Generated LLM-orientation file map, workflow checklists, and scenario
 # narratives — internal tooling artifacts, not user docs.

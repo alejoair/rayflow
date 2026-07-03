@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from rayflow.nodes.registry import reset_catalog
 from rayflow.server import load_served_flows, create_app
 from rayflow.registry import clear_served
+from tests import entry_fixtures
 
 
 @pytest.fixture(autouse=True)
@@ -13,6 +14,7 @@ def ray_init():
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, namespace="rayflow")
     reset_catalog()
+    entry_fixtures.register()
     clear_served()
     yield
     clear_served()

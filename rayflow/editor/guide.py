@@ -21,8 +21,8 @@ A flow is a graph of nodes connected by two kinds of wire:
   "variables": [{ "name": "counter", "type": "int", "default": 0 }],
   "events": [],
   "nodes": [
-    { "id": "entry", "type": "EntryX" },
-    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": "entry.x", "b": 10 } },
+    { "id": "entry", "type": "OnStart" },
+    { "id": "add", "type": "Add", "exec_in": "entry", "inputs": { "a": 5, "b": 10 } },
     { "id": "exit", "type": "FlowOutput", "exec_in": "add", "inputs": { "result": "add.result" } }
   ]
 }
@@ -87,12 +87,11 @@ same type, or one is `Any`. **int and float are incompatible**: cast with
 ## Recommended workflow for an agent
 
 1. `GET /editor/guide` and `GET /editor/nodes` to learn the catalog.
-2. (Optional) `GET /editor/examples/{name}` as a template.
-3. Build the flow JSON.
-4. `POST /editor/validate` -> returns ALL errors and warnings at once.
-5. Fix until `valid: true`.
-6. `POST /editor/flows` (create) or `PUT /editor/flows/{name}` (update).
-7. `POST /editor/flows/{name}/test` with `{inputs, expected_outputs}` to
+2. Build the flow JSON.
+3. `POST /editor/validate` -> returns ALL errors and warnings at once.
+4. Fix until `valid: true`.
+5. `POST /editor/flows` (create) or `PUT /editor/flows/{name}` (update).
+6. `POST /editor/flows/{name}/test` with `{inputs, expected_outputs}` to
    verify it does what's expected, or `POST /flows/{name}/run` to run it
    (loads it into Ray on demand if needed; add `Accept: text/event-stream`
    for the SSE event stream instead of a single JSON response).

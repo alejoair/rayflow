@@ -59,7 +59,7 @@ class OnStart:
     name. For triggers that need to compute something before firing
     exec_out, override run() and use ctx.set_output.
     """
-    category = "Control"
+    category = "Trigger"
     body    = Input("Any", default={})
     headers = Input("dict[str, str]", default={})
     query   = Input("dict[str, str]", default={})
@@ -77,7 +77,7 @@ class ChatTrigger:
     POSTs {"message": "..."} to /flows/{name}/run — same endpoint as any
     caller, no special transport.
     """
-    category = "Control"
+    category = "Trigger"
     frontend = "chat_trigger_frontend"
     message = Input("str")
     message_out = Output("str")
@@ -87,88 +87,6 @@ class ChatTrigger:
         ctx.set_output("message_out", message)
         await ctx.fire("exec_out")
 
-
-@entry_node
-class EntryXY:
-    """Convenience entry declaring two int inputs (x, y) — used by tests
-    and examples that need a fixed-shape trigger without the full HTTP
-    envelope. Auto-passthrough mirrors x and y as outputs."""
-    category = "Control"
-    x = Input("int")
-    y = Input("int")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryX:
-    """Convenience entry declaring a single int input (x). Used by tests
-    and examples. Auto-passthrough mirrors x as output."""
-    category = "Control"
-    x = Input("int")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryAB:
-    """Convenience entry declaring two int inputs (a, b). Used by tests
-    and examples (especially subflow CallFlow tests). Auto-passthrough
-    mirrors a and b as outputs."""
-    category = "Control"
-    a = Input("int")
-    b = Input("int")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryN:
-    """Convenience entry declaring a single int input (n). Used by tests
-    and examples. Auto-passthrough mirrors n as output."""
-    category = "Control"
-    n = Input("int")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryABC:
-    """Convenience entry declaring three int inputs (a, b, c). Used by
-    examples. Auto-passthrough mirrors a, b, c as outputs."""
-    category = "Control"
-    a = Input("int")
-    b = Input("int")
-    c = Input("int")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryItems:
-    """Convenience entry declaring a single list input (items). Used by
-    examples that loop over a list. Auto-passthrough mirrors items as
-    output."""
-    category = "Control"
-    items = Input("list")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryNumbersThreshold:
-    """Convenience entry declaring list (numbers) + int (threshold). Used
-    by examples that filter a list. Auto-passthrough mirrors both as
-    outputs."""
-    category = "Control"
-    numbers = Input("list")
-    threshold = Input("int")
-    exec_out = ExecOutput()
-
-
-@entry_node
-class EntryXBool:
-    """Convenience entry declaring int (x) + bool (use_positive). Used by
-    examples that branch on a flag. Auto-passthrough mirrors both as
-    outputs."""
-    category = "Control"
-    x = Input("int")
-    use_positive = Input("bool")
-    exec_out = ExecOutput()
 
 @engine_node
 class FlowOutput:

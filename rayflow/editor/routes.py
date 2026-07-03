@@ -146,45 +146,6 @@ async def get_guide() -> dict[str, Any]:
     return {"guide": GUIDE}
 
 
-def _examples_dir():
-    from pathlib import Path
-    return Path(__file__).parent / "examples"
-
-
-@router.get("/examples")
-async def list_examples() -> dict[str, Any]:
-    """Lists the bundled example flows (few-shot templates)."""
-    import json
-    examples = []
-    d = _examples_dir()
-    if d.exists():
-        for path in sorted(d.glob("*.json")):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            examples.append({
-                "name": path.stem,
-                "flow_name": data.get("name"),
-                "inputs": data.get("inputs", {}),
-                "outputs": data.get("outputs", {}),
-            })
-    return {"examples": examples}
-
-
-@router.get("/examples/{name}")
-async def get_example(name: str) -> dict[str, Any]:
-    """Returns the full JSON of an example flow by its file name."""
-    import json
-    path = _examples_dir() / f"{name}.json"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Example '{name}' not found")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading the example: {e}")
-
-
 @router.get("/types")
 async def get_types() -> dict[str, Any]:
     """Available canonical types and compatibility rules."""

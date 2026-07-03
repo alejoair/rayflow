@@ -41,7 +41,6 @@ include = ["rayflow*"]
 
 [tool.setuptools.package-data]
 "rayflow.editor.static" = ["dist/**/*"]
-"rayflow.editor.examples" = ["*.json"]
 "rayflow.claude_tools" = ["**/*.md", "mcp.json"]
 "rayflow.nodes.builtin" = ["*_frontend/**/*"]
 
