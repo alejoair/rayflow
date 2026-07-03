@@ -41,7 +41,7 @@ que alguien se acuerde de releerlo.
 | `rayflow_file_map.json` | Ya existente, sin cambios de rol: mapa mecánico archivo→{descripción, depends_on, dependents}. | Sin cambios — ver §3 por qué no se fusiona con lo anterior. |
 | Agente auditor | Recorre cada claim del SOT, valida contra el repo, escribe/actualiza `rayflow_issues.json`. | **Definido.** `.claude/agents/rayflow-auditor.md` + helper `.claude/hooks/_sot_scope.py` (scopea por diff). Método validado a mano (ver §6.1) — la invocación real vía `Task`/`Agent` **no** se pudo probar en la misma sesión que creó el archivo (ver §6.1, hallazgo de descubrimiento de subagentes). |
 | Hook pre-commit | Dispara el agente auditor (y otras herramientas) antes de cada commit; usa `claude -p` en modo headless. | No implementado. `pre-commit` (framework) ya está instalado en el entorno de trabajo. |
-| Bloqueo de edición directa | Impide que `RAYFLOW_SOURCE_OF_TRUTH.json` se edite a mano fuera del flujo del agente auditor, para "garantizar" (mayúsculas del nombre del archivo) que nunca quede desactualizado. | No implementado. Mecanismo concreto pendiente de diseño. |
+| Bloqueo de edición directa | Impide que `RAYFLOW_SOURCE_OF_TRUTH.json` se edite casualmente, para "garantizar" (mayúsculas del nombre del archivo) que nunca quede desactualizado por accidente. | **Hecho.** Dos capas: `.claude/hooks/sot_guard.py` (PreToolUse, rápida) + `scripts/check_sot_commit_message.py` (commit-msg, la garantía real) — ver §6.3. Validado end-to-end. |
 
 ## 3. Por qué tres archivos separados, no uno fusionado
 
@@ -240,22 +240,60 @@ Lo discutido hasta ahora, a nivel de intención, no de mecanismo concreto:
   que el auditor no re-audite los 215 claims en cada commit — ya resuelto a
   nivel de mecanismo (`_sot_scope.py`), falta engancharlo al hook en sí.
 - Si encuentra una divergencia, escribe/actualiza `rayflow_issues.json`.
-- Se quiere que `RAYFLOW_SOURCE_OF_TRUTH.json` **no se pueda editar a mano**
-  fuera de ese flujo — la idea es que un hook lo bloquee, aunque el mecanismo
-  concreto (¿qué distingue una edición "del agente auditor" de una edición
-  cualquiera? ¿un flag de entorno, un commit trailer, un proceso que corre
-  con permisos distintos?) todavía no está decidido.
 - Pensado para correr 100% local (versionado con git normal), sin depender
   de GitHub/GitLab ni de sus mecanismos de CI/PR.
 
-Todo este punto queda abierto para la próxima sesión de diseño.
+Este punto (la invocación del auditor desde pre-commit en sí) queda abierto
+para la próxima sesión de diseño. El bloqueo de edición directa del SOT
+(que originalmente iba a resolverse acá también) ya tiene mecanismo propio,
+ver §6.3.
+
+### 6.3. Bloqueo de edición directa del SOT — implementado
+
+Dos capas, cada una resolviendo un problema distinto (ninguna reemplaza a la
+otra):
+
+**Capa 1 — `.claude/hooks/sot_guard.py`** (`PreToolUse`, matcher
+`Edit|Write`): bloquea cualquier intento de tocar
+`RAYFLOW_SOURCE_OF_TRUTH.json` con esos tools, salvo que la sesión tenga
+`RAYFLOW_SOT_UNLOCK=1` seteado en su entorno. Feedback inmediato, sin costo
+de LLM. **No es la garantía real** — un `Bash` con `python3`/`sed`/lo que
+sea la esquiva sin problema, porque el hook solo mira `Edit`/`Write`. Por
+eso hace falta la Capa 2.
+
+**Capa 2 — `scripts/check_sot_commit_message.py`** (stage `commit-msg` del
+framework `pre-commit`, wireado en `.pre-commit-config.yaml`): si
+`RAYFLOW_SOURCE_OF_TRUTH.json` está en el diff staged de un commit, exige un
+trailer `Sot-Change: <razón>` en el mensaje — si falta, rechaza el commit.
+Esta es la garantía real: corre sobre el estado de git, no importa cómo se
+editó el archivo (Editor, `Bash`, a mano desde la terminal, lo que sea). A
+propósito no tiene bypass por variable de entorno acá — el trailer hay que
+escribirlo de nuevo en cada commit, así que no puede quedar "prendido" por
+accidente para commits futuros no relacionados (a diferencia de una env var
+a este nivel).
+
+Para activar las dos capas en un checkout nuevo:
+
+```bash
+pip install pre-commit   # si no está ya
+pre-commit install       # instala pre-commit Y commit-msg (default_install_hook_types)
+```
+
+**Validado end-to-end** (repo git temporal, no en este repo): commit a un
+archivo no relacionado sin trailer → pasa; commit al SOT sin trailer →
+rechazado con mensaje claro; mismo commit con `Sot-Change: ...` → pasa. La
+Capa 1 también se probó simulando el payload de stdin que le manda el
+harness: bloquea sin `RAYFLOW_SOT_UNLOCK=1`, permite con la variable
+seteada, no interviene en archivos que no son el SOT.
 
 ## 7. Pendientes
 
 - [x] Aprobar el schema v2 del SOT (§4) y migrar los ~215 claims existentes.
 - [x] Crear `rayflow_issues.json` en la raíz con el schema de §5 (arrancando
       con `ISSUE-0001` = el caso de `FlowSettingsDialog.tsx`).
-- [ ] Diseñar el mecanismo de bloqueo de edición directa del SOT.
+- [x] Diseñar e implementar el mecanismo de bloqueo de edición directa del
+      SOT — dos capas, `sot_guard.py` + `check_sot_commit_message.py`,
+      validadas end-to-end (§6.3).
 - [x] Diseñar el prompt/alcance del agente auditor — `.claude/agents/
       rayflow-auditor.md` + `.claude/hooks/_sot_scope.py` (§6.1). Método
       validado a mano; invocación real vía `Task`/`Agent` sin confirmar

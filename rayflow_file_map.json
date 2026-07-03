@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 152,
+  "file_count": 155,
   "files": {
     ".claude/agents/rayflow-auditor.md": {
       "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids.",
@@ -19,6 +19,7 @@
         ".claude/hooks/file_map_context.py",
         ".claude/hooks/prompt_file_hints.py",
         ".claude/hooks/session_orientation.py",
+        ".claude/hooks/sot_guard.py",
         ".claude/hooks/stale_reminder.py",
         ".claude/hooks/staleness_guard.py",
         ".claude/hooks/ty_diff_post.py",
@@ -69,6 +70,14 @@
     },
     ".claude/hooks/session_orientation.py": {
       "description": "SessionStart hook: injects a one-line pointer to rayflow_file_map.json's existence (file count, root description) so a fresh session knows to consult it.",
+      "depends_on": [
+        ".claude/hooks/_file_map.py"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
+    },
+    ".claude/hooks/sot_guard.py": {
+      "description": "PreToolUse hook (Edit|Write): blocks direct edits to RAYFLOW_SOURCE_OF_TRUTH.json unless RAYFLOW_SOT_UNLOCK=1 is set in the session's environment. Layer 1 of 2 in the SOT edit-blocking design (docs/issues_system.md §6.3) — fast, in-session feedback against casual edits; NOT the real guarantee, since a Bash command bypasses it entirely (only matches Edit/Write). Layer 2 is scripts/check_sot_commit_message.py.",
       "depends_on": [
         ".claude/hooks/_file_map.py"
       ],
@@ -159,6 +168,14 @@
       "depends_on": [],
       "dependents": [],
       "system": "mcp"
+    },
+    ".pre-commit-config.yaml": {
+      "description": "pre-commit framework config. Local-only hooks (no external repos): wires scripts/check_sot_commit_message.py at the commit-msg stage. default_install_hook_types installs both pre-commit and commit-msg git hooks from a plain `pre-commit install`.",
+      "depends_on": [
+        "scripts/check_sot_commit_message.py"
+      ],
+      "dependents": [],
+      "system": "hooks-infra"
     },
     "CLA.md": {
       "description": "Contributor License Agreement: contributors keep copyright but grant the maintainer the right to relicense their contributions, including commercially.",
@@ -1317,6 +1334,14 @@
       ],
       "system": "docs"
     },
+    "scripts/check_sot_commit_message.py": {
+      "description": "commit-msg stage hook (framework `pre-commit`, wired via .pre-commit-config.yaml): if RAYFLOW_SOURCE_OF_TRUTH.json is staged, requires a `Sot-Change: <reason>` trailer in the commit message or rejects the commit. Layer 2 of 2 in the SOT edit-blocking design (docs/issues_system.md §6.3) — the real enforcement, since it runs against git's staged state regardless of how the file was edited. No env-var bypass here on purpose (the trailer must be typed fresh each commit). Validated end-to-end in an isolated temp repo.",
+      "depends_on": [],
+      "dependents": [
+        ".pre-commit-config.yaml"
+      ],
+      "system": "hooks-infra"
+    },
     "signatures/cla.json": {
       "description": "Generated file (written by the CLA Assistant GitHub Action) recording which external contributors have signed the CLA.",
       "depends_on": [],
@@ -1723,7 +1748,7 @@
       ]
     },
     "hooks-infra": {
-      "description": "Claude Code hooks that read rayflow_file_map.json to give an LLM agent working in this repo per-file and per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists — plus the settings.json wiring them in.",
+      "description": "Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose.",
       "files": [
         ".claude/agents/rayflow-auditor.md",
         ".claude/hooks/_file_map.py",
@@ -1733,13 +1758,16 @@
         ".claude/hooks/file_map_context.py",
         ".claude/hooks/prompt_file_hints.py",
         ".claude/hooks/session_orientation.py",
+        ".claude/hooks/sot_guard.py",
         ".claude/hooks/stale_reminder.py",
         ".claude/hooks/staleness_guard.py",
         ".claude/hooks/ty_diff_post.py",
         ".claude/hooks/ty_diff_pre.py",
         ".claude/hooks/workflow_hints.py",
         ".claude/settings.json",
-        ".claude/settings.local.json"
+        ".claude/settings.local.json",
+        ".pre-commit-config.yaml",
+        "scripts/check_sot_commit_message.py"
       ],
       "depends_on_systems": [],
       "dependents_systems": []

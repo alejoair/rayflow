@@ -1,0 +1,23 @@
+# Local, first-party hooks only — no external repos, nothing published.
+# `pre-commit install` only wires the `pre-commit` stage by default; this
+# repo also uses `commit-msg`, so run:
+#   pre-commit install --hook-type pre-commit --hook-type commit-msg
+# (default_install_hook_types below makes a plain `pre-commit install`
+# do the same.)
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: local
+    hooks:
+      - id: sot-commit-guard
+        name: Require a Sot-Change trailer when editing RAYFLOW_SOURCE_OF_TRUTH.json
+        description: >
+          See docs/issues_system.md §6.3 and scripts/check_sot_commit_message.py.
+          Layer 2 of the SOT edit-blocking design: rejects any commit that
+          touches RAYFLOW_SOURCE_OF_TRUTH.json without a `Sot-Change: <reason>`
+          trailer in the commit message.
+        entry: python3 scripts/check_sot_commit_message.py
+        language: system
+        stages: [commit-msg]
