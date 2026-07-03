@@ -4,7 +4,7 @@
   "file_count": 152,
   "files": {
     ".claude/agents/rayflow-auditor.md": {
-      "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Can be scoped to a diff via .claude/hooks/_sot_scope.py (invoked with `git diff --cached --name-only | python3 .claude/hooks/_sot_scope.py`), or run unscoped over the full SOT for a manual audit. Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids.",
+      "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and creates issues in rayflow_issues.json for contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). Deliberately restricted: never edits RAYFLOW_SOURCE_OF_TRUTH.json or CLAUDE.md, never writes a suggested_fix — its only write is appending issues to rayflow_issues.json, deduped against already-open claim_ids.",
       "depends_on": [
         ".claude/hooks/_sot_scope.py"
       ],
@@ -27,7 +27,7 @@
       "system": "hooks-infra"
     },
     ".claude/hooks/_sot_scope.py": {
-      "description": "Shared helper (not a hook itself): given a list of changed file paths, returns which RAYFLOW_SOURCE_OF_TRUTH.json claims are potentially affected (claims whose evidence array references one of those files). Used to scope the audit agent to a commit's actual diff instead of re-checking all ~215 claims every time. CLI mode reads paths from argv or stdin (one per line) and prints affected claim ids — pipeable from `git diff --name-only`.",
+      "description": "Shared helper (not a hook itself): given a list of changed file paths, returns which RAYFLOW_SOURCE_OF_TRUTH.json claims are potentially affected (claims whose evidence array references one of those files), and via affected_docs()/--docs, the union of those claims' docs arrays — other documentation files (never CLAUDE.md, which is slated to become a generated rendering of the SOT) that duplicate the same fact and might need a look. Used to scope the audit agent to a commit's actual diff instead of re-checking all ~215 claims every time. CLI mode reads paths from argv or stdin (one per line); pipeable from `git diff --name-only`.",
       "depends_on": [],
       "dependents": [
         ".claude/agents/rayflow-auditor.md"
@@ -197,7 +197,7 @@
       "system": "packaging"
     },
     "RAYFLOW_SOURCE_OF_TRUTH.json": {
-      "description": "Structured, section-organized claims about the rayflow codebase (schema_version 2), each claim an object {id, text, evidence}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative paths (optionally '#symbol') supporting the claim; empty means 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the audit agent (.claude/agents/rayflow-auditor.md) and by hand.",
+      "description": "Structured, section-organized claims about the rayflow codebase (schema_version 2), each claim an object {id, text, evidence, docs}. id is '<section_id>#<slug>', stable and referenced by rayflow_issues.json's claim_ids. evidence is a best-effort array of repo-relative code paths (optionally '#symbol') supporting the claim. docs is a best-effort array of OTHER documentation files (README.md, a SKILL.md, guide.py, ...) that independently restate the same fact — CLAUDE.md is deliberately excluded from every claim's docs, since it's slated to become a generated rendering of this file rather than an independent doc that can drift. Both evidence and docs empty mean 'not yet located', not 'false'. No known_issues array anymore (migrated to rayflow_issues.json) and no per-claim verification timestamps (would churn every audit run). Not auto-derived or hook-consumed — read/written by the audit agent (.claude/agents/rayflow-auditor.md) and by hand.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"
@@ -221,7 +221,7 @@
       "system": "docs"
     },
     "docs/issues_system.md": {
-      "description": "Design doc (in Spanish, self-contained) for a documentation-audit system. RAYFLOW_SOURCE_OF_TRUTH.json (v2, implemented: claims as {id, text, evidence}) and rayflow_issues.json (v1, implemented: open-issues-only queue, no resolved history in-file — git log is the log) linked by stable ids. The audit agent (.claude/agents/rayflow-auditor.md) is implemented and its method manually validated, though invoking it via the Agent/Task tool failed in the same session that created the file (§6.1 — project subagents seem to need a fresh session to be discovered, unconfirmed). Still undesigned: the pre-commit hook that would run it via `claude -p` (§6.2), and the mechanism to block direct edits to the SOT. Explains why these stay separate files rather than merging with rayflow_file_map.json.",
+      "description": "Design doc (in Spanish, self-contained) for a documentation-audit system. RAYFLOW_SOURCE_OF_TRUTH.json (v2, implemented: claims as {id, text, evidence, docs} — evidence links code, docs links OTHER documentation that duplicates the fact, CLAUDE.md deliberately excluded since it's slated to become a generated rendering of the SOT) and rayflow_issues.json (v1, implemented: open-issues-only queue, no resolved history in-file — git log is the log) linked by stable ids. The audit agent (.claude/agents/rayflow-auditor.md) is implemented and its method manually validated, though invoking it via the Agent/Task tool failed in the same session that created the file (§6.1 — project subagents seem to need a fresh session to be discovered, unconfirmed). Still undesigned: the pre-commit hook that would run it via `claude -p` (§6.2), and the mechanism to block direct edits to the SOT (in discussion). Explains why these stay separate files rather than merging with rayflow_file_map.json.",
       "depends_on": [],
       "dependents": [],
       "system": "docs"

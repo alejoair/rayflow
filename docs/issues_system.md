@@ -77,16 +77,30 @@ archivo).
 
 Cambios respecto al v1 actual (claims como strings sueltos en un array):
 
-- Cada claim pasa a ser un objeto `{id, text, evidence}`.
+- Cada claim pasa a ser un objeto `{id, text, evidence, docs}`.
 - `id`: `<section_id>#<slug>`, estable — es lo que un issue referencia en
   `claim_ids`.
-- `evidence`: array de rutas repo-relative, con sufijo opcional `#símbolo`
-  cuando conviene precisión (`rayflow/nodes/decorators.py#entry_node` en vez
-  de un número de línea, que no sobrevive a una edición arriba). Puede estar
-  vacío — significa "no localizado todavía", no "no existe". No distingue
-  "sin auditar" de "es falso": esa distinción la hace `rayflow_issues.json`
-  (si el auditor lo revisó y tiene razones para creer que es falso, nace un
-  issue; si el array está vacío porque nadie lo miró todavía, no).
+- `evidence`: array de rutas repo-relative de **código**, con sufijo
+  opcional `#símbolo` cuando conviene precisión
+  (`rayflow/nodes/decorators.py#entry_node` en vez de un número de línea,
+  que no sobrevive a una edición arriba). Puede estar vacío — significa "no
+  localizado todavía", no "no existe". No distingue "sin auditar" de "es
+  falso": esa distinción la hace `rayflow_issues.json` (si el auditor lo
+  revisó y tiene razones para creer que es falso, nace un issue; si el
+  array está vacío porque nadie lo miró todavía, no).
+- `docs`: array de rutas de **otra documentación** (no código) que
+  restablece el mismo hecho de forma independiente — `README.md`, un
+  `SKILL.md`, `rayflow/editor/guide.py`, `docs/*.md`. **Nunca incluye
+  `CLAUDE.md`** — una vez que exista la generación programática de
+  `CLAUDE.md` a partir del SOT, `CLAUDE.md` deja de ser "otra
+  documentación que puede desincronizarse": se vuelve una renderización
+  del propio claim, siempre en sync por construcción. El valor de `docs`
+  está justamente en capturar los lugares que SÍ pueden quedar
+  desincronizados porque se mantienen a mano — el `.claude/hooks/
+  _sot_scope.py --docs` resuelve, a partir de archivos de código
+  cambiados, qué claims se ven afectados (vía `evidence`) y qué
+  documentos de ese `docs` hay que revisar en consecuencia. Mismo criterio
+  de "vacío no es falso" que `evidence`.
 - `known_issues` (el array que vivía embebido en el SOT v1) desaparece por
   completo — se muda a `rayflow_issues.json`. El caso concreto de
   `FlowSettingsDialog.tsx` que motivó ese campo en v1 es hoy `ISSUE-0001`,
@@ -111,7 +125,8 @@ Cambios respecto al v1 actual (claims como strings sueltos en un array):
         {
           "id": "sistema-de-nodos-entrada#exactly-one-entry",
           "text": "Un flow necesita exactamente un nodo de entrada — el punto donde el engine arranca la ejecución.",
-          "evidence": ["rayflow/build/validator.py#_find_entry"]
+          "evidence": ["rayflow/build/validator.py#_find_entry"],
+          "docs": []
         }
       ]
     }

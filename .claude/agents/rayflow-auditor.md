@@ -33,6 +33,14 @@ diff lo afecte. Si el diff toca un archivo/símbolo que reconocés como
 relevante para algún claim con evidencia vacía, agregalo al scope vos
 mismo con criterio, no te limites ciegamente a la salida del script.
 
+El mismo script con `--docs` te da, en cambio, los documentos (`docs` de
+cada claim afectado, nunca `CLAUDE.md`) que valdría la pena revisar porque
+el código que los respalda cambió:
+
+```bash
+git diff --cached --name-only | python3 .claude/hooks/_sot_scope.py --docs
+```
+
 ## Método
 
 1. **Cargá el estado actual**: `RAYFLOW_SOURCE_OF_TRUTH.json` (los claims en
@@ -63,10 +71,15 @@ mismo con criterio, no te limites ciegamente a la salida del script.
    - `files`: los archivos reales donde está la evidencia de la
      contradicción (no necesariamente los mismos que `evidence` del claim,
      que puede estar vacío o apuntar a lo viejo).
-   - `docs`: qué documento en prosa hay que corregir (`CLAUDE.md` la
-     mayoría de las veces, ya que el SOT se generó leyéndolo — pero puede
-     ser `README.md`, un `SKILL.md`, `rayflow/editor/guide.py`, etc. si el
-     mismo hecho está duplicado ahí).
+   - `docs`: empezá por el propio `claim["docs"]` (el SOT ya lo trae
+     precalculado para este claim, o vacío si nadie lo audité todavía) y
+     agregá `CLAUDE.md` siempre, salvo que ya exista la generación
+     programática de `CLAUDE.md` a partir del SOT (en ese caso `CLAUDE.md`
+     se corrige solo con una regeneración, no hace falta listarlo). Si con
+     tu propia búsqueda encontrás un documento que duplica el hecho y no
+     está en `claim["docs"]`, agregalo acá igual — y mencionalo en tu
+     reporte final, porque es información que le falta al SOT (no la
+     escribas vos ahí, ver Restricciones).
    - `detected_by`: `{"agent": "rayflow-auditor", "run_id": "audit-<ISO8601 de ahora>", "trigger": "pre-commit" | "manual"}`.
    - `detected_at`: ISO8601 de ahora.
    - `evidence`: array de `{file, note}` — la prueba concreta de por qué el

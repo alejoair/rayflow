@@ -1,5 +1,5 @@
 {
-  "$schema_note": "Structured breakdown of every claim CLAUDE.md makes about the rayflow codebase, organized by CLAUDE.md's own section structure. Each claim is {id, text, evidence}: id is '<section_id>#<slug>', stable — it's what rayflow_issues.json references in claim_ids. evidence is a best-effort array of repo-relative paths (optionally '#symbol') that support the claim; an empty array means 'not yet located', not 'false' — actively-contradicted claims get an entry in rayflow_issues.json instead of being marked here. This file does NOT track verification timestamps or resolved issues per-claim (that would churn on every audit run) — open discrepancies live in rayflow_issues.json, and historical state lives in git history, same philosophy as that file.",
+  "$schema_note": "Structured breakdown of every claim CLAUDE.md makes about the rayflow codebase, organized by CLAUDE.md's own section structure. Each claim is {id, text, evidence, docs}: id is '<section_id>#<slug>', stable — it's what rayflow_issues.json references in claim_ids. evidence is a best-effort array of repo-relative code paths (optionally '#symbol') that support the claim. docs is a best-effort array of OTHER documentation files (README.md, a SKILL.md, guide.py, docs/*.md, ...) that independently restate the same fact and can drift out of sync — CLAUDE.md itself is deliberately excluded from every claim's docs, since it's slated to become a generated rendering of this file (once that exists, CLAUDE.md can't 'drift' from a claim, it just re-renders it). Both evidence and docs empty arrays mean 'not yet located', not 'false' — actively-contradicted claims get an entry in rayflow_issues.json instead of being marked here. This file does NOT track verification timestamps or resolved issues per-claim (that would churn on every audit run) — open discrepancies live in rayflow_issues.json, and historical state lives in git history, same philosophy as that file.",
   "schema_version": 2,
   "source_file": "CLAUDE.md",
   "sections": [
@@ -12,14 +12,16 @@
           "text": "Los flows y nodos custom de prueba viven en un sandbox fuera del repo (ej. ~/rayflow_sandbox/), con subcarpetas flows/ y custom_nodes/.",
           "evidence": [
             "rayflow/workspace.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "carpeta-de-pruebas#lanzar-rayflow-serve-port-8000-desde",
           "text": "Al lanzar `rayflow serve --port 8000` desde ese sandbox, Ray y el editor detectan esas carpetas automáticamente.",
           "evidence": [
             "rayflow/workspace.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -37,7 +39,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#rayflow-serve-port-8000-python-m",
@@ -49,7 +52,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#rayflow-serve-file-flows-suma-json",
@@ -61,7 +65,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#rayflow-serve-port-8000-debug-redirige",
@@ -73,7 +78,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#tests-pip-install-e-dev-pytest",
@@ -85,7 +91,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#type-check-ty-check-rayflow-astral",
@@ -97,7 +104,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#ty-produce-falsos-positivos-conocidos-archivos",
@@ -109,7 +117,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#hooks-ty-diff-pre-py-ty",
@@ -121,7 +130,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "comandos-de-desarrollo#servidor-sirve-editor-visual-editor-api",
@@ -133,7 +143,8 @@
             ".claude/hooks/ty_diff_pre.py",
             ".claude/hooks/ty_diff_post.py",
             ".claude/hooks/_ty_check.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -148,7 +159,8 @@
             "rayflow/server.py",
             "rayflow/engine/executor.py",
             "rayflow/editor/frontend/vite.config.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "arquitectura-general#principio-diseno-1-nodo-clase-python",
@@ -157,7 +169,8 @@
             "rayflow/server.py",
             "rayflow/engine/executor.py",
             "rayflow/editor/frontend/vite.config.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "arquitectura-general#principio-diseno-2-namespace-plano-flatten",
@@ -166,7 +179,8 @@
             "rayflow/server.py",
             "rayflow/engine/executor.py",
             "rayflow/editor/frontend/vite.config.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "arquitectura-general#principio-diseno-3-ejecucion-secuencial-control",
@@ -175,7 +189,8 @@
             "rayflow/server.py",
             "rayflow/engine/executor.py",
             "rayflow/editor/frontend/vite.config.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "arquitectura-general#principio-diseno-4-tipos-siempre-son",
@@ -184,7 +199,8 @@
             "rayflow/server.py",
             "rayflow/engine/executor.py",
             "rayflow/editor/frontend/vite.config.ts"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -209,7 +225,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#xyflow-react-12-canvas-grafos",
@@ -228,7 +245,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#shadcn-ui-componentes-button-input-dialog",
@@ -247,7 +265,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#uiw-react-codemirror-codemirror-lang-python",
@@ -266,7 +285,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#build-npm-run-build-desde-rayflow",
@@ -285,7 +305,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#comandos-npm-install-npm-run-build",
@@ -304,7 +325,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#app-tsx-raiz-layout-carga-catalogo",
@@ -323,7 +345,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#flowcanvas-tsx-canvas-react-flow-animaciones",
@@ -342,7 +365,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#nodecard-tsx-renderizado-nodo-canvas-handles",
@@ -361,7 +385,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#nodepalette-tsx-sidebar-izq-paleta-nodos",
@@ -380,7 +405,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#variablespanel-tsx-sidebar-izq-gestion-variables",
@@ -399,7 +425,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#customnodespanel-tsx-sidebar-izq-editor-codemirror",
@@ -418,7 +445,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#propertiespanel-tsx-sidebar-der-propiedades-nodo",
@@ -437,7 +465,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#runspanel-tsx-footer-ejecutar-flow-historial",
@@ -456,12 +485,14 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#flowsettingsdialog-tsx-modal-inputs-outputs-flow",
           "text": "FlowSettingsDialog.tsx: \"Modal de inputs/outputs del flow\".",
-          "evidence": []
+          "evidence": [],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#src-lib-api-ts-cliente-http",
@@ -480,7 +511,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#src-lib-translator-ts-conversion-flowdef",
@@ -499,7 +531,8 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#src-store-flowstore-ts-zustand-store",
@@ -518,14 +551,16 @@
             "rayflow/editor/frontend/src/lib/translator.ts",
             "rayflow/editor/frontend/src/store/flowStore.ts",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "frontend-editor-visual#src-hooks-userunstream-ts-sse-streaming",
           "text": "src/hooks/useRunStream.ts: SSE streaming + sistema de animación con agrupación paralela. Captura run_id del evento run_start y reconecta automáticamente (hasta 5 reintentos, backoff 500ms) si el stream cae con el run todavía activo. Expone abort() para cancelar el stream SSE activo.",
           "evidence": [
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -538,42 +573,48 @@
           "text": "@ray_node corre en proceso Ray remoto (actor con exec pins, task sin exec pins).",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-decoradores#engine-node-corre-directamente-dentro-flowengine",
           "text": "@engine_node corre directamente dentro del FlowEngine (sin RPC); usar para lógica de control ligera.",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-decoradores#parallel-node-alias-engine-node-fork",
           "text": "@parallel_node es alias de @engine_node, para fork/join explícito.",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-decoradores#contrato-run-identico-entre-ray-node",
           "text": "El contrato de run() es idéntico entre @ray_node y @engine_node (ctx.set_output(), await ctx.fire()), pero difieren en despliegue y estado.",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-decoradores#ray-node-exec-pins-stateful-actor",
           "text": "@ray_node con exec pins es stateful: el actor Ray se instancia una vez en load() y persiste hasta unload(); la misma instancia atiende todas las ejecuciones — atributos en self.__init__ o acumulados en run() persisten entre requests.",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-decoradores#engine-node-stateless-instancia-descarta-cada",
           "text": "@engine_node es stateless: se instancia y descarta en cada ejecución del nodo; no puede acumular estado en self.",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -589,42 +630,48 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#diferencia-category-frontend-atributos-clase-leidos",
           "text": "A diferencia de category/frontend (atributos de clase leídos por _extract_meta), ser entry point no es algo que el autor del nodo fije directamente: lo otorga el decorador @entry_node, que marca meta.is_entry = True después de extraer la metadata.",
           "evidence": [
             "rayflow/nodes/decorators.py#entry_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#entry-node-engine-node-corre-dentro",
           "text": "@entry_node es un @engine_node (corre dentro del engine, nunca @ray_node) con dos agregados: (1) recibe un EntryContext, subclase de ExecContext que expone ctx.request (body/headers/query/method) — solo un entry tiene acceso; cualquier otro nodo que intente leer ctx.request obtiene AttributeError por construcción; (2) sus Input declarados se pueblan desde run.flow_inputs (que el server llena con el body de la request, matcheando por nombre de pin) en vez de desde predecesores wireados.",
           "evidence": [
             "rayflow/nodes/decorators.py#EntryContext"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#find-entry-build-validator-py-exige",
           "text": "_find_entry (build/validator.py) exige exactamente un nodo con meta.is_entry = True al buildear — cero o más de uno es error de build (\"no entry node\" / \"more than one entry node\").",
           "evidence": [
             "rayflow/nodes/decorators.py#entry_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#sin-run-engine-fire-engine-node",
           "text": "Sin run(), el engine (_fire_engine_node) espeja cada Input declarado como un Output del mismo nombre y dispara exec_out — auto-passthrough, cubre el caso \"trigger tonto\" (OnStart) sin escribir un run() trivial.",
           "evidence": [
             "rayflow/engine/executor.py#_fire_engine_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#define-run-autor-llama-ctx-set",
           "text": "Si define run(), el autor llama ctx.set_output(...) + await ctx.fire(...) como cualquier engine_node (ChatTrigger es la referencia: reenvía message como message_out).",
           "evidence": [
             "rayflow/nodes/builtin/control.py#ChatTrigger"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#red-seguridad-run-entry-dispara-ningun",
@@ -634,7 +681,8 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#frontend-str-opcional-nombre-directorio-assets",
@@ -644,14 +692,16 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#bundle-neutral-tipo-entry-onstart-chattrigger",
           "text": "El bundle es neutral al tipo de entry: para OnStart/ChatTrigger el JS típicamente POSTea a /flows/{name}/run; otro entry podría no usar /run.",
           "evidence": [
             "rayflow/nodes/builtin/control.py#ChatTrigger"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#hay-sumo-frontend-flow-garantizado-exactly",
@@ -661,7 +711,8 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#directorio-resuelve-via-inspect-getfile-cls",
@@ -671,7 +722,8 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#directorio-declarado-existe-loguea-warning-ruta",
@@ -681,14 +733,16 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#chattrigger-built-in-referencia-declara-frontend",
           "text": "ChatTrigger es el built-in de referencia: declara frontend = \"chat_trigger_frontend\" y un message/message_out propios.",
           "evidence": [
             "rayflow/nodes/builtin/control.py#ChatTrigger"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#restricciones-validadas-decorar-valueerror-inmediato-entry",
@@ -698,7 +752,8 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#ray-node-rechaza-clase-ya-decorada",
@@ -708,14 +763,16 @@
             "rayflow/build/validator.py#_find_entry",
             "rayflow/nodes/builtin/control.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#onstart-onevent-onvariablechange-chattrigger-son-cuatro",
           "text": "OnStart, OnEvent, OnVariableChange, y ChatTrigger son los cuatro tipos built-in decorados con @entry_node — no una lista cerrada del engine.",
           "evidence": [
             "rayflow/nodes/builtin/control.py#ChatTrigger"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-entrada#campo-inputs-flow-flowdef-ya-existe",
@@ -723,6 +780,11 @@
           "evidence": [
             "rayflow/schema/models.py#FlowDef",
             "rayflow/schema/loader.py#_FLOW_KEYS"
+          ],
+          "docs": [
+            "README.md",
+            "rayflow/claude_tools/skills/rayflow-flow/SKILL.md",
+            "rayflow/editor/guide.py"
           ]
         },
         {
@@ -730,7 +792,8 @@
           "text": "Los subflows (CallFlow) reconocen su nodo de entrada spliceado genéricamente vía meta.is_entry en _splice_subflow (con un fallback por nombre literal OnStart/OnEvent, solo para callers legacy que invocan sin pasar el catálogo).",
           "evidence": [
             "rayflow/nodes/builtin/events.py#OnEvent"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -744,7 +807,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-estado#engine-node-entre-ejecuciones-flow-solo",
@@ -752,7 +816,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-estado#ray-node-exec-pins-entre-iteraciones",
@@ -760,7 +825,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-estado#ray-node-exec-pins-entre-ejecuciones",
@@ -768,7 +834,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-estado#engine-node-reinstancia-cada-ejecucion-flow",
@@ -776,7 +843,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-estado#ray-node-exec-pins-actor-ray",
@@ -784,7 +852,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -798,7 +867,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py#ExecContext.fire",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-ctx-fire#ray-node-execcontext-viaja-serializado-actor",
@@ -806,7 +876,8 @@
           "evidence": [
             "rayflow/nodes/decorators.py#ExecContext.fire",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -819,28 +890,32 @@
           "text": "ctx.set_output() en un engine_node no escribe directamente al RunContext (eso requeriría await dentro de un método sync, o ray.get() bloqueante dentro del actor FlowEngine). En cambio, acumula en ctx._pending_outputs (dict local en memoria).",
           "evidence": [
             "rayflow/engine/executor.py#_fire_engine_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-pending-outputs#flowengine-flushea-ese-buffer-await-dos",
           "text": "El FlowEngine flushea ese buffer con await en dos momentos: (1) antes de _local_fire(pin), solo si hay nodos destino que vayan a leer los outputs; (2) al finalizar run(), para outputs que no tienen sucesor exec.",
           "evidence": [
             "rayflow/engine/executor.py#_fire_engine_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-pending-outputs#write-node-outputs-escribe-run-node",
           "text": "_write_node_outputs escribe en run.node_outputs (dict local por-run, síncrono — ya no toca el GraphState).",
           "evidence": [
             "rayflow/engine/executor.py#_fire_engine_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-pending-outputs#pending-outputs-vacia-serializacion-getstate-ctx",
           "text": "_pending_outputs se vacía en serialización (__getstate__) — si el ctx viaja a un worker Ray, el buffer queda limpio y el nodo usa la ruta normal (RPC a set_output).",
           "evidence": [
             "rayflow/engine/executor.py#_fire_engine_node"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -857,7 +932,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#internamente-mantiene-dict-run-id-asyncio",
@@ -868,7 +944,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#flowengine-empuja-eventos-sub-queue-run",
@@ -879,7 +956,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#driver-llama-await-queue-get-remote",
@@ -890,7 +968,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#eventos-sse-emitidos-orden-run-start",
@@ -901,7 +980,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#5-eventos-node-start-edge-fire",
@@ -912,7 +992,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#antes-empujaban-node-start-edge-fire",
@@ -920,7 +1001,8 @@
           "evidence": [
             "rayflow/engine/executor.py#_local_fire",
             "rayflow/engine/executor.py#_emit_node_start"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#driver-drena-queue-execute-async-corta",
@@ -931,7 +1013,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#await-cada-push-garantiza-cada-evento",
@@ -942,7 +1025,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#costo-rpc-bloqueante-evento-hot-path",
@@ -953,7 +1037,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#post-flows-name-run-rayflow-server",
@@ -964,7 +1049,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#servido-validado-actores-ray-vivos-llega",
@@ -975,7 +1061,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#flow-este-servido-devuelve-404-ya",
@@ -984,14 +1071,16 @@
             "rayflow/server.py#run_flow",
             "tests/test_server.py",
             "tests/test_editor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#editor-visual-tiene-propia-ruta-ejecucion",
           "text": "El editor visual no tiene su propia ruta de ejecución: useRunStream.ts pega contra el mismo /flows/{name}/run que pegaría cualquier caller externo.",
           "evidence": [
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#run-flow-delega-renderizado-respuesta-run",
@@ -1002,7 +1091,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#frontend-manda-explicitamente-ese-header-accept",
@@ -1013,7 +1103,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#reconexion-sse-get-flows-name-run",
@@ -1024,14 +1115,16 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#frontend-userunstream-ts-reconecta-automaticamente-hasta",
           "text": "El frontend (useRunStream.ts) reconecta automáticamente: hasta 5 reintentos con backoff lineal de 500ms, solo si no se había recibido un evento terminal (flow_done/flow_error) antes de que el stream cayera.",
           "evidence": [
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#frontend-bundle-flow-get-flows-name",
@@ -1042,7 +1135,8 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#ui-monta-desmonta-automaticamente-segun-presencia",
@@ -1051,7 +1145,8 @@
             "rayflow/server.py#run_flow",
             "tests/test_server.py",
             "tests/test_editor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#ui-habla-flow-mismo-flows-name",
@@ -1062,14 +1157,16 @@
             "rayflow/server.py",
             "rayflow/editor/routes.py",
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-nodos-runqueue-sse#chattrigger-built-in-expone-asi-ui",
           "text": "ChatTrigger (built-in) expone así una UI de chat estilo n8n.",
           "evidence": [
             "rayflow/nodes/builtin/control.py#ChatTrigger"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1083,7 +1180,8 @@
           "evidence": [
             "rayflow/nodes/registry.py",
             "rayflow/nodes/loader.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1096,147 +1194,168 @@
           "text": "GET /editor/info: workspace activo {cwd}.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-nodes-catalogo-nodos-disponibles",
           "text": "GET /editor/nodes: catálogo de nodos disponibles.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-nodes-node-type-spec",
           "text": "GET /editor/nodes/{node_type}: spec de un tipo de nodo concreto. Incluye dynamic para nodos con pins dinámicos (FlowOutput, Parallel, CallFlow); los nodos de entrada (OnStart, OnEvent, ChatTrigger, ...) ya no aparecen ahí — sus pins son estáticos, declarados en la clase.",
           "evidence": [
             "rayflow/nodes/builtin/control.py#ChatTrigger"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-types-tipos-canonicos-reglas",
           "text": "GET /editor/types: tipos canónicos y reglas de compatibilidad.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#post-editor-type-check-verificar-compatibilidad",
           "text": "POST /editor/type-check: verificar compatibilidad entre dos tipos.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-guide-guia-curada-modelo",
           "text": "GET /editor/guide: guía curada del modelo de Rayflow (markdown) para construir flows.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-flows-lista-flows-flows",
           "text": "GET /editor/flows: lista flows en flows/.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-flows-name-flow-json",
           "text": "GET /editor/flows/{name}: flow JSON.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-flows-name-catalog-catalogo",
           "text": "GET /editor/flows/{name}/catalog: catálogo resuelto del flow, cada nodo con sus pins dinámicos ya expandidos.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#post-editor-flows-crear-flow",
           "text": "POST /editor/flows: crear flow.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#put-editor-flows-name-actualizar-flow",
           "text": "PUT /editor/flows/{name}: actualizar flow.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#delete-editor-flows-name-borrar-flow",
           "text": "DELETE /editor/flows/{name}: borrar flow.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#post-editor-validate-validar-flow-body",
           "text": "POST /editor/validate: validar flow (body = flow JSON). Devuelve todos los errores + warnings de claves desconocidas.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#post-editor-flows-name-test-ejecutar",
           "text": "POST /editor/flows/{name}/test: ejecutar y comparar outputs vs expected_outputs (auto-verificación).",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#post-editor-flows-name-load-cargar",
           "text": "POST /editor/flows/{name}/load: cargar flow en Ray (precaché).",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#delete-editor-flows-name-load-descargar",
           "text": "DELETE /editor/flows/{name}/load: descargar flow de Ray.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-flows-loaded-lista-todos",
           "text": "GET /editor/flows/loaded: lista todos los flows cargados en Ray con su interfaz (inputs/outputs).",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#get-editor-flows-name-loaded-estado",
           "text": "GET /editor/flows/{name}/loaded: estado de carga de un flow concreto.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#post-editor-flows-name-serve-events",
           "text": "POST /editor/flows/{name}/serve-events: suscribir al event bus.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#delete-editor-flows-name-serve-events",
           "text": "DELETE /editor/flows/{name}/serve-events/{graph_id}: desuscribir.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-flows#ejecutar-flow-post-flows-name-run",
           "text": "Ejecutar un flow (POST /flows/{name}/run) y reconectarse a un run activo (GET /flows/{name}/run/{run_id}/stream) no viven en routes.py — son endpoints de rayflow/server.py, compartidos entre flows servidos y flows del editor.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1249,56 +1368,64 @@
           "text": "GET /editor/custom-nodes: lista archivos .py en custom_nodes/.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#get-editor-custom-nodes-name-source",
           "text": "GET /editor/custom-nodes/{name}/source: código fuente de un nodo.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#post-editor-custom-nodes-crear-nuevo",
           "text": "POST /editor/custom-nodes: crear nuevo archivo (body: {name, source?}).",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#put-editor-custom-nodes-name-source",
           "text": "PUT /editor/custom-nodes/{name}/source: guardar código editado.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#delete-editor-custom-nodes-name-eliminar",
           "text": "DELETE /editor/custom-nodes/{name}: eliminar archivo.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#post-editor-custom-nodes-reload-recargar",
           "text": "POST /editor/custom-nodes/reload: recargar catálogo desde disco (hot reload).",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#endpoint-guardar-crear-valida-sintaxis-python",
           "text": "El endpoint de guardar/crear valida sintaxis Python con ast.parse() antes de escribir el archivo, y llama reset_catalog() + get_catalog() para hacer hot reload sin reiniciar el servidor.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "api-rest-custom-nodes#modulos-custom-nodes-cacheados-sys-modules",
           "text": "Los módulos custom_nodes.* cacheados en sys.modules se eliminan antes del reload para forzar reimportación.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1311,7 +1438,8 @@
           "text": "rayflow/mcp/server.py expone un set curado de tools MCP construido con FastMCP, montado en /mcp (streamable-http) por create_app.",
           "evidence": [
             "rayflow/mcp/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#reusa-misma-logica-api-rest-editor",
@@ -1320,7 +1448,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#lifespan-pasa-fastapi-construir-app-gestor",
@@ -1329,7 +1458,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#discovery-tools-get-guide-list-nodes",
@@ -1338,7 +1468,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#validation-tools-validate-flow",
@@ -1347,7 +1478,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#flow-crud-tools-list-flows-get",
@@ -1356,7 +1488,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#custom-nodes-tools-list-custom-nodes",
@@ -1365,7 +1498,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#events-tools-serve-flow-events-stop",
@@ -1374,7 +1508,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#execution-tools-run-flow-test-flow",
@@ -1383,7 +1518,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#loop-tipico-agente-get-guide-list",
@@ -1392,7 +1528,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#validate-flow-devuelve-todos-errores-pasada",
@@ -1401,7 +1538,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#update-flow-delete-flow-descargan-flow",
@@ -1410,7 +1548,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#unload-flow-expone-esa-descarga-explicitamente",
@@ -1419,7 +1558,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#create-custom-node-update-custom-node",
@@ -1428,7 +1568,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#run-flow-test-flow-aceptan-trace",
@@ -1437,7 +1578,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#fastmcp-dependencia-core",
@@ -1446,14 +1588,16 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#rayflow-install-claude-tools-copia-plantillas",
           "text": "rayflow install claude-tools copia plantillas empaquetadas en rayflow/claude_tools/ (package-data) al directorio de trabajo del usuario final — no es tooling para desarrollar rayflow mismo.",
           "evidence": [
             "rayflow/cli/main.py#install_claude_tools"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#claude-skills-rayflow-node-skill-md",
@@ -1462,7 +1606,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#claude-skills-rayflow-flow-skill-md",
@@ -1471,7 +1616,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#claude-agents-rayflow-debugger-md-subagente",
@@ -1480,7 +1626,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#mcp-json-registra-server-mcp-local",
@@ -1489,7 +1636,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#force-sobreescribe-skills-agente-existentes-nunca",
@@ -1498,7 +1646,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "capa-mcp#sin-force-instalacion-idempotente-archivos-existentes",
@@ -1507,7 +1656,8 @@
             "rayflow/mcp/server.py",
             "rayflow/cli/main.py",
             "rayflow/claude_tools/mcp.json"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1523,7 +1673,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#hay-campo-inputs-nivel-flow-inputs",
@@ -1531,6 +1682,11 @@
           "evidence": [
             "rayflow/schema/models.py#FlowDef",
             "rayflow/schema/loader.py#_FLOW_KEYS"
+          ],
+          "docs": [
+            "README.md",
+            "rayflow/claude_tools/skills/rayflow-flow/SKILL.md",
+            "rayflow/editor/guide.py"
           ]
         },
         {
@@ -1541,7 +1697,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#flows-guardan-flows-dentro-directorio-trabajo",
@@ -1551,7 +1708,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#todo-flow-disparado-via-post-flows",
@@ -1561,7 +1719,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#onstart-declara-body-headers-query-method",
@@ -1571,6 +1730,9 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
+          ],
+          "docs": [
+            "rayflow/claude_tools/skills/rayflow-flow/SKILL.md"
           ]
         },
         {
@@ -1578,6 +1740,9 @@
           "text": "Ya no hay un flag genérico (exposes_flow_inputs) que inyecte esos pines automáticamente en cualquier entry.",
           "evidence": [
             "rayflow/nodes/builtin/control.py#OnStart"
+          ],
+          "docs": [
+            "rayflow/claude_tools/skills/rayflow-flow/SKILL.md"
           ]
         },
         {
@@ -1588,7 +1753,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#flow-corre-via-http-mcp-execute",
@@ -1598,14 +1764,16 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#acceso-envelope-crudo-sin-declarar-pines",
           "text": "Para acceso al envelope crudo sin declarar pines, el propio entry puede leer ctx.request (EntryContext) dentro de su run().",
           "evidence": [
             "rayflow/nodes/decorators.py#EntryContext"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#ctx-set-response-status-code-ctx",
@@ -1615,7 +1783,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#sin-llamarlos-default-200-sin-headers",
@@ -1625,7 +1794,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#cuidado-parallel-dos-ramas-verdaderamente-paralelas",
@@ -1635,7 +1805,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "schema-de-un-flow#ejemplo-codigo-nodo-checkapikey-engine-node",
@@ -1645,7 +1816,8 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1659,7 +1831,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#tokens-color-css-definidos-src-index",
@@ -1667,7 +1840,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#escala-tipografica-label-seccion-uppercase-11px",
@@ -1675,7 +1849,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#espaciado-base-gap-entre-elementos-mismo",
@@ -1683,7 +1858,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#snippet-estructura-estandar-dialogcontent-maxwidth-480",
@@ -1691,7 +1867,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#snippet-label-seccion-estandar-fontsize-11",
@@ -1699,7 +1876,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#componente-button-src-components-ui-button",
@@ -1707,7 +1885,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#usar-buttonvariants-ni-cva-ambos-dependen",
@@ -1715,7 +1894,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "reglas-de-ui#usar-componente-badge-shadcn-tiene-problemas",
@@ -1723,7 +1903,8 @@
           "evidence": [
             "rayflow/editor/frontend/src/index.css",
             "rayflow/editor/frontend/src/components/ui/button.tsx"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1738,7 +1919,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#loadedflow-load-spawn-actores-ray-node",
@@ -1747,7 +1929,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#register-served-servedflow-agrega-flow-registry",
@@ -1756,7 +1939,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#execute-flow-name-inputs-genera-run",
@@ -1765,7 +1949,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#unload-flow-name-unregister-served-flow",
@@ -1774,7 +1959,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#graphstate-persiste-entre-ejecuciones-mismo-flow",
@@ -1783,7 +1969,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#outputs-nodos-viven-graphstate-son-scratch",
@@ -1792,7 +1979,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#run-reificado-runcontext-todo-scratch-transitorio",
@@ -1801,7 +1989,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#engine-mantiene-self-runs-dict-run",
@@ -1810,7 +1999,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#execcontext-lleva-run-id-sobrevive-getstate",
@@ -1819,7 +2009,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#persistente-compartido-entre-runs-debe-serlo",
@@ -1828,7 +2019,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#concurrencia-execute-flowengine-actor-ray-async",
@@ -1837,7 +2029,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#scratch-run-esta-aislado-runcontext-dos",
@@ -1846,7 +2039,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "ciclo-de-vida-de-un-flow#ray-node-stateful-servido-dos-runs",
@@ -1855,7 +2049,8 @@
             "rayflow/api.py",
             "rayflow/engine/executor.py",
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1870,7 +2065,8 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#emitevent-node-ctx-emit-event-name",
@@ -1879,7 +2075,8 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#stop-graph-id-event-names-eventbroker",
@@ -1888,7 +2085,8 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#run-event-flow-corre-task-ray",
@@ -1897,7 +2095,8 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#dispara-engine-execute-directamente-varios-eventos",
@@ -1906,7 +2105,8 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#matching-eventbroker-exacto-string-incluyendo-namespace",
@@ -1915,7 +2115,8 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#nadie-esta-suscrito-evento-pierde-hay",
@@ -1924,21 +2125,24 @@
             "rayflow/events/bus.py",
             "rayflow/api.py",
             "rayflow/nodes/builtin/events.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#flow-eventos-debe-declarar-eventos-campo",
           "text": "Un flow de eventos debe declarar los eventos en su campo events y tener nodo OnEvent.",
           "evidence": [
             "rayflow/nodes/builtin/events.py#OnEvent"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "sistema-de-eventos#flow-tiene-exactamente-nodo-entrada-decorado",
           "text": "Un flow tiene exactamente un nodo de entrada (decorado con @entry_node) — declarar OnStart y OnEvent a la vez es un error de build, no una coexistencia silenciosa.",
           "evidence": [
             "rayflow/nodes/builtin/events.py#OnEvent"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -1951,28 +2155,32 @@
           "text": "Set escribe variable vigilada -> GraphState.set_variable -> si cambió el valor: broker.publish(\"var:{source}/{var}\", {value, old, variable}) (fire-and-forget) -> _run_event_flow.remote(flow_vigía, \"var:...\", payload) -> engine.execute(payload_como_flow_inputs, queue, run_id), donde OnVariableChange expone value/old.",
           "evidence": [
             "rayflow/nodes/builtin/events.py#OnVariableChange"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#onvariablechange-nodo-entrada-events-py-decorado",
           "text": "OnVariableChange (nodo de entrada, events.py, decorado con @entry_node) declara variable y source (flow dueño; vacío = el propio) como Input de config, más value/old como Input que el engine puebla desde el evento — al no definir run(), el auto-passthrough los espeja como outputs.",
           "evidence": [
             "rayflow/engine/executor.py#_fire_engine_node"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#entry-generico-mas-reconocido-find-entry",
           "text": "Es un entry genérico más, reconocido por _find_entry vía meta.is_entry (no por nombre) igual que OnStart/OnEvent/ChatTrigger.",
           "evidence": [
             "rayflow/build/validator.py#_find_entry"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#registro-vigilancia-variables-serve-events-suscribiendo",
           "text": "El registro de vigilancia de variables (serve_events suscribiendo var:{source}/{var} + gs.watch_variable) es específico de OnVariableChange, no algo que un nodo custom decorado con @entry_node obtenga gratis — necesitaría su propio mecanismo de opt-in.",
           "evidence": [
             "rayflow/nodes/builtin/events.py#OnVariableChange"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#registro-hace-serve-events-suscribe-flow",
@@ -1981,7 +2189,8 @@
             "rayflow/nodes/builtin/events.py",
             "rayflow/state/actor.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#graphstate-set-variable-solo-publica-valor",
@@ -1990,7 +2199,8 @@
             "rayflow/nodes/builtin/events.py",
             "rayflow/state/actor.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#orden-carga-flow-fuente-debe-estar",
@@ -1999,7 +2209,8 @@
             "rayflow/nodes/builtin/events.py",
             "rayflow/state/actor.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "triggers-por-cambio-de-variable#riesgo-conocido-flow-vigila-propia-variable",
@@ -2008,7 +2219,8 @@
             "rayflow/nodes/builtin/events.py",
             "rayflow/state/actor.py",
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     },
@@ -2021,105 +2233,120 @@
           "text": "rayflow/server.py: FastAPI app, monta editor estático y ambos routers, handler dinámico /ui.",
           "evidence": [
             "rayflow/server.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-editor-routes-py-endpoints-flows",
           "text": "rayflow/editor/routes.py: endpoints de flows, catálogo y ejecución.",
           "evidence": [
             "rayflow/editor/routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-editor-custom-nodes-routes-py",
           "text": "rayflow/editor/custom_nodes_routes.py: CRUD de nodos custom + hot reload del catálogo.",
           "evidence": [
             "rayflow/editor/custom_nodes_routes.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-editor-storage-py-crud-flows",
           "text": "rayflow/editor/storage.py: CRUD de flows en disco.",
           "evidence": [
             "rayflow/editor/storage.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-registry-py-unica-fuente-verdad",
           "text": "rayflow/registry.py: única fuente de verdad sobre flows servidos. Módulo neutral (sin FastAPI ni Ray) con dict process-level y accesores register_served/unregister_served/get_served/all_served/is_served/clear_served. Define la clase ServedFlow.",
           "evidence": [
             "rayflow/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-engine-executor-py-flowengine-actor",
           "text": "rayflow/engine/executor.py: FlowEngine (actor Ray), LoadedFlow (wrapper de actores, sin registry — eso vive en rayflow/registry.py).",
           "evidence": [
             "rayflow/engine/executor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-build-validator-py-flatten-build",
           "text": "rayflow/build/validator.py: flatten(), build(), validación de tipos.",
           "evidence": [
             "rayflow/build/validator.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-nodes-decorators-py-ray-node",
           "text": "rayflow/nodes/decorators.py: @ray_node, @engine_node, @parallel_node, ExecContext.",
           "evidence": [
             "rayflow/nodes/decorators.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-nodes-loader-py-nodecatalog-registro",
           "text": "rayflow/nodes/loader.py: NodeCatalog — registro, aliases, carga desde disco.",
           "evidence": [
             "rayflow/nodes/loader.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-nodes-registry-py-singleton-catalogo",
           "text": "rayflow/nodes/registry.py: singleton del catálogo, reset_catalog() para hot reload.",
           "evidence": [
             "rayflow/nodes/registry.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-state-actor-py-graphstate-variables",
           "text": "rayflow/state/actor.py: GraphState — variables persistentes y su vigilancia (watch_variable). Los outputs de nodos viven en el RunContext del engine, no aquí.",
           "evidence": [
             "rayflow/state/actor.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-events-bus-py-eventbroker-pub",
           "text": "rayflow/events/bus.py: EventBroker — pub/sub fire-and-forget entre flows.",
           "evidence": [
             "rayflow/events/bus.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-api-py-api-publica-load",
           "text": "rayflow/api.py: API pública — load(), execute(), execute_async(), serve_events(), stop().",
           "evidence": [
             "rayflow/api.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-cli-main-py-cli-rayflow",
           "text": "rayflow/cli/main.py: CLI — rayflow serve.",
           "evidence": [
             "rayflow/cli/main.py"
-          ]
+          ],
+          "docs": []
         },
         {
           "id": "archivos-clave-del-backend#rayflow-workspace-py-convenciones-directorio-custom",
           "text": "rayflow/workspace.py: convenciones de directorio — custom_nodes/, flows/.",
           "evidence": [
             "rayflow/workspace.py"
-          ]
+          ],
+          "docs": []
         }
       ]
     }
