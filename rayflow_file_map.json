@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 187,
+  "file_count": 188,
   "files": {
     ".claude/agents/rayflow-auditor.md": {
       "description": "Repo-dev subagent (not shipped to end users, unlike rayflow/claude_tools/agents/rayflow-debugger.md): verifies RAYFLOW_SOURCE_OF_TRUTH.json claims against the real repo state and detects contradictions. Scoped to a diff via .claude/hooks/_sot_scope.py (claim ids by default, `--docs` for the affected documentation files), or run unscoped over the full SOT for a manual audit. When filling an issue's `docs`, starts from the claim's own `docs` field and adds anything its own search finds missing (reported, not written back to the SOT). No longer has Edit: read-only, never touches RAYFLOW_SOURCE_OF_TRUTH.json, CLAUDE.md, or rayflow_issues.json itself — reports every confirmed finding to .claude/agents/rayflow-issue-writer.md, the only agent with write permission on rayflow_issues.json, instead of writing there directly (unless run as part of a parallel fan-out, in which case it just returns the requested proposed_issues data structure). No longer has Bash either — delegates any shell command it needs (e.g. running _sot_scope.py itself for an unscoped/manual run) to rayflow-bash-runner via the Agent tool.",
@@ -61,6 +61,16 @@
       "dependents": [
         ".claude/agents/rayflow-main.md"
       ],
+      "system": "hooks-infra"
+    },
+    ".claude/agents/rayflow-issue-moderator.md": {
+      "description": "Repo-dev subagent: given an issue_id from rayflow_issues.json, moderates a discussion among the relevant rayflow-<system>-specialist agents (one if a single system is involved, several with up to 2-3 rounds of cross-specialist objections/adjustments if not) to design the best fix, and returns a Markdown solution plan in its final text response — never persisted anywhere. Read-only like rayflow-router/rayflow-auditor (no Edit): never touches source files, never edits rayflow_issues.json (doesn't delete the issue or add a suggested_fix, a field the schema deliberately omits), and never asks a specialist to implement anything — pure design discussion, not execution. If specialists don't converge within the round cap, the moderator itself decides and states the disagreement and its resolution explicitly in the plan.",
+      "depends_on": [
+        "rayflow_issues.json",
+        "rayflow_file_map.json",
+        "RAYFLOW_SOURCE_OF_TRUTH.json"
+      ],
+      "dependents": [],
       "system": "hooks-infra"
     },
     ".claude/hooks/_file_map.py": {
@@ -2091,6 +2101,7 @@
         ".claude/agents/rayflow_bash_runner.md",
         ".claude/agents/rayflow-router.md",
         ".claude/agents/rayflow-github-runner.md",
+        ".claude/agents/rayflow-issue-moderator.md",
         ".claude/agents/rayflow-build-specialist.md",
         ".claude/agents/rayflow-ci-specialist.md",
         ".claude/agents/rayflow-cli-specialist.md",
