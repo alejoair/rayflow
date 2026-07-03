@@ -1,7 +1,7 @@
 {
   "$schema_note": "Flat map of repo-relative file path -> {description, depends_on, dependents}. depends_on/dependents are populated for .py and .ts/.tsx files only (computed from real imports); other files have empty lists. Generated for LLM-agent orientation; not wired into CLAUDE.md.",
   "root": "rayflow — visual workflow orchestration on Ray",
-  "file_count": 156,
+  "file_count": 145,
   "files": {
     ".claude/hooks/_file_map.py": {
       "description": "Shared helper module (not a hook itself) used by every hook script here: loads rayflow_file_map.json, resolves an absolute file_path to a repo-relative path, and extracts live function/class signatures from a .py file via ast (never cached, so it can't go stale like the JSON descriptions can).",
@@ -131,7 +131,7 @@
       "system": "docs"
     },
     "MANIFEST.in": {
-      "description": "setuptools sdist manifest: excludes CLAUDE.md, docs/, and examples/ from the published PyPI package.",
+      "description": "setuptools sdist manifest: excludes CLAUDE.md and docs/ from the published PyPI package.",
       "depends_on": [],
       "dependents": [],
       "system": "packaging"
@@ -165,42 +165,6 @@
       "depends_on": [],
       "dependents": [],
       "system": "docs"
-    },
-    "examples/branch_demo.json": {
-      "description": "Example flow demonstrating conditional branching with the Branch node.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "examples/cast_demo.json": {
-      "description": "Example flow demonstrating explicit type casting nodes (ToInt/ToFloat/ToStr/ToBool).",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "examples/foreach_demo.json": {
-      "description": "Example flow demonstrating iteration over a list with the ForEach node.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "examples/sequence_demo.json": {
-      "description": "Example flow demonstrating ordered sequential execution with the Sequence node.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "examples/showcase.json": {
-      "description": "Larger example flow combining multiple node types to showcase Rayflow's model end-to-end.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "examples/suma.json": {
-      "description": "Minimal example flow: adds two integers (OnStart -> Add -> FlowOutput).",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
     },
     "pyproject.toml": {
       "description": "Python package metadata: dependencies, build system, author/license info, pytest config, and package-data inclusion rules.",
@@ -321,48 +285,6 @@
         "rayflow/server.py"
       ],
       "system": "editor-api"
-    },
-    "rayflow/editor/examples/__init__.py": {
-      "description": "Marks examples/ as a Python package so its *.json files can be included as package-data and shipped with the pip install.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "rayflow/editor/examples/branch_demo.json": {
-      "description": "Packaged copy of examples/branch_demo.json, served via GET /editor/examples and the MCP get_example tool.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "rayflow/editor/examples/cast_demo.json": {
-      "description": "Packaged copy of examples/cast_demo.json, served via GET /editor/examples and the MCP get_example tool.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "rayflow/editor/examples/foreach_demo.json": {
-      "description": "Packaged copy of examples/foreach_demo.json, served via GET /editor/examples and the MCP get_example tool.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "rayflow/editor/examples/sequence_demo.json": {
-      "description": "Packaged copy of examples/sequence_demo.json, served via GET /editor/examples and the MCP get_example tool.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "rayflow/editor/examples/showcase.json": {
-      "description": "Packaged copy of examples/showcase.json, served via GET /editor/examples and the MCP get_example tool.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
-    },
-    "rayflow/editor/examples/suma.json": {
-      "description": "Packaged example: a flow using EntryXY (an @entry_node declaring x and y as int Inputs) wired to Add and FlowOutput. Served via GET /editor/examples and the MCP get_example tool.",
-      "depends_on": [],
-      "dependents": [],
-      "system": "examples"
     },
     "rayflow/editor/frontend/.gitignore": {
       "description": "Standard Git ignore for Node.js projects, excludes build artifacts, node_modules, and editor temp files.",
@@ -818,7 +740,7 @@
       "system": "editor-api"
     },
     "rayflow/editor/routes.py": {
-      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/test endpoints, guide/examples, and event subscription. _node_spec() surfaces meta.is_entry. The _DYNAMIC_PINS table no longer includes OnStart/FlowInput/OnEvent — those nodes declare their pins statically now; only FlowOutput/Parallel/CallFlow remain as dynamic. run_flow_response accepts an optional `request` RequestData.",
+      "description": "FastAPI router for the visual editor: node catalog, type info, flow CRUD, validation, load/test endpoints, guide, and event subscription. _node_spec() surfaces meta.is_entry. The _DYNAMIC_PINS table no longer includes OnStart/FlowInput/OnEvent — those nodes declare their pins statically now; only FlowOutput/Parallel/CallFlow remain as dynamic. run_flow_response accepts an optional `request` RequestData. The packaged-examples endpoints (GET /editor/examples, GET /editor/examples/{name}) were removed.",
       "depends_on": [
         "rayflow/api.py",
         "rayflow/build/validator.py",
@@ -995,7 +917,7 @@
       "system": "nodes"
     },
     "rayflow/nodes/builtin/control.py": {
-      "description": "Builtin control-flow nodes: OnStart (entry, @entry_node, declares body/headers/query/method from the HTTP envelope as Inputs with empty defaults — auto-passthrough since no run()), ChatTrigger (entry with frontend bundle, declares message Input + message_out Output + run() that forwards), FlowOutput, Branch, Sequence, Parallel (fork/join), ForEach, While, Map. Plus a handful of convenience entries (EntryX/EntryXY/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool) used by tests/examples.",
+      "description": "Builtin control-flow nodes: OnStart (entry, @entry_node, declares body/headers/query/method from the HTTP envelope as Inputs with empty defaults — auto-passthrough since no run()), ChatTrigger (entry with frontend bundle, declares message Input + message_out Output + run() that forwards), FlowOutput, Branch, Sequence, Parallel (fork/join), ForEach, While, Map. OnStart and ChatTrigger now use category=\"Trigger\" (unified with OnEvent/OnVariableChange in events.py) instead of \"Control\". The EntryX/EntryXY/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool convenience entries that used to live here were removed — re-homed as test-only fixtures in tests/entry_fixtures.py so they no longer ship in the real builtin catalog.",
       "depends_on": [
         "rayflow/nodes/decorators.py",
         "rayflow/nodes/registry.py"
@@ -1006,7 +928,7 @@
       "system": "nodes"
     },
     "rayflow/nodes/builtin/events.py": {
-      "description": "Builtin event nodes: OnEvent (@entry_node triggered by the event bus; declares event_name config Input + payload Input, auto-passthrough), OnVariableChange (@entry_node triggered by a watched variable; declares variable/source config + value/old Inputs, auto-passthrough), and EmitEvent (@engine_node, publishes to the bus).",
+      "description": "Builtin event nodes: OnEvent (@entry_node triggered by the event bus; declares event_name config Input + payload Input, auto-passthrough), OnVariableChange (@entry_node triggered by a watched variable; declares variable/source config + value/old Inputs, auto-passthrough), and EmitEvent (@engine_node, publishes to the bus). OnEvent and OnVariableChange both use category=\"Trigger\" (unified with OnStart/ChatTrigger in control.py).",
       "depends_on": [
         "rayflow/nodes/decorators.py"
       ],
@@ -1281,7 +1203,7 @@
       "system": "tests"
     },
     "tests/test_editor.py": {
-      "description": "Tests for the /editor/* FastAPI routes: node catalog, types, validation (including multi-error collection and warnings), flow CRUD, custom nodes, concurrency isolation, events, guide/examples, and the self-verification /test endpoint. Also covers POST /flows/{name}/run (rayflow/server.py) from the editor-managed-flow side — auto-load on demand, 404 on unknown flow, SSE vs. JSON via the Accept header — since that endpoint is shared with served flows rather than living under /editor.",
+      "description": "Tests for the /editor/* FastAPI routes: node catalog, types, validation (including multi-error collection and warnings), flow CRUD, custom nodes, concurrency isolation, events, and the self-verification /test endpoint. Also covers POST /flows/{name}/run (rayflow/server.py) from the editor-managed-flow side — auto-load on demand, 404 on unknown flow, SSE vs. JSON via the Accept header — since that endpoint is shared with served flows rather than living under /editor. The packaged-examples tests were removed along with that feature.",
       "depends_on": [
         "rayflow/__init__.py",
         "rayflow/api.py",
@@ -1477,6 +1399,20 @@
         "rayflow/mcp/server.py",
         "rayflow/server.py"
       ]
+    },
+    "tests/entry_fixtures.py": {
+      "description": "Test-only @entry_node fixtures (EntryXY/EntryX/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool) with register() to add them to the process-wide NodeCatalog. Re-homed here from rayflow/nodes/builtin/control.py so they never ship in the real catalog a `pip install rayflow` user sees; called from each test file's ray_init fixture right after reset_catalog(), since a catalog reset wipes anything outside rayflow.nodes.builtin.",
+      "depends_on": [
+        "rayflow/nodes/decorators.py",
+        "rayflow/nodes/registry.py"
+      ],
+      "dependents": [
+        "tests/test_callflow.py",
+        "tests/test_editor.py",
+        "tests/test_mcp.py",
+        "tests/test_server.py"
+      ],
+      "system": "tests"
     }
   },
   "systems": {
@@ -1603,26 +1539,6 @@
         "state",
         "tests"
       ]
-    },
-    "examples": {
-      "description": "Sample flow JSON files: the packaged few-shot examples served via get_example/list_examples (rayflow/editor/examples/) and the top-level flows/ used ad hoc during development.",
-      "files": [
-        "examples/branch_demo.json",
-        "examples/cast_demo.json",
-        "examples/foreach_demo.json",
-        "examples/sequence_demo.json",
-        "examples/showcase.json",
-        "examples/suma.json",
-        "rayflow/editor/examples/__init__.py",
-        "rayflow/editor/examples/branch_demo.json",
-        "rayflow/editor/examples/cast_demo.json",
-        "rayflow/editor/examples/foreach_demo.json",
-        "rayflow/editor/examples/sequence_demo.json",
-        "rayflow/editor/examples/showcase.json",
-        "rayflow/editor/examples/suma.json"
-      ],
-      "depends_on_systems": [],
-      "dependents_systems": []
     },
     "frontend-app": {
       "description": "App shell: root component, entry point, global styles, static assets, and the HTML page the editor mounts into.",
