@@ -42,7 +42,7 @@ include = ["rayflow*"]
 
 [tool.setuptools.package-data]
 "rayflow.editor.static" = ["dist/**/*"]
-"rayflow.claude_tools" = ["**/*.md", "mcp.json"]
+"rayflow.claude_tools" = ["**/*.md", "**/*.py", "mcp.json"]
 "rayflow.nodes.builtin" = ["*_frontend/**/*"]
 
 [tool.pytest.ini_options]
