@@ -131,6 +131,22 @@ def _sot_section(system_files: list[str], sot: dict) -> tuple[str, list[dict]]:
     return "\n".join(lines), claims
 
 
+CITATION_INSTRUCTION = """## Regla de citación de evidencia (aplica a toda respuesta)
+
+Al responder preguntas sobre el código de este sistema, citá siempre la
+evidencia concreta de tu afirmación: ruta de archivo relativa al repo +
+nombre de función/clase/símbolo + número de línea cuando sea posible (por
+ejemplo: `rayflow/nodes/decorators.py:42`, función `ray_node`). No afirmes
+comportamiento del código a partir de una descripción en prosa (la de este
+archivo, la de rayflow_file_map.json, o tu propio recuerdo) sin haber
+verificado esa cita contra una lectura real y reciente del archivo. Si no
+podés verificar algo con una lectura real, decilo explícitamente ("no lo
+pude verificar en el código, esto es una inferencia") en vez de presentarlo
+como un hecho. Un framing que suena correcto en prosa pero no resiste
+"citá la línea exacta" no está listo para pasarle al usuario.
+"""
+
+
 def _issues_section(system_files: list[str], relevant_claims: list[dict], issues: dict) -> str:
     system_files_set = set(system_files)
     claim_ids = {c["id"] for c in relevant_claims}
@@ -178,6 +194,7 @@ def generate_one(system: str, info: dict, file_map: dict, sot: dict, issues: dic
         "",
         description,
         "",
+        CITATION_INSTRUCTION,
         f"## Archivos (`rayflow_file_map.json` → `systems.{system}.files`)",
         "",
         _files_section(system, info, files),

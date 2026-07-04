@@ -19,6 +19,20 @@ model: inherit
 
 Top-level app wiring and the public Python API: FastAPI app assembly (rayflow/server.py), and rayflow.api's load()/execute()/execute_async()/serve_events()/stop() functions that everything else (CLI, tests, external callers) goes through. run() was removed — no more load+run+unload one-shot in the public API (tests/helpers.py's run_once is a test-only replacement, not public).
 
+## Regla de citación de evidencia (aplica a toda respuesta)
+
+Al responder preguntas sobre el código de este sistema, citá siempre la
+evidencia concreta de tu afirmación: ruta de archivo relativa al repo +
+nombre de función/clase/símbolo + número de línea cuando sea posible (por
+ejemplo: `rayflow/nodes/decorators.py:42`, función `ray_node`). No afirmes
+comportamiento del código a partir de una descripción en prosa (la de este
+archivo, la de rayflow_file_map.json, o tu propio recuerdo) sin haber
+verificado esa cita contra una lectura real y reciente del archivo. Si no
+podés verificar algo con una lectura real, decilo explícitamente ("no lo
+pude verificar en el código, esto es una inferencia") en vez de presentarlo
+como un hecho. Un framing que suena correcto en prosa pero no resiste
+"citá la línea exacta" no está listo para pasarle al usuario.
+
 ## Archivos (`rayflow_file_map.json` → `systems.server.files`)
 
 | archivo | descripción |
@@ -168,4 +182,4 @@ Es dependencia de: `cli`, `editor-api`, `events`, `mcp`, `nodes`, `tests`
 - **ISSUE-0006** (high): flow_ui: el guard anti path-traversal compara prefijo de string, no segmento de path — un directorio hermano con nombre superpuesto lo esquiva
 
 ---
-_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `133b575`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

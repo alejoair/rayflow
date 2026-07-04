@@ -19,6 +19,20 @@ model: inherit
 
 The REST surface for the visual editor: flow CRUD, validation, catalog resolution, custom-node CRUD with hot reload, and the curated markdown guide served to LLM agents.
 
+## Regla de citación de evidencia (aplica a toda respuesta)
+
+Al responder preguntas sobre el código de este sistema, citá siempre la
+evidencia concreta de tu afirmación: ruta de archivo relativa al repo +
+nombre de función/clase/símbolo + número de línea cuando sea posible (por
+ejemplo: `rayflow/nodes/decorators.py:42`, función `ray_node`). No afirmes
+comportamiento del código a partir de una descripción en prosa (la de este
+archivo, la de rayflow_file_map.json, o tu propio recuerdo) sin haber
+verificado esa cita contra una lectura real y reciente del archivo. Si no
+podés verificar algo con una lectura real, decilo explícitamente ("no lo
+pude verificar en el código, esto es una inferencia") en vez de presentarlo
+como un hecho. Un framing que suena correcto en prosa pero no resiste
+"citá la línea exacta" no está listo para pasarle al usuario.
+
 ## Archivos (`rayflow_file_map.json` → `systems.editor-api.files`)
 
 | archivo | descripción |
@@ -112,4 +126,4 @@ Es dependencia de: `mcp`, `server`, `tests`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `133b575`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
