@@ -78,6 +78,13 @@ Es dependencia de: `mcp`, `server`, `tests`
 - **api-rest-flows#post-editor-flows-name-serve-events**: POST /editor/flows/{name}/serve-events: suscribir al event bus. — evidencia: `rayflow/editor/routes.py`
 - **api-rest-flows#delete-editor-flows-name-serve-events**: DELETE /editor/flows/{name}/serve-events/{graph_id}: desuscribir. — evidencia: `rayflow/editor/routes.py`
 - **api-rest-flows#ejecutar-flow-post-flows-name-run**: Ejecutar un flow (POST /flows/{name}/run) y reconectarse a un run activo (GET /flows/{name}/run/{run_id}/stream) no viven en routes.py — son endpoints de rayflow/server.py, compartidos entre flows servidos y flows del editor. — evidencia: `rayflow/editor/routes.py`
+- **api-rest-flows#nodes-dynamic-solo-si-en-dynamic-pins**: _node_spec() solo agrega la clave "dynamic" al spec de un nodo si su tipo está en la tabla estática _DYNAMIC_PINS (FlowOutput, Parallel, CallFlow) — para cualquier otro tipo el frontend/agente no recibe ningún indicio de que sus pins puedan variar en runtime. — evidencia: `rayflow/editor/routes.py#_node_spec`, `rayflow/editor/routes.py#_DYNAMIC_PINS`
+- **api-rest-flows#run-flow-editor-carga-implicita-vs-server-explicita**: A diferencia de POST /flows/{name}/run (server.py, devuelve 404 si el flow no está servido explícitamente), test_editor_flow (POST /editor/flows/{name}/test) sí carga el flow implícitamente con load_flow_api si is_flow_loaded(name) es falso, antes de ejecutarlo. — evidencia: `rayflow/editor/routes.py#test_editor_flow`, `rayflow/server.py#run_flow`
+- **api-rest-flows#test-flow-passed-null-sin-expected**: POST /editor/flows/{name}/test devuelve passed: null (no false) cuando el body no incluye expected_outputs — se interpreta como 'solo quiero ver el output real', no como fallo de comparación. — evidencia: `rayflow/editor/routes.py#test_editor_flow`
+- **api-rest-flows#update-flow-put-name-en-body-opcional-toma-path**: PUT /editor/flows/{name} permite omitir "name" en el body (lo toma del path), pero si está presente y no coincide con el path devuelve 400 — no se sobreescribe silenciosamente. — evidencia: `rayflow/editor/routes.py#update_flow`
+- **api-rest-flows#create-flow-409-si-nombre-ya-existe**: POST /editor/flows devuelve 409 (no 400) si ya existe un flow con ese nombre — es el único 409 en routes.py, reservado específicamente para colisión de recurso. — evidencia: `rayflow/editor/routes.py#create_flow`
+- **api-rest-flows#load-editor-flow-idempotente-resetea-estado**: POST /editor/flows/{name}/load es idempotente pero no un no-op — si el flow ya estaba cargado, rayflow.api.load lo vuelve a cargar y resetea su estado (según el docstring del endpoint), no simplemente devuelve el graph_id existente. — evidencia: `rayflow/editor/routes.py#load_editor_flow`
+- **api-rest-flows#wants-stream-mismo-header-que-cualquier-cliente-http**: La decisión SSE vs JSON no usa un flag de body ni un header custom: se basa en el header estándar Accept: text/event-stream, así que cualquier cliente HTTP genérico puede optar sin código especial para el editor. — evidencia: `rayflow/editor/routes.py#wants_stream`
 
 ### API REST del editor > Nodos custom (rayflow/editor/custom_nodes_routes.py)
 
@@ -90,6 +97,10 @@ Es dependencia de: `mcp`, `server`, `tests`
 - **api-rest-custom-nodes#endpoint-guardar-crear-valida-sintaxis-python**: El endpoint de guardar/crear valida sintaxis Python con ast.parse() antes de escribir el archivo, y llama reset_catalog() + get_catalog() para hacer hot reload sin reiniciar el servidor. — evidencia: `rayflow/editor/custom_nodes_routes.py`
 - **api-rest-custom-nodes#modulos-custom-nodes-cacheados-sys-modules**: Los módulos custom_nodes.* cacheados en sys.modules se eliminan antes del reload para forzar reimportación. — evidencia: `rayflow/editor/custom_nodes_routes.py`
 
+### Capa MCP (para agentes LLM)
+
+- **capa-mcp#flow-catalog-mcp-omite-kind-en-outputs-vs-rest**: La tool MCP flow_catalog devuelve outputs como {"name":..., "type":...} (sin "kind"), mientras que el endpoint REST equivalente (GET /editor/flows/{name}/catalog) sí incluye "kind" en cada output — pequeña divergencia de shape entre las dos superficies que reusan la misma lógica. — evidencia: `rayflow/mcp/server.py#flow_catalog`, `rayflow/editor/routes.py#flow_catalog`
+
 ### Archivos clave del backend
 
 - **archivos-clave-del-backend#rayflow-editor-routes-py-endpoints-flows**: rayflow/editor/routes.py: endpoints de flows, catálogo y ejecución. — evidencia: `rayflow/editor/routes.py`
@@ -101,4 +112,4 @@ Es dependencia de: `mcp`, `server`, `tests`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

@@ -561,6 +561,179 @@
             "rayflow/editor/frontend/src/hooks/useRunStream.ts"
           ],
           "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#isref-heuristica-punto-ambigua",
+          "text": "isRef() en translator.ts clasifica cualquier string que contenga un punto como referencia a otro nodo (nodeId.pin), sin escapar ni distinguir un literal legítimo (ej. un input str con valor \"3.14\" o \"example.com\"); ese valor se filtra fuera de literals en flowDefToRF y se renderiza como un edge de datos hacia un nodo/pin probablemente inexistente.",
+          "evidence": [
+            "rayflow/editor/frontend/src/lib/translator.ts#isRef"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#or-join-mode-no-autorable-desde-canvas",
+          "text": "El modo OR de exec_in ({\"or\": [...]}) solo puede originarse cargando un flow JSON editado a mano: flowDefToRF() sí lee joinMode='or' desde el JSON al abrir, pero cada exec edge creado desde el canvas vía onConnect en FlowCanvas.tsx siempre nace con data.joinMode='single', y rfToFlowDef() al guardar sólo copia el joinMode de la primera arista del nodo destino (default 'and' si no es 'or') — no existe ningún control de UI que fije joinMode a 'or'.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/FlowCanvas.tsx#onConnect",
+            "rayflow/editor/frontend/src/lib/translator.ts#rfToFlowDef"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#highlight-edges-key-por-par-nodos-no-por-pin",
+          "text": "El highlighting de ejecución en FlowCanvas.tsx agrupa las aristas por clave exec:source-target / data:source-target (sin el pin), así que si dos nodos están conectados por más de una arista de datos entre el mismo par, activar una las resalta a todas por igual.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/FlowCanvas.tsx#edges"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#exec-edge-sin-edgetypes-custom",
+          "text": "Aunque los edges de exec llevan type: 'exec', <ReactFlow> en FlowCanvas.tsx no recibe prop edgeTypes — el renderer de arista sigue siendo el default de @xyflow/react; toda la diferenciación visual exec vs datos se logra solo con className CSS y el flag animated, no con un componente de edge custom.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/FlowCanvas.tsx#ReactFlow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#nodecard-solo-primer-exec-output-en-header",
+          "text": "NodeCard.tsx solo renderiza el primer exec output (execOutputs[0]) como handle en el header del nodo; el resto de exec_outputs se renderizan como filas de pin adicionales dentro del cuerpo, cada una con su propio ExecHandle.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/NodeCard.tsx#execOutputs"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#ui-position-siempre-persistida-al-guardar",
+          "text": "rfToFlowDef() asigna node.ui = {x, y} incondicionalmente para todo nodo al construir el FlowDef a guardar — incluidos los que flowDefToRF había ubicado con autoPos() por no tener ui previo — así que tras el primer guardado un nodo pierde su auto-layout implícito y queda con coordenadas explícitas fijas en el JSON.",
+          "evidence": [
+            "rayflow/editor/frontend/src/lib/translator.ts#rfToFlowDef",
+            "rayflow/editor/frontend/src/lib/translator.ts#autoPos"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#tipografia-tokens-type-star-no-documentados",
+          "text": "index.css define tokens --type-int/--type-float/--type-str/--type-bool/--type-list/--type-dict/--type-any (y --exec-color) consumidos por typeColor() en translator.ts para colorear pines por tipo; tokens de color independientes de los tokens generales de UI.",
+          "evidence": [
+            "rayflow/editor/frontend/src/index.css",
+            "rayflow/editor/frontend/src/lib/translator.ts#typeColor"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#rayflowhighlight-tooltip-sin-cache-rescanea-en-hover",
+          "text": "rayflowTooltip (hoverTooltip) en rayflowHighlight.ts re-ejecuta el escaneo regex completo del documento en cada posición de hover consultada (no reutiliza las decoraciones ya calculadas por buildDecorations).",
+          "evidence": [
+            "rayflow/editor/frontend/src/lib/rayflowHighlight.ts#rayflowTooltip"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#app-css-no-importado-codigo-muerto",
+          "text": "src/App.css (boilerplate de Vite) no se importa desde ningún archivo .tsx del proyecto — código muerto heredado del scaffold inicial de Vite+React.",
+          "evidence": [
+            "rayflow/editor/frontend/src/App.css"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#assets-react-vite-hero-sin-referencias",
+          "text": "src/assets/react.svg, src/assets/vite.svg, src/assets/hero.png y public/icons.svg no están referenciados por ningún componente fuente — artefactos residuales del template de Vite, a diferencia de public/favicon.svg que sí se usa en index.html.",
+          "evidence": [
+            "rayflow/editor/frontend/src/assets/react.svg"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#cwd-fallback-default-si-editor-info-falla",
+          "text": "App.tsx obtiene el workspace real vía getEditorInfo() en el primer useEffect; si la llamada falla, initWorkspaceStore('default') se usa como fallback genérico y cwd se fija en '' — efecto secundario: dos usuarios corriendo el editor sin servidor accesible comparten el mismo namespace 'default' de localStorage.",
+          "evidence": [
+            "rayflow/editor/frontend/src/App.tsx#useEffect"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#flowoutput-meta-sintetizada-duplicada-2-lugares",
+          "text": "La meta sintética de FlowOutput (inputs derivados de flowDef.outputs) se reconstruye por separado en dos lugares de App.tsx: dentro de refreshCatalog() y dentro de handleSaveSettings() — mismo cálculo casi idéntico duplicado, no factorizado en una función compartida.",
+          "evidence": [
+            "rayflow/editor/frontend/src/App.tsx#refreshCatalog",
+            "rayflow/editor/frontend/src/App.tsx#handleSaveSettings"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#dirty-tracking-distinto-flow-vs-code-tabs",
+          "text": "El estado 'dirty' (punto de color en la pestaña) se calcula de forma distinta según el tipo de tab: para tabs de código es t.source !== t.savedSource (derivado en render), para tabs de flow es el booleano t.dirty persistido en el store.",
+          "evidence": [
+            "rayflow/editor/frontend/src/App.tsx#isDirty"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#rename-nodo-regex-word-boundary-en-edge-id",
+          "text": "handleUpdateNode en App.tsx, al renombrar un nodo, reescribe los ids de edges con e.id.replace(new RegExp(`\\b${nodeId}\\b`), newId) — un solo reemplazo (no global) por edge y basado en word-boundary regex sobre el id compuesto del edge, no en comparación estructurada de source/target.",
+          "evidence": [
+            "rayflow/editor/frontend/src/App.tsx#handleUpdateNode"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#typescript-strict-no-habilitado",
+          "text": "Ni tsconfig.app.json ni tsconfig.node.json declaran \"strict\": true — el proyecto corre solo con linting parcial (noUnusedLocals, noUnusedParameters, erasableSyntaxOnly, noFallthroughCasesInSwitch), no con TypeScript strict mode; el propio README.md del frontend sugiere tseslint.configs.strictTypeChecked como alternativa 'más estricta', confirmando que no está activada por defecto.",
+          "evidence": [
+            "rayflow/editor/frontend/tsconfig.app.json",
+            "rayflow/editor/frontend/tsconfig.node.json"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#build-script-tsc-b-project-references-antes-de-vite",
+          "text": "package.json define \"build\": \"tsc -b && vite build\" — el type-check corre en modo build de project references antes de que Vite empaquete; un error de tipos hace fallar el build completo antes de invocar Vite.",
+          "evidence": [
+            "rayflow/editor/frontend/package.json#scripts.build"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#vite-proxy-dev-solo-4-rutas-editor",
+          "text": "vite.config.ts solo proxea 4 rutas específicas del servidor de desarrollo hacia http://127.0.0.1:8000 — /editor/nodes, /editor/flows, /editor/validate, /editor/type-check — no un catch-all de /editor/*; cualquier otra ruta de API del editor (custom-nodes, guía, load-flow) no está proxeada explícitamente.",
+          "evidence": [
+            "rayflow/editor/frontend/vite.config.ts#server.proxy"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#base-editor-alinea-con-mount-fastapi",
+          "text": "vite.config.ts fija base: '/editor/', lo que hace que las referencias a assets generadas en el build de producción usen ese prefijo — debe coincidir con el path bajo el cual server.py monta los archivos estáticos servidos desde rayflow/editor/static/dist/.",
+          "evidence": [
+            "rayflow/editor/frontend/vite.config.ts#base"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#versiones-bleeding-edge-vite8-react19-ts6",
+          "text": "package.json fija versiones bleeding-edge: vite ^8.0.12, react/react-dom ^19.2.6, typescript ~6.0.2 y eslint ^10.3.0 — todas majors recientes, no LTS conservadoras (relacionado con el issue ya existente sobre React 18 vs 19: información complementaria sobre el resto del stack).",
+          "evidence": [
+            "rayflow/editor/frontend/package.json#dependencies"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#eslint-flat-config-solo-ignora-dist",
+          "text": "eslint.config.js usa flat config con globalIgnores(['dist']) como única exclusión — no ignora node_modules explícitamente, ni excluye vite.config.ts del set de reglas de navegador, con tseslint.configs.recommended sin la variante typeChecked/strictTypeChecked que sí menciona el README como alternativa no adoptada.",
+          "evidence": [
+            "rayflow/editor/frontend/eslint.config.js#globalIgnores"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-editor-visual#frontend-md-vs-claude-md-split-de-audiencia",
+          "text": "docs/frontend.md declara explícitamente su límite de alcance: arquitectura y convenciones de UI viven en CLAUDE.md, este doc describe features de usuario del editor — split deliberado de audiencia, no duplicación accidental.",
+          "evidence": [
+            "docs/frontend.md"
+          ],
+          "docs": []
         }
       ]
     },
@@ -613,6 +786,52 @@
           "text": "@engine_node es stateless: se instancia y descarta en cada ejecución del nodo; no puede acumular estado en self.",
           "evidence": [
             "rayflow/nodes/decorators.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-decoradores#mro-override-pin-descriptors",
+          "text": "_extract_meta itera reversed(cls.__mro__) y va sobreescribiendo un dict `members` compartido con vars(base) de cada clase en la cadena — un pin descriptor de la subclase con el mismo nombre que uno heredado de una clase base lo sobreescribe silenciosamente en vez de fusionarse o entrar en conflicto.",
+          "evidence": [
+            "rayflow/nodes/decorators.py#_extract_meta"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-decoradores#is-builtin-no-settable-por-autor",
+          "text": "A diferencia de category/frontend (leídos vía getattr(cls, ...) dentro de _extract_meta), NodeMeta.is_builtin nunca se extrae de la clase: queda en el default False del dataclass, y get_catalog() lo vuelve True post-hoc solo para los módulos builtin, vía dataclasses.replace() después de registrarlos.",
+          "evidence": [
+            "rayflow/nodes/decorators.py#NodeMeta",
+            "rayflow/nodes/registry.py#get_catalog"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-decoradores#input-default-explicito-none-opcional",
+          "text": "Un Input con cualquier `default=` explícito (incluso None) es opcional (PinSpec.required=False); solo un Input sin argumento default es requerido, porque `required` se calcula como `default is _MISSING`, un sentinel privado distinto de None.",
+          "evidence": [
+            "rayflow/nodes/decorators.py#Input.__init__",
+            "rayflow/nodes/decorators.py#_extract_meta"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-decoradores#defaults-mutables-compartidos-por-referencia",
+          "text": "Input no copia su `default` (no hay default_factory): OnStart declara `body = Input(\"Any\", default={})`, `headers`/`query` = Input(..., default={}) — cada uno es un único objeto dict creado una vez en tiempo de definición de clase, compartido por referencia en todo run que caiga a ese default.",
+          "evidence": [
+            "rayflow/nodes/decorators.py#Input.__init__",
+            "rayflow/nodes/builtin/control.py#OnStart"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-decoradores#engine-node-parallel-node-sin-validacion",
+          "text": "engine_node() y parallel_node() no validan nada de la clase decorada (no chequean has_exec_in/exec_outputs, no rechazan doble decoración) — solo ray_node() (rechaza @entry_node previo) y entry_node() (exige exec_in ausente y al menos un ExecOutput) lanzan ValueError ante mal uso. El caso @ray_node seguido de @entry_node no tiene guard explícito en entry_node(): como _strip_pin_descriptors de ray_node ya borró los atributos Input/ExecOutput de la clase, el _extract_meta(cls) de entry_node() encuentra un conjunto de pines vacío y falla por 'debe declarar al menos un ExecOutput' — un motivo distinto (atributos ya borrados) del error nombrado que sí se ve en el orden inverso.",
+          "evidence": [
+            "rayflow/nodes/decorators.py#engine_node",
+            "rayflow/nodes/decorators.py#parallel_node",
+            "rayflow/nodes/decorators.py#entry_node",
+            "rayflow/nodes/decorators.py#ray_node"
           ],
           "docs": []
         }
@@ -1167,6 +1386,17 @@
             "rayflow/nodes/builtin/control.py#ChatTrigger"
           ],
           "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-runqueue-sse#timeout-runqueue-no-capturado-run-endpoint",
+          "text": "RunQueue.get() tiene un timeout hardcodeado de 300s que lanza asyncio.TimeoutError si se excede; ni execute() ni execute_async() (api.py) capturan esa excepción alrededor del loop de queue.get — solo reconnect_async() la atrapa (indirectamente, vía el except Exception genérico) y la convierte en un evento flow_error. Una corrida estancada más de 5 minutos hace crashear el generador principal usado por POST /flows/{name}/run en vez de emitir un error limpio.",
+          "evidence": [
+            "rayflow/state/queue.py#RunQueue.get",
+            "rayflow/api.py#execute",
+            "rayflow/api.py#execute_async",
+            "rayflow/api.py#reconnect_async"
+          ],
+          "docs": []
         }
       ]
     },
@@ -1180,6 +1410,27 @@
           "evidence": [
             "rayflow/nodes/registry.py",
             "rayflow/nodes/loader.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-descubrimiento#alias-comparte-identidad-meta-name-original",
+          "text": "register_alias hace que el alias apunte a la MISMA tupla (cls, meta) que su target, así que catalog.get(\"FlowInput\") devuelve una metadata cuyo .name sigue siendo \"OnStart\" (meta.name se fija una sola vez en cls.__name__) — cualquier código que reporte el tipo de un nodo desde meta.name (en vez de la key de catálogo usada) mostrará \"OnStart\" incluso para nodos declarados como type=\"FlowInput\" en el JSON del flow.",
+          "evidence": [
+            "rayflow/nodes/loader.py#register_alias",
+            "rayflow/nodes/registry.py#get_catalog",
+            "rayflow/nodes/decorators.py#NodeMeta"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-descubrimiento#extra-dirs-colisiona-en-llamadas-repetidas",
+          "text": "get_catalog(extra_dirs=[...]) llama incondicionalmente a catalog.load_directory(d) en CADA llamada (incluso con el catálogo singleton ya construido), y load_directory/_load_file siempre re-ejecuta el .py en un módulo/clase nuevos (el módulo se saca de sys.modules justo después de registrar). Una segunda llamada a get_catalog con los mismos extra_dirs en el mismo proceso re-registra clases con identidad nueva bajo el mismo nombre, y NodeCatalog.register() lanza ValueError(\"Duplicate node ...\") porque `existing[0] is not cls`. Es alcanzable en la práctica: rayflow.api.serve_events() y rayflow.server.load_served_flows() reenvían extra_node_dirs directo a get_catalog() en cada invocación.",
+          "evidence": [
+            "rayflow/nodes/registry.py#get_catalog",
+            "rayflow/nodes/loader.py#load_directory",
+            "rayflow/nodes/loader.py#_load_file",
+            "rayflow/nodes/loader.py#register"
           ],
           "docs": []
         }
@@ -1354,6 +1605,64 @@
           "text": "Ejecutar un flow (POST /flows/{name}/run) y reconectarse a un run activo (GET /flows/{name}/run/{run_id}/stream) no viven en routes.py — son endpoints de rayflow/server.py, compartidos entre flows servidos y flows del editor.",
           "evidence": [
             "rayflow/editor/routes.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#nodes-dynamic-solo-si-en-dynamic-pins",
+          "text": "_node_spec() solo agrega la clave \"dynamic\" al spec de un nodo si su tipo está en la tabla estática _DYNAMIC_PINS (FlowOutput, Parallel, CallFlow) — para cualquier otro tipo el frontend/agente no recibe ningún indicio de que sus pins puedan variar en runtime.",
+          "evidence": [
+            "rayflow/editor/routes.py#_node_spec",
+            "rayflow/editor/routes.py#_DYNAMIC_PINS"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#run-flow-editor-carga-implicita-vs-server-explicita",
+          "text": "A diferencia de POST /flows/{name}/run (server.py, devuelve 404 si el flow no está servido explícitamente), test_editor_flow (POST /editor/flows/{name}/test) sí carga el flow implícitamente con load_flow_api si is_flow_loaded(name) es falso, antes de ejecutarlo.",
+          "evidence": [
+            "rayflow/editor/routes.py#test_editor_flow",
+            "rayflow/server.py#run_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#test-flow-passed-null-sin-expected",
+          "text": "POST /editor/flows/{name}/test devuelve passed: null (no false) cuando el body no incluye expected_outputs — se interpreta como 'solo quiero ver el output real', no como fallo de comparación.",
+          "evidence": [
+            "rayflow/editor/routes.py#test_editor_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#update-flow-put-name-en-body-opcional-toma-path",
+          "text": "PUT /editor/flows/{name} permite omitir \"name\" en el body (lo toma del path), pero si está presente y no coincide con el path devuelve 400 — no se sobreescribe silenciosamente.",
+          "evidence": [
+            "rayflow/editor/routes.py#update_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#create-flow-409-si-nombre-ya-existe",
+          "text": "POST /editor/flows devuelve 409 (no 400) si ya existe un flow con ese nombre — es el único 409 en routes.py, reservado específicamente para colisión de recurso.",
+          "evidence": [
+            "rayflow/editor/routes.py#create_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#load-editor-flow-idempotente-resetea-estado",
+          "text": "POST /editor/flows/{name}/load es idempotente pero no un no-op — si el flow ya estaba cargado, rayflow.api.load lo vuelve a cargar y resetea su estado (según el docstring del endpoint), no simplemente devuelve el graph_id existente.",
+          "evidence": [
+            "rayflow/editor/routes.py#load_editor_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "api-rest-flows#wants-stream-mismo-header-que-cualquier-cliente-http",
+          "text": "La decisión SSE vs JSON no usa un flag de body ni un header custom: se basa en el header estándar Accept: text/event-stream, así que cualquier cliente HTTP genérico puede optar sin código especial para el editor.",
+          "evidence": [
+            "rayflow/editor/routes.py#wants_stream"
           ],
           "docs": []
         }
@@ -1658,6 +1967,47 @@
             "rayflow/claude_tools/mcp.json"
           ],
           "docs": []
+        },
+        {
+          "id": "capa-mcp#mcp-app-degradacion-graceful-si-fastmcp-falla",
+          "text": "create_app() en server.py envuelve la construcción del MCP (create_mcp().http_app(...)) en un try/except amplio — si fastmcp no está disponible o falla, el servidor sigue arrancando sin /mcp (solo loggea un warning), en vez de que todo rayflow serve caiga.",
+          "evidence": [
+            "rayflow/server.py#create_app"
+          ],
+          "docs": []
+        },
+        {
+          "id": "capa-mcp#mcp-tools-nunca-lanzan-http-exception-devuelven-error-dict",
+          "text": "A diferencia de los endpoints REST equivalentes (que usan HTTPException con códigos 400/404/409), ninguna tool MCP lanza excepciones al cliente — todas devuelven {\"error\": \"...\"} con status 200 implícito de FastMCP. Contrato de error completamente distinto entre las dos superficies que reusan la misma lógica.",
+          "evidence": [
+            "rayflow/mcp/server.py#get_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "capa-mcp#run-flow-test-flow-no-recargan-flow-ya-cargado-optimizacion",
+          "text": "run_flow/test_flow (vía _run_and_collect) solo llaman load_api(data) si not is_flow_loaded(name) — si el flow ya está cargado, ejecutan el grafo existente en Ray tal cual está, sin comparar contra el JSON guardado. Esto es precisamente lo que obliga a update_flow/delete_flow a descargar explícitamente, pero la causa raíz — el chequeo is_flow_loaded como shortcut de performance — no está explicitada como claim propia.",
+          "evidence": [
+            "rayflow/mcp/server.py#_run_and_collect"
+          ],
+          "docs": []
+        },
+        {
+          "id": "capa-mcp#trace-solo-filtra-tres-tipos-de-evento",
+          "text": "trace=True en run_flow/test_flow no captura todos los eventos SSE — filtra específicamente node_start, node_done, edge_fire, descartando explícitamente otros tipos de evento del array trace devuelto.",
+          "evidence": [
+            "rayflow/mcp/server.py#_run_and_collect"
+          ],
+          "docs": []
+        },
+        {
+          "id": "capa-mcp#flow-catalog-mcp-omite-kind-en-outputs-vs-rest",
+          "text": "La tool MCP flow_catalog devuelve outputs como {\"name\":..., \"type\":...} (sin \"kind\"), mientras que el endpoint REST equivalente (GET /editor/flows/{name}/catalog) sí incluye \"kind\" en cada output — pequeña divergencia de shape entre las dos superficies que reusan la misma lógica.",
+          "evidence": [
+            "rayflow/mcp/server.py#flow_catalog",
+            "rayflow/editor/routes.py#flow_catalog"
+          ],
+          "docs": []
         }
       ]
     },
@@ -1816,6 +2166,34 @@
             "rayflow/schema/loader.py",
             "rayflow/nodes/builtin/control.py",
             "rayflow/server.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "schema-de-un-flow#state-path-reconocido-pero-nunca-parseado",
+          "text": "_NODE_KEYS en schema/loader.py incluye \"state_path\" (así que unknown_keys() no advierte sobre esa key en un flow JSON crudo), pero _parse_node() nunca lee data.get(\"state_path\") al construir el NodeDef — un flow escrito a mano o reexportado con una key \"state_path\" en un nodo pierde ese valor silenciosamente al cargar, pese a que _NODE_KEYS lo marca como reconocido.",
+          "evidence": [
+            "rayflow/schema/loader.py#_NODE_KEYS",
+            "rayflow/schema/loader.py#_parse_node"
+          ],
+          "docs": []
+        },
+        {
+          "id": "schema-de-un-flow#version-forzada-a-string",
+          "text": "_parse_flow envuelve el campo version en str(data.get(\"version\", \"1\")), así que un flow JSON crudo con version numérica (p.ej. \"version\": 2) se coacciona silenciosamente al string \"2\" en vez de rechazarse o preservarse como número.",
+          "evidence": [
+            "rayflow/schema/loader.py#_parse_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "schema-de-un-flow#campos-de-flatten-generan-warning-y-se-descartan",
+          "text": "A diferencia de state_path, los demás campos de NodeDef que solo llena flatten() (subflow_of, iface, subflow_entry, subflow_exit, subflow_vars, flow_name) NO están en _NODE_KEYS — un flow JSON escrito a mano que incluya alguno de ellos (p.ej. copiando por error un flow ya flatteneado/exportado) dispara un warning 'unknown key' de unknown_keys() Y de todos modos _parse_node lo descarta: ni se valida como error ni se honra, es puro ruido.",
+          "evidence": [
+            "rayflow/schema/loader.py#_NODE_KEYS",
+            "rayflow/schema/loader.py#unknown_keys",
+            "rayflow/schema/loader.py#_parse_node",
+            "rayflow/schema/models.py#NodeDef"
           ],
           "docs": []
         }
@@ -2143,6 +2521,32 @@
             "rayflow/nodes/builtin/events.py#OnEvent"
           ],
           "docs": []
+        },
+        {
+          "id": "sistema-de-eventos#unload-no-desuscribe-broker",
+          "text": "unload(name) en api.py NO desuscribe del EventBroker (solo llama sf.loaded.unload()) — únicamente stop(graph_id, event_names) hace broker.unsubscribe. Si un flow servido con serve_events() se saca de servicio con unload() en vez de stop(), la suscripción queda permanentemente en EventBroker._subscriptions (inofensiva por-publish, ya que _run_event_flow atrapa el ValueError de ray.get_actor sobre un actor muerto, pero es un leak real visible en list_subscriptions()).",
+          "evidence": [
+            "rayflow/api.py#unload",
+            "rayflow/api.py#stop"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-eventos#publish-ignora-graph-id-guardado",
+          "text": "EventBroker.publish itera self._subscriptions[event_name] como (flow_name, _graph_id) y descarta _graph_id por completo — solo usa flow_name para resolver el actor engine_{flow_name} en _run_event_flow. El graph_id que subscribe() guarda solo se usa para filtrar en unsubscribe()/list_subscriptions(), nunca para decidir a qué actor despachar.",
+          "evidence": [
+            "rayflow/events/bus.py#EventBroker.publish",
+            "rayflow/api.py#_run_event_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-eventos#run-event-flow-invisible-a-sse-externo",
+          "text": "_run_event_flow genera un run_id nuevo (uuid interno) y lo crea/cierra dentro del mismo Ray task — ningún caller externo se entera de ese run_id, así que una ejecución disparada por evento (EmitEvent, OnVariableChange) es intrínsecamente inalcanzable vía GET /flows/{name}/run/{run_id}/stream: nadie fuera del propio task puede reconectarse a su trace SSE.",
+          "evidence": [
+            "rayflow/api.py#_run_event_flow"
+          ],
+          "docs": []
         }
       ]
     },
@@ -2345,6 +2749,1171 @@
           "text": "rayflow/workspace.py: convenciones de directorio — custom_nodes/, flows/.",
           "evidence": [
             "rayflow/workspace.py"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-de-nodos-pin-descriptors",
+      "heading": "Sistema de nodos > Pin descriptors (Input/Output/ExecInput/ExecOutput)",
+      "claims": [
+        {
+          "id": "sistema-de-nodos-pin-descriptors#tipo-validado-en-tiempo-de-decoracion",
+          "text": "El string de tipo de un Input/Output se valida en tiempo de decoración de la clase (no al cargar un flow ni en build): _extract_meta llama _validate_type -> parse_type dentro del propio proceso de importación, así que un nodo builtin o custom con un tipo malformado (p.ej. Input(\"integer\")) falla con TypeError al importar el módulo, antes de que cualquier flow lo referencie.",
+          "evidence": [
+            "rayflow/nodes/decorators.py#_extract_meta",
+            "rayflow/nodes/decorators.py#_validate_type"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-pin-descriptors#descriptores-se-borran-tras-extraer-metadata",
+          "text": "_strip_pin_descriptors borra los atributos de clase Input/Output/ExecInput/ExecOutput después de extraer la metadata — dentro de run(), `self.a` no devuelve un objeto descriptor: el atributo directamente ya no existe en la clase (los valores llegan solo por los kwargs de run()).",
+          "evidence": [
+            "rayflow/nodes/decorators.py#_strip_pin_descriptors"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-de-nodos-catalogo-builtin",
+      "heading": "Sistema de nodos > Catálogo builtin",
+      "claims": [
+        {
+          "id": "sistema-de-nodos-catalogo-builtin#decorador-divide-nodos-puros-ray-vs-inproceso",
+          "text": "Un nodo puro (sin exec pins) puede declararse @ray_node (se despacha como una ray.remote task real por cada evaluación — p.ej. Get en variables.py, Equal en compare.py) o @engine_node (corre síncronamente in-process dentro del FlowEngine, sin tocar Ray — el resto de comparadores: GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual, NotEqual, Not, And, Or). Dentro de compare.py, Equal es el único @ray_node entre nodos de comparación puros por lo demás idénticos en forma.",
+          "evidence": [
+            "rayflow/nodes/builtin/variables.py#Get",
+            "rayflow/nodes/builtin/compare.py#Equal",
+            "rayflow/nodes/decorators.py#ray_node"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-catalogo-builtin#map-bypassa-ray-y-el-actor-del-nodo-mapeado",
+          "text": "Map instancia cls() directamente y llama node_instance.run(capture_ctx, **inputs) in-process para cada elemento, sin importar si node_type es @ray_node o @engine_node — el ray_handle/actor del nodo mapeado nunca se toca, así que cualquier estado que ese nodo normalmente mantendría en un actor Ray persistente (para un ray_node con exec pins) no está disponible ni se usa dentro de Map.",
+          "evidence": [
+            "rayflow/nodes/builtin/control.py#Map.run",
+            "rayflow/nodes/builtin/control.py#_MapCaptureCtx"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-catalogo-builtin#map-falla-con-segundo-input-requerido",
+          "text": "base_inputs en Map solo incluye los inputs del node_type que tienen default (pin.has_default); cualquier Input declarado más allá del primero que NO tenga default nunca se le pasa a run(), así que aplicar Map a un nodo con 2+ inputs requeridos (sin default) lanza un TypeError de Python (falta keyword argument) en el primer elemento mapeado.",
+          "evidence": [
+            "rayflow/nodes/builtin/control.py#Map.run"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-de-nodos-catalogo-builtin#category-inconsistente-en-la-libreria-builtin",
+          "text": "Solo OnStart/ChatTrigger/OnEvent/OnVariableChange (\"Trigger\"), FlowOutput/Branch/Sequence (\"Control\"), ForEach/Parallel (\"Loops\") y Add (\"Math\") declaran category explícita. While, Map y EmitEvent (pese a ser construcciones de loop/evento) y todos los nodos de cast.py, compare.py, variables.py y flow.py (CallFlow) no la declaran y caen al default \"General\" de NodeMeta.",
+          "evidence": [
+            "rayflow/nodes/builtin/control.py#While",
+            "rayflow/nodes/builtin/control.py#Map",
+            "rayflow/nodes/builtin/events.py#EmitEvent",
+            "rayflow/nodes/decorators.py#_extract_meta"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "schema-sistema-de-tipos",
+      "heading": "Schema > Sistema de tipos (rayflow/types.py)",
+      "claims": [
+        {
+          "id": "schema-sistema-de-tipos#parse-type-none-resuelve-a-any-sin-error",
+          "text": "parse_type(None) resuelve al singleton ANY sin pasar por el parser de strings — relevante porque NodeDef/PinDef.type es None para exec pins (\"o un tipo Any implícito\"), así que ese código nunca cae en la rama de error 'Unknown type'.",
+          "evidence": [
+            "rayflow/types.py#parse_type"
+          ],
+          "docs": []
+        },
+        {
+          "id": "schema-sistema-de-tipos#list-dict-sin-parametro-compatible-con-cualquier-parametrizacion",
+          "text": "_compatible corta a True siempre que las bases coincidan y CUALQUIERA de los dos operandos tenga .param is None — un pin tipado solo \"list\" o \"dict\" NO se normaliza internamente a list[Any]/dict[str, Any] (se parsea como PinType(\"list\", None), distinto de PinType(\"list\", PinType(\"Any\"))), pero se comporta idéntico a la versión Any-parametrizada para compatibilidad; solo el caso parametrizado-vs-parametrizado (list[int] vs list[str]) chequea de verdad el tipo interno.",
+          "evidence": [
+            "rayflow/types.py#_parse_str",
+            "rayflow/types.py#_compatible"
+          ],
+          "docs": []
+        },
+        {
+          "id": "schema-sistema-de-tipos#dict-key-str-literal-no-modelada",
+          "text": "El tipo de key de dict[K, V] se valida solo como comparación de string literal (key.strip() == \"str\") en tiempo de parseo — dict[int, V] o cualquier otra key lanzan TypeError, y el PinType resultante nunca almacena el tipo de key (solo base=\"dict\" + param=V parseado): es un gate sintáctico en el parser, no algo modelado en el tipo resultante.",
+          "evidence": [
+            "rayflow/types.py#_parse_str"
+          ],
+          "docs": []
+        },
+        {
+          "id": "schema-sistema-de-tipos#pindef-pinkind-nunca-instanciados",
+          "text": "PinDef y PinKind se definen y re-exportan públicamente desde rayflow.schema pero no se instancian en ningún lugar del repo (ni rayflow/, ni tests/) — la metadata de pin que realmente se usa en runtime es la clase no relacionada PinSpec en rayflow/nodes/decorators.py; PinDef/PinKind parecen exports muertos/vestigiales.",
+          "evidence": [
+            "rayflow/schema/models.py#PinDef",
+            "rayflow/schema/models.py#PinKind",
+            "rayflow/schema/__init__.py#__all__"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-build",
+      "heading": "Sistema de build (validación y BuiltFlow)",
+      "claims": [
+        {
+          "id": "sistema-build#null-literal-bypassea-required-y-tipo",
+          "text": "Un literal null explícito en inputs ({'pin': null}) NO dispara el chequeo de 'required' (raw no es _MISSING) NI el chequeo de tipo (_check_literal_type retorna temprano si value is None) — mientras que OMITIR la misma clave sí dispara el chequeo de required. Mismo valor efectivo (None), dos resultados de build distintos según presencia de la clave.",
+          "evidence": [
+            "rayflow/build/validator.py#_validate_data_inputs",
+            "rayflow/build/validator.py#_check_literal_type"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-build#callflow-extra-inputs-siempre-any",
+          "text": "Los pines dinámicos que _with_dynamic_pins agrega para las 'extra inputs' de un CallFlow se tipan incondicionalmente como PinSpec(type='Any', ...) — la validación de tipos queda deshabilitada por diseño para cualquier valor pasado a un subflow por este mecanismo.",
+          "evidence": [
+            "rayflow/build/validator.py#_with_dynamic_pins"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-build#callflow-flow-dinamico-bypassea-error-collector",
+          "text": "El chequeo de flatten() de que el 'flow' de un CallFlow sea estático (no una referencia con '.') hace raise BuildError directo, sin pasar por el objeto _Errors — así que incluso validate_all() (que en general acumula TODOS los errores) retorna solo ese único mensaje y aborta el resto de la validación cuando este caso ocurre.",
+          "evidence": [
+            "rayflow/build/validator.py#flatten",
+            "rayflow/build/validator.py#validate_all"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-build#parse-exec-ref-default-silencioso-exec-out",
+          "text": "_parse_exec_ref, para una referencia 'node_id' (sin '.pin') hacia un nodo con exactamente un exec output, o hacia un node_id que NO existe en el grafo, retorna silenciosamente (src_id, 'exec_out') como default adivinado en ambos casos — la ambigüedad solo se reporta como error cuando el source SÍ existe y tiene MÁS de un exec output.",
+          "evidence": [
+            "rayflow/build/validator.py#_parse_exec_ref",
+            "rayflow/build/validator.py#_validate_exec_inputs"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-engine",
+      "heading": "Sistema de engine (ejecución interna del FlowEngine)",
+      "claims": [
+        {
+          "id": "sistema-engine#and-join-reset-en-loops",
+          "text": "En _is_ready, un nodo AND-join (exec_join='and' con >1 exec_sources) que ya recibió todas sus llegadas limpia run.exec_arrivals[node_id] con arrivals.clear() antes de retornar True — así que si el mismo nodo vuelve a visitarse dentro de la misma ejecución (loop / re-entrancy), debe esperar de nuevo TODAS sus fuentes, no queda 'ready' permanentemente.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine._is_ready"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#fire-run-descartado-keyerror",
+          "text": "FlowEngine.fire(run_id, ...) hace self._runs[run_id] sin default; como execute()'s finally hace self._runs.pop(run_id, None) apenas termina la corrida, cualquier RPC ctx.fire()/set_output() que llegue después de que execute() ya retornó revienta con KeyError en vez de fallar silenciosamente.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine.fire",
+            "rayflow/engine/executor.py#FlowEngine.execute"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#fanout-mismo-pin-concurrente",
+          "text": "Cuando un mismo exec pin tiene más de un target (rnode.exec_targets[pin] con len>1), tanto _local_fire como _run_loop disparan las ramas con asyncio.gather — es decir, el fan-out de UN pin hacia varios nodos corre en paralelo, no secuencialmente; 'secuencial' solo describe el avance dentro de una sola cadena de exec.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine._local_fire",
+            "rayflow/engine/executor.py#FlowEngine._run_loop"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#or-join-dispara-en-cada-llegada",
+          "text": "Un nodo con exec_join='or' nunca se registra en run.exec_arrivals (solo se registran ahí los AND-join con >1 fuente); por lo tanto _is_ready lo trata como siempre-listo, y el nodo se re-dispara en CADA llegada de CUALQUIERA de sus fuentes dentro de la misma corrida — no es 'el primero en llegar gana e ignora al resto', es 'corre una vez por cada arribo'.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine.execute",
+            "rayflow/engine/executor.py#FlowEngine._is_ready"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#callflow-invisible-en-sse",
+          "text": "El nodo shell de un CallFlow nunca emite node_start ni node_done: _fire_callflow_node escribe node_outputs directo y retorna la lista de targets a _run_loop sin pasar por _local_fire, así que la transición de su exec_out tampoco emite edge_fire. En el trace SSE/editor, un CallFlow shell es invisible — solo se ven los nodos internos ya aplanados del subflow.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine._fire_callflow_node",
+            "rayflow/engine/executor.py#FlowEngine._local_fire"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#callflow-isolated-vars-reseed-cada-fire",
+          "text": "Para un CallFlow isolated (subflow_vars no vacío), _fire_callflow_node reseedea las variables del subflow a sus defaults ESTÁTICOS en cada disparo del nodo — no solo una vez al cargar — vía self._state.set_variable.remote(...) ejecutado incondicionalmente al inicio de cada llamada. Si el mismo CallFlow se dispara varias veces dentro de un loop en la misma corrida, el estado acumulado del subflow se pisa antes de cada iteración.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine._fire_callflow_node"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#pure-node-sin-memoizar-por-run",
+          "text": "_resolve_pin, cuando el nodo productor no fue disparado en esta corrida y es un engine_node puro (not is_exec_node), evalúa su run() en el momento vía _eval_pure_engine_node — sin escribir el resultado a run.node_outputs. Si N consumidores distintos referencian el mismo pin de ese nodo puro, su run() se re-ejecuta N veces por corrida, sin memoización ni caché.",
+          "evidence": [
+            "rayflow/engine/executor.py#FlowEngine._resolve_pin",
+            "rayflow/engine/executor.py#FlowEngine._eval_pure_engine_node"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#entry-input-requerido-silenciosamente-none",
+          "text": "Un Input requerido del entry raíz sin valor en flow_inputs (body HTTP) resuelve a None en runtime sin error: build.py salta el chequeo de 'required' para el entry raíz (rnode.node_def.subflow_of is None) en _validate_data_inputs, y _resolve_inputs en el engine cae a val=None cuando el pin no está en run.flow_inputs y no tiene default — no hay validación de 'required' ni en build-time ni en runtime para pines del entry raíz.",
+          "evidence": [
+            "rayflow/build/validator.py#_validate_data_inputs",
+            "rayflow/engine/executor.py#FlowEngine._resolve_inputs"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-engine#print-timing-incondicional-execute-async",
+          "text": "execute_async() imprime breadcrumbs de timing ('[timing] ...') vía print() plano en cada punto del flujo (start, load, queue handle, create_run, cada evento recibido) de forma incondicional en TODA ejecución vía HTTP — no está gateado por --debug ni por logging, parece instrumentación de profiling dejada en el código de producción.",
+          "evidence": [
+            "rayflow/api.py#execute_async"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-state",
+      "heading": "Sistema de state (GraphState)",
+      "claims": [
+        {
+          "id": "sistema-state#comparacion-fallida-asume-cambio",
+          "text": "GraphState.set_variable envuelve la comparación old != new en try/except Exception, y en caso de fallo (valores incomparables, __eq__ que lanza, etc.) asume changed=True y publica el evento igual — prioriza no perderse un cambio real sobre evitar falsos positivos.",
+          "evidence": [
+            "rayflow/state/actor.py#GraphState.set_variable"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-state#isolation-callflow-es-namespacing-no-actor",
+          "text": "Un CallFlow isolated no obtiene su propio actor GraphState: _var_key namespacea la clave (state_path/var_name) dentro del MISMO actor GraphState del flow raíz. 'Isolated' es una convención de nombres de clave, no aislamiento real de proceso/actor.",
+          "evidence": [
+            "rayflow/engine/executor.py#_var_key",
+            "rayflow/build/validator.py#flatten"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-state#graphstate-sync-vs-runqueue-async",
+          "text": "GraphState declara sus métodos como def (no async def), mientras que FlowEngine y RunQueue son actores con métodos async def — un actor Ray sync procesa una llamada a la vez sin puntos de interleaving posibles dentro de un método, una garantía de serialización más fuerte que la 'secuencialidad del engine' que el docstring de GraphState invoca: incluso dos execute() concurrentes de la MISMA flow que escriben la misma variable simultáneamente quedan serializados por el actor mismo.",
+          "evidence": [
+            "rayflow/state/actor.py#GraphState",
+            "rayflow/state/queue.py#RunQueue"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-server",
+      "heading": "Sistema server (rayflow/server.py, rayflow.api)",
+      "claims": [
+        {
+          "id": "sistema-server#envelope-gana-sobre-body-contradice-comentario",
+          "text": "En POST /flows/{name}/run, flow_inputs se construye como {**inputs, 'headers': headers, 'query': query, 'body': inputs, 'method': method} — al estar los literales DESPUÉS del spread de **inputs, son ellos los que ganan en colisión, no las claves del body. Esto contradice el comentario adyacente ('Keys present in the body win over the envelope on collision'): si el body trae una clave llamada 'headers', su valor es sobreescrito por el header real de la request.",
+          "evidence": [
+            "rayflow/server.py#run_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-server#ui-traversal-guard-string-prefix",
+          "text": "El guard anti-traversal de /flows/{name}/ui/{rest:path} (str(target).startswith(str(bundle_dir.resolve()))) es un chequeo de prefijo de string, no de segmento de path — un directorio hermano cuyo nombre empiece con el nombre de bundle_dir es alcanzable con un rest tipo '../ui_internal/secret.txt'.",
+          "evidence": [
+            "rayflow/server.py#flow_ui"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-server#autoload-distinto-api-vs-http",
+          "text": "rayflow.api.execute() auto-carga un flow no cargado (if not is_flow_loaded(name): load(name)) antes de ejecutarlo, mientras que POST /flows/{name}/run en server.py devuelve 404 si is_served(name) es False, sin auto-cargar nunca — los dos puntos de entrada 'ejecutar un flow por nombre' tienen semánticas de auto-load opuestas.",
+          "evidence": [
+            "rayflow/api.py#execute",
+            "rayflow/server.py#run_flow"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-cli",
+      "heading": "Sistema CLI (rayflow/cli, claude_tools)",
+      "claims": [
+        {
+          "id": "sistema-cli#serve-runtime-env-none-si-no-hay-custom-nodes",
+          "text": "rayflow serve solo pasa runtime_env a ray.init() si runtime_env() (workspace.py) detecta al menos un archivo .py en custom_nodes/ además de __init__.py; si la carpeta está vacía o no existe, Ray arranca sin runtime_env en absoluto (no con uno vacío).",
+          "evidence": [
+            "rayflow/workspace.py#runtime_env",
+            "rayflow/cli/main.py#serve"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-cli#nodes-dir-repetible-carga-siempre-no-solo-primera-vez",
+          "text": "--nodes-dir (repetible) en rayflow serve se traduce en get_catalog(extra_node_dirs), cuyo bloque de carga de extra_dirs corre fuera del if _catalog is None — es decir en cada llamada a get_catalog con extra_dirs, no solo en la inicialización del catálogo singleton.",
+          "evidence": [
+            "rayflow/nodes/registry.py#get_catalog"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-cli#install-claude-tools-copia-desde-package-data-md-mcp-json",
+          "text": "rayflow install claude-tools copia archivos desde rayflow/claude_tools/ (declarado como package_data en pyproject.toml) — el comando funciona también sobre una instalación pip install rayflow normal (no editable), porque los templates viajan empaquetados, no leídos desde un checkout de fuente.",
+          "evidence": [
+            "pyproject.toml#package-data",
+            "rayflow/cli/main.py#_claude_tools_dir"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-cli#force-nunca-toca-mcp-json-incluso-si-difiere-de-otro-server",
+          "text": "El test test_install_claude_tools_force_overwrites_skills_but_not_mcp_json confirma que incluso con --force, si .mcp.json ya existe con contenido que no registra rayflow, el comando lo deja completamente intacto.",
+          "evidence": [
+            "tests/test_cli.py#test_install_claude_tools_force_overwrites_skills_but_not_mcp_json",
+            "rayflow/cli/main.py#install_claude_tools"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-cli#copy-tree-status-tres-valores-instalado-sobreescrito-salteado",
+          "text": "_copy_tree reporta tres estados distintos por archivo (\"installed\", \"overwritten\", \"skipped (already exists, use --force to overwrite)\") — el CLI imprime cada archivo individualmente, no un resumen agregado.",
+          "evidence": [
+            "rayflow/cli/main.py#_copy_tree"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "frontend-state",
+      "heading": "Frontend > Estado y acceso a datos del cliente",
+      "claims": [
+        {
+          "id": "frontend-state#flowstore-persist-namespace-por-workspace",
+          "text": "initWorkspaceStore(cwd) en flowStore.ts recalcula la clave de localStorage como rayflow-ws-<hash(cwd)> (hash simple tipo Java String.hashCode) y llama useFlowStore.persist.setOptions({name: key}) + rehydrate() — cada carpeta desde la que se lanza rayflow serve tiene su propio namespace de tabs persistidos.",
+          "evidence": [
+            "rayflow/editor/frontend/src/store/flowStore.ts#initWorkspaceStore"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#flowstore-runs-en-vuelo-se-descartan-al-rehidratar",
+          "text": "onRehydrateStorage filtra tab.runs descartando cualquier run con status === 'running' al recargar la página — un run que estaba en curso cuando el navegador se cerró/recargó no reaparece en el historial (se pierde, no se marca como error).",
+          "evidence": [
+            "rayflow/editor/frontend/src/store/flowStore.ts#onRehydrateStorage"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#flowstore-sets-serializados-como-arrays",
+          "text": "Run.activeNodes/doneNodes/activeEdges son Set<string> en memoria pero el storage custom (setAwareStorage) los serializa a arrays antes de escribir a localStorage y los reconstruye a Set al leer, porque JSON.stringify no soporta Set nativamente.",
+          "evidence": [
+            "rayflow/editor/frontend/src/store/flowStore.ts#serializeRun",
+            "rayflow/editor/frontend/src/store/flowStore.ts#setAwareStorage"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#userunstream-reconexion-solo-antes-de-evento-terminal",
+          "text": "La reconexión SSE en useRunStream solo se intenta si terminalReceived es false (no llegó flow_done/flow_error) Y ya se recibió backendRunId desde el evento run_start — si el stream se corta antes de recibir run_start, no hay run_id para reconectar y el run queda tal como estaba (sin marcarlo explícitamente como error).",
+          "evidence": [
+            "rayflow/editor/frontend/src/hooks/useRunStream.ts#backendRunId"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#userunstream-backoff-lineal-no-exponencial",
+          "text": "El backoff entre reintentos de reconexión es LINEAL (attempt * 500 ms: 500, 1000, 1500, 2000, 2500), no exponencial, con un máximo de 5 intentos (MAX_RECONNECT_ATTEMPTS).",
+          "evidence": [
+            "rayflow/editor/frontend/src/hooks/useRunStream.ts#MAX_RECONNECT_ATTEMPTS"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#userunstream-agrupacion-por-ventana-50ms",
+          "text": "Los eventos SSE se agrupan usando una ventana deslizante de BATCH_WINDOW_MS = 50ms (debounce): cada evento nuevo resetea el timer; el grupo se 'flushea' recién cuando pasan 50ms sin eventos nuevos, y luego cada grupo se reproduce con un delay de animMinMs (default 600ms) entre sí — esto es lo que hace que nodos paralelos aparezcan 'activos' simultáneamente en la animación aunque el backend los reporte en microsegundos de diferencia.",
+          "evidence": [
+            "rayflow/editor/frontend/src/hooks/useRunStream.ts#BATCH_WINDOW_MS",
+            "rayflow/editor/frontend/src/store/flowStore.ts#animMinMs"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#userunstream-unload-bypassa-el-active-tab",
+          "text": "A diferencia de la mayoría de los setters del store (setLoaded, setStale, etc., que solo operan sobre activeTabName), unload() en useRunStream hace un useFlowStore.setState directo filtrando por el tabName recibido como parámetro del hook — puede apagar loaded en un tab que no es el activo.",
+          "evidence": [
+            "rayflow/editor/frontend/src/hooks/useRunStream.ts#unload",
+            "rayflow/editor/frontend/src/store/flowStore.ts#setLoaded"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-state#useresizable-persistencia-independiente-de-zustand",
+          "text": "useResizable persiste el tamaño de cada panel redimensionable en una clave de localStorage propia (el key pasado por option), completamente al margen del store Zustand — un segundo mecanismo de persistencia de UI, no unificado con flowStore's persist middleware.",
+          "evidence": [
+            "rayflow/editor/frontend/src/hooks/useResizable.ts#useResizable"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "frontend-panels",
+      "heading": "Frontend > Paneles del editor (sidebars y footer)",
+      "claims": [
+        {
+          "id": "frontend-panels#nodepalette-color-categoria-hash-hsl",
+          "text": "NodePalette.getCategoryColor() asigna un color de fondo por categoría de nodo usando un hash simple del string de categoría para elegir un hue de una paleta fija de 8 (baseHues) más saturación/luminosidad derivadas de bits distintos del mismo hash — puramente determinista por nombre de categoría, no configurable ni basado en metadata del backend.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/NodePalette.tsx#getCategoryColor"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-panels#nodepalette-doble-filtro-builtin-custom-mas-categoria",
+          "text": "NodePalette filtra el catálogo en dos niveles independientes de colapso: builtin/custom (builtinOpen/customOpen) y luego por categoría dentro de cada uno (Section's open state) — cada categoría tiene su propio estado de apertura no persistido (se resetea a open:true en cada montaje).",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/NodePalette.tsx#builtinOpen"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-panels#variablespanel-parseo-json-best-effort-para-default",
+          "text": "VariablesPanel.parseDefault() intenta JSON.parse el valor tipeado por el usuario para el default de una variable no-str, y si falla el parseo devuelve el string crudo tal cual (sin validar contra el tipo declarado) — es posible guardar un default cuyo tipo real en runtime no coincide con variable.type.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/VariablesPanel.tsx#parseDefault"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-panels#custom-nodes-panel-refresh-list-silencia-errores",
+          "text": "CustomNodesPanel.refreshList(), handleOpen(), y handleDelete() tragan cualquier error de red/API en un catch silencioso sin mostrar feedback al usuario — solo handleCreate() propaga el error a un estado createError visible en el formulario.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx#refreshList"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-panels#flowsettingsdialog-solo-edita-outputs",
+          "text": "FlowSettingsDialog solo edita outputs del flow (vía PinEditor) — no existe edición de 'inputs' a nivel de flow en este diálogo porque los inputs de un flow viven en los pins del nodo de entrada (OnStart, ChatTrigger, un @entry_node custom), documentado explícitamente en un comentario del propio archivo. Al guardar, valida nombres duplicados entre filas (tras trim) y bloquea el guardado mostrando la lista de duplicados; borrar todas las filas es válido y persiste un objeto outputs vacío ({}).",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx#Props"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-panels#propertiespanel-prioriza-meta-del-nodo-sobre-catalogo-global",
+          "text": "PropertiesPanel resuelve la metadata de pins de un nodo priorizando data.meta (guardada en el nodo de React Flow al momento de crearlo) por sobre catalog[data.nodeType] (el catálogo global actual) — un nodo con pins dinámicos conserva su forma original aunque el catálogo global cambie después.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/PropertiesPanel.tsx#meta"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-panels#codeeditor-ctrl-s-intercepta-guardado-nativo",
+          "text": "CodeEditor captura Ctrl+S/Cmd+S a nivel de onKeyDown del contenedor raíz (listener nativo, no un keymap de CodeMirror) y llama preventDefault() + onSave(), evitando el diálogo nativo 'Guardar página' del navegador — único atajo de teclado en los paneles de este subsistema. El tema del editor está fijo en oneDark (@codemirror/theme-one-dark) independientemente del tema claro/oscuro del resto de la app.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/CodeEditor.tsx#handleKeyDown"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "frontend-ui-kit",
+      "heading": "Frontend > Primitivas de UI (shadcn/ui adaptado)",
+      "claims": [
+        {
+          "id": "frontend-ui-kit#solo-3-de-11-primitivas-son-inline-styles-puras",
+          "text": "De los 11 archivos del sistema, solo button.tsx, input.tsx y select.tsx están efectivamente reescritos con style={{}} puro. Los otros 8 (accordion.tsx, badge.tsx, dialog.tsx, scroll-area.tsx, separator.tsx, tabs.tsx, textarea.tsx, tooltip.tsx) siguen usando strings de clases Tailwind extensos sin convertir a style. La descripción del sistema en rayflow_file_map.json ('rewritten to use inline styles instead of Tailwind') es cierta solo para una minoría de archivos.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/ui/button.tsx",
+            "rayflow/editor/frontend/src/components/ui/dialog.tsx"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-ui-kit#8-de-11-primitivas-no-tienen-ningun-import",
+          "text": "De las 11 primitivas del ui-kit, 7 no tienen ningún import fuera de sus propios archivos de definición: accordion.tsx, badge.tsx, scroll-area.tsx, separator.tsx, tabs.tsx, textarea.tsx, tooltip.tsx — código muerto heredado del scaffold de shadcn/ui. Solo button.tsx, dialog.tsx, input.tsx, select.tsx están efectivamente en uso.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/ui/accordion.tsx"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-ui-kit#tailwind-v4-esta-cableado-en-el-build-pese-a-regla-de-no-usarlo",
+          "text": "Tailwind v4 (@tailwindcss/vite + tailwindcss) está activamente cableado en vite.config.ts (plugin tailwindcss()) y se importa en src/index.css (@import \"tailwindcss\") — el build sigue procesando Tailwind pese a que reglas-de-ui documenta que 'no genera clases de forma fiable'. Complementa (no contradice) esa claim ya existente: dialog.tsx (única primitiva no migrada en uso real) compensa pasando className con utilidades Tailwind de valor entre corchetes (ej. \"bg-[var(--card)]\"), que sí se generan de forma fiable en build time, en vez de migrar la primitiva.",
+          "evidence": [
+            "rayflow/editor/frontend/vite.config.ts",
+            "rayflow/editor/frontend/src/index.css"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-ui-kit#lib-utils-cn-usa-clsx-tailwind-merge",
+          "text": "src/lib/utils.ts exporta cn() = twMerge(clsx(inputs)) — utilidad estándar de shadcn/ui para componer/mergear clases Tailwind con prioridad de conflicto, usada por 8 de las 9 primitivas que importan cn (todas menos input.tsx).",
+          "evidence": [
+            "rayflow/editor/frontend/src/lib/utils.ts#cn"
+          ],
+          "docs": []
+        },
+        {
+          "id": "frontend-ui-kit#panels-inyectan-clases-tailwind-arbitrary-value-en-props-de-ui-kit",
+          "text": "Pese a la regla 'usar siempre style={{}}', al menos tres puntos de frontend-panels pasan className con sintaxis de valor arbitrario de Tailwind (bg-[var(--card)], border-[var(--border)], text-[var(--foreground)]) a componentes del ui-kit en vez de usar solo style: NodePalette's Input, CustomNodesPanel's DialogContent, y FlowSettingsDialog's DialogContent/SelectContent.",
+          "evidence": [
+            "rayflow/editor/frontend/src/components/NodePalette.tsx",
+            "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+            "rayflow/editor/frontend/src/components/FlowSettingsDialog.tsx"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-packaging",
+      "heading": "Sistema de packaging",
+      "claims": [
+        {
+          "id": "sistema-packaging#dist-committed-al-repo",
+          "text": "El bundle de frontend compilado (rayflow/editor/static/dist/) está commiteado al repo pese a que .gitignore tiene una regla general dist/, gracias a una excepción explícita !rayflow/editor/static/dist/.",
+          "evidence": [
+            ".gitignore"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-packaging#package-data-tres-reglas",
+          "text": "pyproject.toml declara tres reglas [tool.setuptools.package-data] independientes: rayflow.editor.static incluye dist/**/* (bundle del editor), rayflow.claude_tools incluye **/*.md + mcp.json (skills/agents/mcp.json), y rayflow.nodes.builtin incluye *_frontend/**/* (bundles de UI de entry nodes como ChatTrigger).",
+          "evidence": [
+            "pyproject.toml#tool.setuptools.package-data"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-packaging#manifest-excluye-tooling-interno-no-docs",
+          "text": "MANIFEST.in excluye del sdist/wheel publicado: CLAUDE.md, rayflow_system_prompt.md, todo docs/, y 5 JSON de tooling LLM (rayflow_file_map.json, rayflow_workflows.json, rayflow_scenarios.json, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json) — son 'internal tooling artifacts, not user docs'.",
+          "evidence": [
+            "MANIFEST.in"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-packaging#dependencias-runtime-vs-dev",
+          "text": "Las dependencias de runtime declaradas (ray>=2.40, fastapi>=0.110, uvicorn>=0.29, fastmcp>=2.3) no incluyen pytest/httpx/ty/pre-commit, que viven exclusivamente en [project.optional-dependencies].dev — consistente con que no hay pydantic en ninguna lista de deps.",
+          "evidence": [
+            "pyproject.toml#dependencies"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-packaging#entry-point-cli-unico",
+          "text": "El único entry point de consola declarado es rayflow = \"rayflow.cli.main:cli\"; no hay otros scripts ([project.scripts] tiene una sola entrada).",
+          "evidence": [
+            "pyproject.toml#project.scripts"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-packaging#pytest-asyncio-mode-auto",
+          "text": "[tool.pytest.ini_options] fija asyncio_mode = \"auto\", por lo que los tests async def de tests/test_mcp.py y tests/test_editor.py::test_concurrent_executions_are_isolated corren sin necesitar @pytest.mark.asyncio explícito.",
+          "evidence": [
+            "pyproject.toml#tool.pytest.ini_options"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-ci",
+      "heading": "Sistema de CI",
+      "claims": [
+        {
+          "id": "sistema-ci#cla-maintainer-bypass",
+          "text": "El workflow de CLA (cla.yml) se salta la verificación por completo cuando el PR o el comentario 'recheck' proviene del usuario alejoair (maintainer), en ambos triggers — workaround documentado porque commits con autoría automatizada (ej. Claude <noreply@anthropic.com>) no tienen login de GitHub para matchear.",
+          "evidence": [
+            ".github/workflows/cla.yml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-ci#cla-usa-pull-request-target-permisos-elevados",
+          "text": "cla.yml dispara sobre pull_request_target (no pull_request), dándole acceso a secrets del repo base incluso para PRs de forks — necesario para poder escribir el archivo de firmas (signatures/cla.json) en la rama master.",
+          "evidence": [
+            ".github/workflows/cla.yml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-ci#pypi-workflow-corre-tests-antes-de-publicar",
+          "text": "pypi.yaml tiene un job test (needs del job publish); si los tests fallan, publish nunca corre. El job test de pypi.yaml NO construye el frontend antes de correr pytest (a diferencia de publish, que sí corre npm ci && npm run build) — el test suite depende del bundle ya commiteado en dist/, no de un build fresco.",
+          "evidence": [
+            ".github/workflows/pypi.yaml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-ci#pypi-solo-dispara-en-release-published",
+          "text": "pypi.yaml solo se dispara con on: release: types: [published] — publicar a PyPI requiere crear un GitHub Release manualmente, no basta con pushear un tag.",
+          "evidence": [
+            ".github/workflows/pypi.yaml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-ci#pypi-usa-trusted-publishing-oidc",
+          "text": "El job publish de pypi.yaml declara permissions: id-token: write y usa pypa/gh-action-pypi-publish sin ningún token/secret explícito — usa 'trusted publishing' (OIDC) contra PyPI en vez de un API token almacenado como secret.",
+          "evidence": [
+            ".github/workflows/pypi.yaml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-ci#test-workflow-branches-limitadas",
+          "text": "test.yml dispara push solo en [master, main, feature/*, refactor/*] y pull_request solo hacia [master, main] — un push a una rama que no matchee ninguno de esos 4 patrones no dispara CI vía push.",
+          "evidence": [
+            ".github/workflows/test.yml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-ci#test-workflow-no-construye-frontend",
+          "text": "test.yml (el workflow de cada push/PR) tampoco construye el frontend — depende enteramente de que dist/ esté commiteado y actualizado; si alguien edita editor/frontend/src/ sin regenerar dist/ y commitear el resultado, CI no lo detecta ni lo reconstruye.",
+          "evidence": [
+            ".github/workflows/test.yml"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-tests",
+      "heading": "Sistema de tests",
+      "claims": [
+        {
+          "id": "sistema-tests#run-once-shim-reemplaza-api-run-eliminado",
+          "text": "tests/helpers.py::run_once es un reemplazo test-only de una función pública rayflow.api.run() que ya no existe: hace load->execute->unload incondicional. tests/test_server.py::test_graphstate_persists_across_requests es el test de regresión que verifica que server.py NO usa ese patrón (3 POSTs sucesivos acumulan count 1,2,3, no resetean).",
+          "evidence": [
+            "tests/helpers.py#run_once",
+            "tests/test_server.py#test_graphstate_persists_across_requests"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#run-once-migra-flow-inputs-legacy-a-entry-node-dinamico",
+          "text": "run_once contiene un shim de migración: si el dict de flow tiene un campo top-level inputs (el antiguo flow.inputs, ya eliminado del schema), genera dinámicamente una clase @entry_node con esos inputs y reescribe el type de cualquier nodo FlowInput/OnStart para usarla.",
+          "evidence": [
+            "tests/helpers.py#run_once"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#entry-fixtures-nunca-en-catalogo-real",
+          "text": "Las fixtures de entry nodes usadas por múltiples suites (EntryXY, EntryX, EntryAB, etc.) viven en tests/entry_fixtures.py, no en rayflow/nodes/builtin/, para que no aparezcan en el catálogo real de un usuario de pip install rayflow — deben re-registrarse manualmente tras cada reset_catalog().",
+          "evidence": [
+            "tests/entry_fixtures.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#build-entry-node-mutuamente-exclusivo-con-ray-node",
+          "text": "tests/test_build.py::test_build_ray_node_with_is_entry_rejected verifica que @ray_node sobre una clase con @entry_node lanza ValueError matcheando \"@entry_node\"; test_build_entry_node_with_exec_in_rejected verifica que un @entry_node con exec_in lanza ValueError matcheando \"exec_in\".",
+          "evidence": [
+            "tests/test_build.py#test_build_ray_node_with_is_entry_rejected"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#build-mas-de-un-entry-node-es-error",
+          "text": "test_build_more_than_one_entry_node verifica que un flow con dos nodos is_entry falla el build con BuildError matcheando \"more than one entry\" — el build layer exige exactamente un entry point por flow.",
+          "evidence": [
+            "tests/test_build.py#test_build_more_than_one_entry_node"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#and-join-se-resetea-en-cada-iteracion-de-loop",
+          "text": "test_and_join_inside_loop_resets es un test de regresión: antes, _exec_arrivals no se reseteaba tras quedar 'ready', un AND-join dentro de un loop ForEach de 3 iteraciones con fan-out de 2 ramas terminaba en contador 5 en vez de 3. El test actual verifica count==3.",
+          "evidence": [
+            "tests/test_executor.py#test_and_join_inside_loop_resets"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#runcontext-aisla-outputs-entre-runs-del-mismo-flow-cargado",
+          "text": "test_outputs_not_stale_between_runs: con el mismo flow cargado una sola vez y ejecutado dos veces con distinta rama disparada, el resultado del run 2 debe ser None (default), no el valor stale del run 1 — confirma que los outputs de nodos son per-run, no compartidos en GraphState.",
+          "evidence": [
+            "tests/test_executor.py#test_outputs_not_stale_between_runs"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#set-response-status-dos-caminos-engine-vs-ray-node",
+          "text": "ctx.set_response_status()/set_response_header() se verifican por dos caminos distintos: test_set_response_status_and_header_engine_node (closure local, sin RPC) y test_set_response_status_ray_node (vía RPC set_response_meta en el actor FlowEngine desde un worker separado) — ambos convergen en el mismo evento flow_done.",
+          "evidence": [
+            "tests/test_executor.py#test_set_response_status_ray_node"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#response-headers-no-sangran-entre-requests-http-reales",
+          "text": "test_ctx_set_response_status_reaches_the_real_http_response verifica extremo a extremo que un header de error seteado en un request denegado NO aparece en un segundo request exitoso al mismo flow servido — aislamiento por-request real sobre el mismo GraphState persistente.",
+          "evidence": [
+            "tests/test_server.py#test_ctx_set_response_status_reaches_the_real_http_response"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#served-requiere-load-explicito-no-hay-autoload",
+          "text": "test_run_404_for_unserved_editor_flow y test_editor_load_then_run_succeeds verifican que POST /flows/{name}/run da 404 si el flow existe pero nunca se llamó POST /editor/flows/{name}/load — 'servido' == 'cargado explícitamente', sin auto-carga bajo demanda.",
+          "evidence": [
+            "tests/test_server.py#test_run_404_for_unserved_editor_flow"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#validate-recolecta-todos-los-errores-en-un-pase",
+          "text": "test_validate_collects_multiple_errors verifica que /editor/validate devuelve >=4 errores simultáneos para un flow con 4 problemas distintos en una sola llamada — no se detiene en el primer error como sí lo hace build() (fail-fast). Dos modos de validación con comportamiento de error distinto: fail-fast (build) vs collect-all (validate_all).",
+          "evidence": [
+            "tests/test_editor.py#test_validate_collects_multiple_errors"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#mcp-update-flow-invalida-grafo-cargado-stale",
+          "text": "test_update_flow_unloads_stale_loaded_graph (MCP) verifica que sin des-cargar el flow al hacer update_flow, run_flow/test_flow seguirían ejecutando silenciosamente el grafo VIEJO tras la actualización — el test corre el flow, actualiza sus nodos, y verifica que el segundo run_flow da el resultado NUEVO.",
+          "evidence": [
+            "tests/test_mcp.py#test_update_flow_unloads_stale_loaded_graph"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#custom-nodes-discovery-por-convencion-cwd",
+          "text": "tests/test_custom_nodes.py verifica que get_catalog() descubre nodos custom por convención (./custom_nodes/*.py relativo al cwd del proceso), no por configuración explícita, y que workspace.runtime_env() inyecta py_modules apuntando a ese directorio para que los workers Ray remotos también puedan importarlos.",
+          "evidence": [
+            "tests/test_custom_nodes.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-tests#cli-install-force-nunca-toca-mcp-json",
+          "text": "test_install_claude_tools_force_overwrites_skills_but_not_mcp_json verifica que rayflow install claude-tools --force sobreescribe archivos de skills/agent tampereados pero JAMÁS toca un .mcp.json preexistente — asimetría deliberada entre ambos tipos de archivo bajo el mismo flag.",
+          "evidence": [
+            "tests/test_cli.py#test_install_claude_tools_force_overwrites_skills_but_not_mcp_json"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-licenciamiento",
+      "heading": "Docs > Licenciamiento (CLA, LICENSE, licencia comercial)",
+      "claims": [
+        {
+          "id": "sistema-docs-licenciamiento#cla-retiene-copyright-cede-relicenciamiento",
+          "text": "El CLA no transfiere propiedad: el contribuidor retiene copyright pero otorga al maintainer licencia perpetua/irrevocable/no-exclusiva para relicenciar la contribución bajo AGPL y/o comercial.",
+          "evidence": [
+            "CLA.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#cla-patent-grant-alcance-limitado",
+          "text": "El patent grant del CLA (§4) es acotado: solo cubre patent claims necesariamente infringidos por la Contribución sola o combinada con el Project, no un grant general.",
+          "evidence": [
+            "CLA.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#cla-sin-obligacion-de-incorporar",
+          "text": "El CLA deja explícito que incluir la Contribución es discreción exclusiva del maintainer; firmar no obliga a mergear nada.",
+          "evidence": [
+            "CLA.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#firma-cla-automatizada-por-bot",
+          "text": "La firma se registra automáticamente: en la primera PR de un externo, el workflow cla.yml pide comentar el texto exacto \"I have read the CLA Document and I hereby sign the CLA\", y la firma se persiste en signatures/cla.json (rama master).",
+          "evidence": [
+            ".github/workflows/cla.yml",
+            "signatures/cla.json"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#contribuir-sin-firmar-cla-via-issues",
+          "text": "No firmar el CLA no bloquea contribuir vía issues/bug reports/feature requests — solo el código requiere firma.",
+          "evidence": [
+            "CONTRIBUTING.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#dual-license-agpl-o-comercial",
+          "text": "Dual-license: AGPL-3.0-or-later gratis para cualquier uso; licencia comercial separada requerida específicamente para embeber en producto cerrado, ofrecer como SaaS sin liberar fuente, o distribuir bajo términos incompatibles con AGPL.",
+          "evidence": [
+            "COMMERCIAL-LICENSE.md"
+          ],
+          "docs": [
+            "README.md",
+            "LICENSE"
+          ]
+        },
+        {
+          "id": "sistema-docs-licenciamiento#agpl-obligacion-red-parrafo-13",
+          "text": "La cláusula específica de copyleft de red (lo que distingue AGPL de GPL) es la §13 de LICENSE: quien modifica y ofrece el programa remotamente por red debe ofrecer el Corresponding Source de esa versión modificada.",
+          "evidence": [
+            "LICENSE"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#contacto-licencia-comercial",
+          "text": "Única vía documentada para licencia comercial: contacto directo con el maintainer por email — no hay proceso self-service.",
+          "evidence": [
+            "COMMERCIAL-LICENSE.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-licenciamiento#uso-no-comercial-cubierto-gratis",
+          "text": "Uso personal/educativo/investigación/sin-fines-de-lucro está 100% cubierto por AGPL gratis; la licencia comercial apunta a compañías que necesitan operar fuera de los términos AGPL.",
+          "evidence": [
+            "COMMERCIAL-LICENSE.md"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-repo-meta",
+      "heading": "Docs > Meta del repo (.gitignore y similares)",
+      "claims": [
+        {
+          "id": "sistema-docs-repo-meta#gitignore-comentarios-inline-rompen-patrones",
+          "text": "Varias reglas de la sección 'Project specific' de .gitignore (flows/, custom_nodes/, *.json, node_modules/, /nodes/, alias shadcn) llevan un comentario # en la MISMA línea del patrón. Git solo trata # como comentario si está al inicio absoluto de la línea — en cualquier otra posición es literal parte del patrón. Resultado: esas reglas nunca matchean nada real y son no-operativas. Reproducido con git check-ignore -v: 'flows/a.json', 'node_modules/c.js', 'nodes/d.py' y cualquier '*.json' NO matchean, mientras que reglas sin comentario inline en el mismo archivo (__pycache__/, .vscode/) sí matchean correctamente.",
+          "evidence": [
+            ".gitignore"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-repo-meta#gitignore-json-tracked-pese-a-comentario",
+          "text": "Pese a la intención documentada de excluir *.json (flows de usuario), varios .json esenciales del repo (RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_file_map.json, rayflow_issues.json, package.json del frontend) están trackeados en git — no por excepción deliberada, sino porque el patrón nunca fue funcional (ver claim de comentarios inline).",
+          "evidence": [
+            ".gitignore"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "meta-generacion-claude-md",
+      "heading": "Docs > Generación de CLAUDE.md",
+      "claims": [
+        {
+          "id": "meta-generacion-claude-md#no-bloqueo-edicion-claude-md-por-diseno",
+          "text": "A diferencia del SOT (bloqueo de dos capas), se evaluó y descartó explícitamente un mecanismo de bloqueo para CLAUDE.md: alcanza con que se sobreescriba solo en cada commit — no hace falta prohibir algo que ya se autocorrige.",
+          "evidence": [
+            "docs/claude_md_generation.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "meta-generacion-claude-md#claude-md-tracked-no-gitignored-por-bootstrap",
+          "text": "CLAUDE.md se mantiene git-tracked (no gitignored) a propósito: gitignorarlo dejaría un clone fresco sin CLAUDE.md hasta la primera regeneración, y como Claude Code lo lee al arrancar sesión sin garantía de que un hook corra antes, la primera sesión en un clone nuevo se quedaría sin contexto.",
+          "evidence": [
+            "docs/claude_md_generation.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "meta-generacion-claude-md#generador-deterministico-sin-llm-git-add-en-el-hook",
+          "text": "scripts/generate_claude_md.py es puramente determinístico (sin LLM, sin red). El hook claude-md-generate nunca falla (siempre exit 0); si el contenido generado es igual al de disco no toca el árbol; si difiere, sobreescribe y corre git add CLAUDE.md él mismo dentro del hook.",
+          "evidence": [
+            "scripts/generate_claude_md.py"
+          ],
+          "docs": [
+            "docs/claude_md_generation.md"
+          ]
+        },
+        {
+          "id": "meta-generacion-claude-md#claude-tools-no-afectado-por-generacion",
+          "text": "rayflow/claude_tools/ (instalado en proyectos de terceros vía rayflow install claude-tools) es un producto de audiencia distinta, no afectado por este mecanismo.",
+          "evidence": [
+            "docs/claude_md_generation.md"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-auditoria",
+      "heading": "Docs > Sistema de auditoría e issues",
+      "claims": [
+        {
+          "id": "sistema-docs-auditoria#rayflow-issues-json-solo-abiertos-sin-historial",
+          "text": "rayflow_issues.json solo contiene issues abiertos; 'resolver' un issue es eliminarlo del array en el mismo commit del fix — el historial vive en git log/blame, no en el archivo.",
+          "evidence": [
+            "docs/issues_system.md",
+            "rayflow_issues.json"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-auditoria#sot-docs-nunca-incluye-claude-md",
+          "text": "El campo docs de un claim en el SOT nunca incluye CLAUDE.md a propósito: una vez que CLAUDE.md se genera desde el SOT, deja de ser 'otra doc que puede desincronizarse' y pasa a ser una vista siempre-en-sync del propio claim.",
+          "evidence": [
+            "docs/issues_system.md",
+            "RAYFLOW_SOURCE_OF_TRUTH.json#$schema_note"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-auditoria#rayflow-issue-writer-unico-punto-escritura",
+          "text": "rayflow-issue-writer es el único agente con Edit sobre rayflow_issues.json; rayflow-auditor perdió Edit en un refactor posterior y ahora siempre delega hallazgos confirmados en vez de escribir directo, incluso corriendo standalone.",
+          "evidence": [
+            "docs/issues_system.md"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-runcontext",
+      "heading": "Docs > Propuesta RunContext (staleness)",
+      "claims": [
+        {
+          "id": "sistema-docs-runcontext#runcontext-ya-implementado-doc-sin-actualizar",
+          "text": "docs/propuesta-runcontext.md sigue redactado como propuesta pendiente ('Documento de diseño para ejecutar en una sesión nueva', plan incremental de 3 pasos aún sin marcar), pero el refactor que describe YA está implementado: rayflow/engine/executor.py define class RunContext (run_id, queue, node_outputs, exec_arrivals, output_refs) threadeada por parámetro, y _exec_lock ya no existe en el engine. A diferencia de otros docs de diseño que sí llevan un banner 'Actualización — implementado' agregado después de ejecutarse, este documento NO fue actualizado.",
+          "evidence": [
+            "rayflow/engine/executor.py#RunContext",
+            "docs/propuesta-runcontext.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-runcontext#graphstate-ya-no-tiene-node-outputs",
+          "text": "Consistente con lo anterior: rayflow/state/actor.py ya no tiene _node_outputs/set_node_outputs/get_node_output/node_has_fired — exactamente lo que la propuesta pedía remover al mover outputs de nodos al RunContext por-run.",
+          "evidence": [
+            "rayflow/state/actor.py",
+            "docs/propuesta-runcontext.md"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-agentes-especialistas",
+      "heading": "Docs > Sistema de agentes especialistas",
+      "claims": [
+        {
+          "id": "sistema-docs-agentes-especialistas#recomendacion-original-revertida",
+          "text": "El documento registra una recomendación original (no embeber contenido en los .md de especialistas) explícitamente REVERTIDA en la implementación: los 21 rayflow-<sistema>-specialist.md generados sí llevan contenido embebido, justificado en que la regeneración automática por commit neutraliza el riesgo de staleness que motivaba la recomendación original.",
+          "evidence": [
+            "rayflow_agents_system.md",
+            "scripts/generate_specialist_agents.py"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-agentes-especialistas#sin-curacion-un-especialista-por-sistema",
+          "text": "No hay curación: se genera un especialista por cada uno de los 21 sistemas sin excepción, incluso los triviales en cantidad de archivos (ej. events con 2 archivos), porque el contenido SOT relevante no es proporcional a la cantidad de archivos.",
+          "evidence": [
+            "rayflow_agents_system.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-agentes-especialistas#bug-yaml-description-con-dos-puntos",
+          "text": "Bug real encontrado y corregido durante la implementación: la primera versión del generador escribía description como escalar YAML plano, rompiendo el parseo si contenía ':' — se corrigió serializando con json.dumps(); un bug análogo con '|' literal en tablas Markdown también se corrigió con escape.",
+          "evidence": [
+            "rayflow_agents_system.md",
+            "scripts/generate_specialist_agents.py"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-analisis-conceptual",
+      "heading": "Docs > Análisis conceptual y docs históricas",
+      "claims": [
+        {
+          "id": "sistema-docs-analisis-conceptual#rayflow-md-marcado-como-historico",
+          "text": "docs/rayflow.md se autodeclara en su encabezado como 'documento histórico — diseño v1' que ya no coincide con la implementación en puntos centrales, remitiendo a CLAUDE.md para arquitectura vigente.",
+          "evidence": [
+            "docs/rayflow.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-docs-analisis-conceptual#tabla-divergencias-siete-puntos",
+          "text": "docs/analisis-conceptual.md §12 documenta 7 divergencias concretas entre docs/rayflow.md y el código: el motor real es recursión en profundidad (_run_loop), no un event loop sobre cola de triggers; SÍ existe fan-out/paralelismo de control (exec_targets disparado con asyncio.gather), contradiciendo la afirmación de rayflow.md de que 'no existe paralelismo de control'; el bus de eventos real se llama rayflow_event_broker con API serve_events(), no rayflow_event_bus/serve().",
+          "evidence": [
+            "docs/analisis-conceptual.md"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-docs-readme",
+      "heading": "Docs > README",
+      "claims": [
+        {
+          "id": "sistema-docs-readme#readme-python-api-surface-nombre-parametro-informal",
+          "text": "README.md documenta la superficie pública como load(source), execute(name, inputs), unload(name), serve_events(source), stop(graph_id, events) — el nombre de parámetro 'events' es prosa informal: la firma real es stop(graph_id: str, event_names: list[str]).",
+          "evidence": [
+            "rayflow/api.py#stop",
+            "README.md"
+          ],
+          "docs": []
+        }
+      ]
+    },
+    {
+      "id": "sistema-hooks-infra",
+      "heading": "Sistema de hooks-infra",
+      "claims": [
+        {
+          "id": "sistema-hooks-infra#dos-capas-bloqueo-sot",
+          "text": "El bloqueo de ediciones a RAYFLOW_SOURCE_OF_TRUTH.json tiene dos capas independientes: Layer 1 (.claude/hooks/sot_guard.py, hook PreToolUse de sesión, solo cubre Edit/Write) y Layer 2 (scripts/check_sot_commit_message.py, hook commit-msg de pre-commit, la única con garantía real porque corre sobre el staged state de git sin importar cómo se editó el archivo).",
+          "evidence": [
+            ".claude/hooks/sot_guard.py#main",
+            "scripts/check_sot_commit_message.py#main"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#sot-guard-env-unlock",
+          "text": "sot_guard.py solo deniega el Edit/Write sobre RAYFLOW_SOURCE_OF_TRUTH.json si la env var RAYFLOW_SOT_UNLOCK no vale exactamente \"1\"; es un bypass de sesión, nunca persistido.",
+          "evidence": [
+            ".claude/hooks/sot_guard.py#main"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#commit-msg-trailer-regex",
+          "text": "check_sot_commit_message.py solo exige que el mensaje de commit contenga una línea que matchee ^Sot-Change:\\s*\\S.*$ (multiline); no valida contenido semántico ni referencia a ningún issue_id.",
+          "evidence": [
+            "scripts/check_sot_commit_message.py#TRAILER_RE"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#commit-msg-fail-open",
+          "text": "check_sot_commit_message.py falla abierto (retorna 0, no bloquea) si git diff --cached --name-only lanza una excepción, o si no recibe el path del archivo de mensaje como argv — el chequeo se trata explícitamente como 'deliberate-change gate, not a security boundary'.",
+          "evidence": [
+            "scripts/check_sot_commit_message.py#staged_files"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#sot-audit-scope",
+          "text": "scripts/run_sot_audit.py (hook pre-commit, no commit-msg) usa _sot_scope.affected_claims() sobre los archivos staged para invocar claude -p --agent rayflow-auditor SOLO con los claim_ids cuya evidencia se solapa con el diff — si no hay solapamiento, no se ejecuta el LLM en absoluto.",
+          "evidence": [
+            "scripts/run_sot_audit.py#main",
+            ".claude/hooks/_sot_scope.py#affected_claims"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#sot-audit-blocking-signal",
+          "text": "run_sot_audit.py bloquea el commit (exit 1) únicamente cuando los bytes de rayflow_issues.json cambian tras correr el auditor (comparación before==after), no por el código de salida del subproceso ni por su stdout; falla abierto (exit 0, warning en stderr) si falta el binario claude, hay timeout, o el proceso terminó no-cero sin escribir el archivo.",
+          "evidence": [
+            "scripts/run_sot_audit.py#main"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#evidence-matching-ignora-symbol",
+          "text": "_sot_scope.py matchea archivos ignorando cualquier sufijo #symbol de las entradas de evidence, y esta misma función (affected_claims) la reutiliza scripts/generate_specialist_agents.py para poblar la sección de SOT de cada specialist — no es solo un helper del auditor.",
+          "evidence": [
+            ".claude/hooks/_sot_scope.py#affected_claims",
+            "scripts/generate_specialist_agents.py#_sot_section"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#claude-md-agents-nunca-bloquean",
+          "text": "Los hooks claude-md-generate y agents-generate, ambos stage pre-commit, son deterministas (sin LLM), sobrescriben CLAUDE.md/.claude/agents/rayflow-<sistema>-specialist.md cuando el contenido cambia, hacen git add de lo regenerado, y nunca retornan código de bloqueo.",
+          "evidence": [
+            "scripts/generate_claude_md.py#main",
+            "scripts/generate_specialist_agents.py#main"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#orden-hooks-pre-commit",
+          "text": "En .pre-commit-config.yaml los hooks claude-md-generate y agents-generate (stage pre-commit) están declarados antes de sot-audit (también pre-commit); sot-commit-guard corre en stage separado commit-msg.",
+          "evidence": [
+            ".pre-commit-config.yaml"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#hooks-fail-silent-en-settings",
+          "text": "Los 8 comandos de hook wireados en .claude/settings.json se invocan todos con ... 2>/dev/null || true, de modo que un crash del script nunca bloquea el tool call subyacente de Claude Code.",
+          "evidence": [
+            ".claude/settings.json#hooks"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#stale-reminder-unico-bloqueante",
+          "text": "De todos los hooks de Claude Code en este sistema, stale_reminder.py (evento Stop) es el único que efectivamente bloquea ({\"decision\": \"block\"}) en vez de solo inyectar additionalContext; usa stop_hook_active para dispararse como máximo una vez por ciclo de Stop.",
+          "evidence": [
+            ".claude/hooks/stale_reminder.py#main"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#ty-diff-cancela-falsos-positivos",
+          "text": "El par ty_diff_pre.py/ty_diff_post.py reporta solo diagnósticos de ty que aparecen en el snapshot posterior a una edición pero no en el previo; esto cancela los falsos positivos conocidos de ty sobre código @ray.remote porque aparecen en ambos snapshots. Puramente advisorio, no-opera si ty no está instalado.",
+          "evidence": [
+            ".claude/hooks/_ty_check.py#ty_diagnostics",
+            ".claude/hooks/ty_diff_post.py#main"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#file-map-shared-helper",
+          "text": "Siete de los ocho hooks basados en rayflow_file_map.json importan su lógica común (load_map, repo_relative, extract_python_symbols vía ast) desde el módulo compartido .claude/hooks/_file_map.py, que no es en sí mismo un hook.",
+          "evidence": [
+            ".claude/hooks/_file_map.py#load_map"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#auditor-sin-edit-delega-a-issue-writer",
+          "text": "El subagente rayflow-auditor no tiene Edit en su frontmatter (tools: Read, Grep, Glob, Agent, SendMessage) y no puede escribir en ningún archivo, incluido rayflow_issues.json; delega cada hallazgo confirmado a rayflow-issue-writer, que además re-verifica cada candidato de forma independiente antes de escribir.",
+          "evidence": [
+            ".claude/agents/rayflow-auditor.md"
+          ],
+          "docs": []
+        },
+        {
+          "id": "sistema-hooks-infra#settings-json-agent-rayflow-main",
+          "text": ".claude/settings.json fija \"agent\": \"rayflow-main\", por lo que toda sesión nueva de Claude Code en este repo carga .claude/agents/rayflow-main.md como su system prompt/restricción de tools de hilo principal en vez del comportamiento default.",
+          "evidence": [
+            ".claude/settings.json#agent"
           ],
           "docs": []
         }

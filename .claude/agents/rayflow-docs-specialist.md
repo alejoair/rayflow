@@ -53,11 +53,66 @@ Es dependencia de: _(ningún otro sistema)_
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
-_Ningún claim de RAYFLOW_SOURCE_OF_TRUTH.json tiene evidencia en archivos de este sistema todavía (evidencia vacía o no localizada, o el sistema no está cubierto por el SOT)._
+### Frontend (editor visual)
+
+- **frontend-editor-visual#frontend-md-vs-claude-md-split-de-audiencia**: docs/frontend.md declara explícitamente su límite de alcance: arquitectura y convenciones de UI viven en CLAUDE.md, este doc describe features de usuario del editor — split deliberado de audiencia, no duplicación accidental. — evidencia: `docs/frontend.md`
+
+### Sistema de packaging
+
+- **sistema-packaging#dist-committed-al-repo**: El bundle de frontend compilado (rayflow/editor/static/dist/) está commiteado al repo pese a que .gitignore tiene una regla general dist/, gracias a una excepción explícita !rayflow/editor/static/dist/. — evidencia: `.gitignore`
+
+### Docs > Licenciamiento (CLA, LICENSE, licencia comercial)
+
+- **sistema-docs-licenciamiento#cla-retiene-copyright-cede-relicenciamiento**: El CLA no transfiere propiedad: el contribuidor retiene copyright pero otorga al maintainer licencia perpetua/irrevocable/no-exclusiva para relicenciar la contribución bajo AGPL y/o comercial. — evidencia: `CLA.md`
+- **sistema-docs-licenciamiento#cla-patent-grant-alcance-limitado**: El patent grant del CLA (§4) es acotado: solo cubre patent claims necesariamente infringidos por la Contribución sola o combinada con el Project, no un grant general. — evidencia: `CLA.md`
+- **sistema-docs-licenciamiento#cla-sin-obligacion-de-incorporar**: El CLA deja explícito que incluir la Contribución es discreción exclusiva del maintainer; firmar no obliga a mergear nada. — evidencia: `CLA.md`
+- **sistema-docs-licenciamiento#firma-cla-automatizada-por-bot**: La firma se registra automáticamente: en la primera PR de un externo, el workflow cla.yml pide comentar el texto exacto "I have read the CLA Document and I hereby sign the CLA", y la firma se persiste en signatures/cla.json (rama master). — evidencia: `.github/workflows/cla.yml`, `signatures/cla.json`
+- **sistema-docs-licenciamiento#contribuir-sin-firmar-cla-via-issues**: No firmar el CLA no bloquea contribuir vía issues/bug reports/feature requests — solo el código requiere firma. — evidencia: `CONTRIBUTING.md`
+- **sistema-docs-licenciamiento#dual-license-agpl-o-comercial**: Dual-license: AGPL-3.0-or-later gratis para cualquier uso; licencia comercial separada requerida específicamente para embeber en producto cerrado, ofrecer como SaaS sin liberar fuente, o distribuir bajo términos incompatibles con AGPL. — evidencia: `COMMERCIAL-LICENSE.md`
+- **sistema-docs-licenciamiento#agpl-obligacion-red-parrafo-13**: La cláusula específica de copyleft de red (lo que distingue AGPL de GPL) es la §13 de LICENSE: quien modifica y ofrece el programa remotamente por red debe ofrecer el Corresponding Source de esa versión modificada. — evidencia: `LICENSE`
+- **sistema-docs-licenciamiento#contacto-licencia-comercial**: Única vía documentada para licencia comercial: contacto directo con el maintainer por email — no hay proceso self-service. — evidencia: `COMMERCIAL-LICENSE.md`
+- **sistema-docs-licenciamiento#uso-no-comercial-cubierto-gratis**: Uso personal/educativo/investigación/sin-fines-de-lucro está 100% cubierto por AGPL gratis; la licencia comercial apunta a compañías que necesitan operar fuera de los términos AGPL. — evidencia: `COMMERCIAL-LICENSE.md`
+
+### Docs > Meta del repo (.gitignore y similares)
+
+- **sistema-docs-repo-meta#gitignore-comentarios-inline-rompen-patrones**: Varias reglas de la sección 'Project specific' de .gitignore (flows/, custom_nodes/, *.json, node_modules/, /nodes/, alias shadcn) llevan un comentario # en la MISMA línea del patrón. Git solo trata # como comentario si está al inicio absoluto de la línea — en cualquier otra posición es literal parte del patrón. Resultado: esas reglas nunca matchean nada real y son no-operativas. Reproducido con git check-ignore -v: 'flows/a.json', 'node_modules/c.js', 'nodes/d.py' y cualquier '*.json' NO matchean, mientras que reglas sin comentario inline en el mismo archivo (__pycache__/, .vscode/) sí matchean correctamente. — evidencia: `.gitignore`
+- **sistema-docs-repo-meta#gitignore-json-tracked-pese-a-comentario**: Pese a la intención documentada de excluir *.json (flows de usuario), varios .json esenciales del repo (RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_file_map.json, rayflow_issues.json, package.json del frontend) están trackeados en git — no por excepción deliberada, sino porque el patrón nunca fue funcional (ver claim de comentarios inline). — evidencia: `.gitignore`
+
+### Docs > Generación de CLAUDE.md
+
+- **meta-generacion-claude-md#no-bloqueo-edicion-claude-md-por-diseno**: A diferencia del SOT (bloqueo de dos capas), se evaluó y descartó explícitamente un mecanismo de bloqueo para CLAUDE.md: alcanza con que se sobreescriba solo en cada commit — no hace falta prohibir algo que ya se autocorrige. — evidencia: `docs/claude_md_generation.md`
+- **meta-generacion-claude-md#claude-md-tracked-no-gitignored-por-bootstrap**: CLAUDE.md se mantiene git-tracked (no gitignored) a propósito: gitignorarlo dejaría un clone fresco sin CLAUDE.md hasta la primera regeneración, y como Claude Code lo lee al arrancar sesión sin garantía de que un hook corra antes, la primera sesión en un clone nuevo se quedaría sin contexto. — evidencia: `docs/claude_md_generation.md`
+- **meta-generacion-claude-md#claude-tools-no-afectado-por-generacion**: rayflow/claude_tools/ (instalado en proyectos de terceros vía rayflow install claude-tools) es un producto de audiencia distinta, no afectado por este mecanismo. — evidencia: `docs/claude_md_generation.md`
+
+### Docs > Sistema de auditoría e issues
+
+- **sistema-docs-auditoria#rayflow-issues-json-solo-abiertos-sin-historial**: rayflow_issues.json solo contiene issues abiertos; 'resolver' un issue es eliminarlo del array en el mismo commit del fix — el historial vive en git log/blame, no en el archivo. — evidencia: `docs/issues_system.md`, `rayflow_issues.json`
+- **sistema-docs-auditoria#sot-docs-nunca-incluye-claude-md**: El campo docs de un claim en el SOT nunca incluye CLAUDE.md a propósito: una vez que CLAUDE.md se genera desde el SOT, deja de ser 'otra doc que puede desincronizarse' y pasa a ser una vista siempre-en-sync del propio claim. — evidencia: `docs/issues_system.md`, `RAYFLOW_SOURCE_OF_TRUTH.json#$schema_note`
+- **sistema-docs-auditoria#rayflow-issue-writer-unico-punto-escritura**: rayflow-issue-writer es el único agente con Edit sobre rayflow_issues.json; rayflow-auditor perdió Edit en un refactor posterior y ahora siempre delega hallazgos confirmados en vez de escribir directo, incluso corriendo standalone. — evidencia: `docs/issues_system.md`
+
+### Docs > Propuesta RunContext (staleness)
+
+- **sistema-docs-runcontext#runcontext-ya-implementado-doc-sin-actualizar**: docs/propuesta-runcontext.md sigue redactado como propuesta pendiente ('Documento de diseño para ejecutar en una sesión nueva', plan incremental de 3 pasos aún sin marcar), pero el refactor que describe YA está implementado: rayflow/engine/executor.py define class RunContext (run_id, queue, node_outputs, exec_arrivals, output_refs) threadeada por parámetro, y _exec_lock ya no existe en el engine. A diferencia de otros docs de diseño que sí llevan un banner 'Actualización — implementado' agregado después de ejecutarse, este documento NO fue actualizado. — evidencia: `rayflow/engine/executor.py#RunContext`, `docs/propuesta-runcontext.md`
+- **sistema-docs-runcontext#graphstate-ya-no-tiene-node-outputs**: Consistente con lo anterior: rayflow/state/actor.py ya no tiene _node_outputs/set_node_outputs/get_node_output/node_has_fired — exactamente lo que la propuesta pedía remover al mover outputs de nodos al RunContext por-run. — evidencia: `rayflow/state/actor.py`, `docs/propuesta-runcontext.md`
+
+### Docs > Sistema de agentes especialistas
+
+- **sistema-docs-agentes-especialistas#recomendacion-original-revertida**: El documento registra una recomendación original (no embeber contenido en los .md de especialistas) explícitamente REVERTIDA en la implementación: los 21 rayflow-<sistema>-specialist.md generados sí llevan contenido embebido, justificado en que la regeneración automática por commit neutraliza el riesgo de staleness que motivaba la recomendación original. — evidencia: `rayflow_agents_system.md`, `scripts/generate_specialist_agents.py`
+- **sistema-docs-agentes-especialistas#sin-curacion-un-especialista-por-sistema**: No hay curación: se genera un especialista por cada uno de los 21 sistemas sin excepción, incluso los triviales en cantidad de archivos (ej. events con 2 archivos), porque el contenido SOT relevante no es proporcional a la cantidad de archivos. — evidencia: `rayflow_agents_system.md`
+- **sistema-docs-agentes-especialistas#bug-yaml-description-con-dos-puntos**: Bug real encontrado y corregido durante la implementación: la primera versión del generador escribía description como escalar YAML plano, rompiendo el parseo si contenía ':' — se corrigió serializando con json.dumps(); un bug análogo con '|' literal en tablas Markdown también se corrigió con escape. — evidencia: `rayflow_agents_system.md`, `scripts/generate_specialist_agents.py`
+
+### Docs > Análisis conceptual y docs históricas
+
+- **sistema-docs-analisis-conceptual#rayflow-md-marcado-como-historico**: docs/rayflow.md se autodeclara en su encabezado como 'documento histórico — diseño v1' que ya no coincide con la implementación en puntos centrales, remitiendo a CLAUDE.md para arquitectura vigente. — evidencia: `docs/rayflow.md`
+- **sistema-docs-analisis-conceptual#tabla-divergencias-siete-puntos**: docs/analisis-conceptual.md §12 documenta 7 divergencias concretas entre docs/rayflow.md y el código: el motor real es recursión en profundidad (_run_loop), no un event loop sobre cola de triggers; SÍ existe fan-out/paralelismo de control (exec_targets disparado con asyncio.gather), contradiciendo la afirmación de rayflow.md de que 'no existe paralelismo de control'; el bus de eventos real se llama rayflow_event_broker con API serve_events(), no rayflow_event_bus/serve(). — evidencia: `docs/analisis-conceptual.md`
+
+### Docs > README
+
+- **sistema-docs-readme#readme-python-api-surface-nombre-parametro-informal**: README.md documenta la superficie pública como load(source), execute(name, inputs), unload(name), serve_events(source), stop(graph_id, events) — el nombre de parámetro 'events' es prosa informal: la firma real es stop(graph_id: str, event_names: list[str]). — evidencia: `rayflow/api.py#stop`, `README.md`
 
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

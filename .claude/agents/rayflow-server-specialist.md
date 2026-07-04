@@ -83,6 +83,15 @@ Es dependencia de: `cli`, `editor-api`, `events`, `mcp`, `nodes`, `tests`
 - **sistema-de-nodos-runqueue-sse#frontend-bundle-flow-get-flows-name**: Frontend bundle por flow (GET /flows/{name}/ui): si el entry de un flow servido declaró frontend, el handler dinámico de rayflow/server.py sirve ese bundle de assets. Aplica a todo flow en el registry (servidos por CLI o cargados desde el editor). — evidencia: `rayflow/state/queue.py`, `rayflow/engine/executor.py`, `rayflow/server.py`, `rayflow/editor/routes.py`, `rayflow/editor/frontend/src/hooks/useRunStream.ts`
 - **sistema-de-nodos-runqueue-sse#ui-monta-desmonta-automaticamente-segun-presencia**: La UI se "monta y desmonta" automáticamente según la presencia del flow en el registry: un DELETE /editor/flows/{name}/load hace que /ui devuelva 404 al instante, sin necesidad de desmontar nada en el router. — evidencia: `rayflow/server.py#run_flow`, `tests/test_server.py`, `tests/test_editor.py`
 - **sistema-de-nodos-runqueue-sse#ui-habla-flow-mismo-flows-name**: La UI habla con el flow por el mismo /flows/{name}/run de siempre — el atributo frontend solo selecciona "qué UI servir", no es un transporte nuevo. — evidencia: `rayflow/state/queue.py`, `rayflow/engine/executor.py`, `rayflow/server.py`, `rayflow/editor/routes.py`, `rayflow/editor/frontend/src/hooks/useRunStream.ts`
+- **sistema-de-nodos-runqueue-sse#timeout-runqueue-no-capturado-run-endpoint**: RunQueue.get() tiene un timeout hardcodeado de 300s que lanza asyncio.TimeoutError si se excede; ni execute() ni execute_async() (api.py) capturan esa excepción alrededor del loop de queue.get — solo reconnect_async() la atrapa (indirectamente, vía el except Exception genérico) y la convierte en un evento flow_error. Una corrida estancada más de 5 minutos hace crashear el generador principal usado por POST /flows/{name}/run en vez de emitir un error limpio. — evidencia: `rayflow/state/queue.py#RunQueue.get`, `rayflow/api.py#execute`, `rayflow/api.py#execute_async`, `rayflow/api.py#reconnect_async`
+
+### API REST del editor > Flows (rayflow/editor/routes.py)
+
+- **api-rest-flows#run-flow-editor-carga-implicita-vs-server-explicita**: A diferencia de POST /flows/{name}/run (server.py, devuelve 404 si el flow no está servido explícitamente), test_editor_flow (POST /editor/flows/{name}/test) sí carga el flow implícitamente con load_flow_api si is_flow_loaded(name) es falso, antes de ejecutarlo. — evidencia: `rayflow/editor/routes.py#test_editor_flow`, `rayflow/server.py#run_flow`
+
+### Capa MCP (para agentes LLM)
+
+- **capa-mcp#mcp-app-degradacion-graceful-si-fastmcp-falla**: create_app() en server.py envuelve la construcción del MCP (create_mcp().http_app(...)) en un try/except amplio — si fastmcp no está disponible o falla, el servidor sigue arrancando sin /mcp (solo loggea un warning), en vez de que todo rayflow serve caiga. — evidencia: `rayflow/server.py#create_app`
 
 ### Schema de un flow (JSON)
 
@@ -124,6 +133,9 @@ Es dependencia de: `cli`, `editor-api`, `events`, `mcp`, `nodes`, `tests`
 - **sistema-de-eventos#dispara-engine-execute-directamente-varios-eventos**: Como dispara engine.execute directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes — aisladas por el RunContext de cada una (sin lock). — evidencia: `rayflow/events/bus.py`, `rayflow/api.py`, `rayflow/nodes/builtin/events.py`
 - **sistema-de-eventos#matching-eventbroker-exacto-string-incluyendo-namespace**: El matching del EventBroker es exacto por string (incluyendo namespace, p.ej. "ventas/order_created"). — evidencia: `rayflow/events/bus.py`, `rayflow/api.py`, `rayflow/nodes/builtin/events.py`
 - **sistema-de-eventos#nadie-esta-suscrito-evento-pierde-hay**: Si nadie está suscrito al evento, se pierde — no hay persistencia. — evidencia: `rayflow/events/bus.py`, `rayflow/api.py`, `rayflow/nodes/builtin/events.py`
+- **sistema-de-eventos#unload-no-desuscribe-broker**: unload(name) en api.py NO desuscribe del EventBroker (solo llama sf.loaded.unload()) — únicamente stop(graph_id, event_names) hace broker.unsubscribe. Si un flow servido con serve_events() se saca de servicio con unload() en vez de stop(), la suscripción queda permanentemente en EventBroker._subscriptions (inofensiva por-publish, ya que _run_event_flow atrapa el ValueError de ray.get_actor sobre un actor muerto, pero es un leak real visible en list_subscriptions()). — evidencia: `rayflow/api.py#unload`, `rayflow/api.py#stop`
+- **sistema-de-eventos#publish-ignora-graph-id-guardado**: EventBroker.publish itera self._subscriptions[event_name] como (flow_name, _graph_id) y descarta _graph_id por completo — solo usa flow_name para resolver el actor engine_{flow_name} en _run_event_flow. El graph_id que subscribe() guarda solo se usa para filtrar en unsubscribe()/list_subscriptions(), nunca para decidir a qué actor despachar. — evidencia: `rayflow/events/bus.py#EventBroker.publish`, `rayflow/api.py#_run_event_flow`
+- **sistema-de-eventos#run-event-flow-invisible-a-sse-externo**: _run_event_flow genera un run_id nuevo (uuid interno) y lo crea/cierra dentro del mismo Ray task — ningún caller externo se entera de ese run_id, así que una ejecución disparada por evento (EmitEvent, OnVariableChange) es intrínsecamente inalcanzable vía GET /flows/{name}/run/{run_id}/stream: nadie fuera del propio task puede reconectarse a su trace SSE. — evidencia: `rayflow/api.py#_run_event_flow`
 
 ### Archivos clave del backend
 
@@ -132,9 +144,28 @@ Es dependencia de: `cli`, `editor-api`, `events`, `mcp`, `nodes`, `tests`
 - **archivos-clave-del-backend#rayflow-api-py-api-publica-load**: rayflow/api.py: API pública — load(), execute(), execute_async(), serve_events(), stop(). — evidencia: `rayflow/api.py`
 - **archivos-clave-del-backend#rayflow-workspace-py-convenciones-directorio-custom**: rayflow/workspace.py: convenciones de directorio — custom_nodes/, flows/. — evidencia: `rayflow/workspace.py`
 
+### Sistema de engine (ejecución interna del FlowEngine)
+
+- **sistema-engine#print-timing-incondicional-execute-async**: execute_async() imprime breadcrumbs de timing ('[timing] ...') vía print() plano en cada punto del flujo (start, load, queue handle, create_run, cada evento recibido) de forma incondicional en TODA ejecución vía HTTP — no está gateado por --debug ni por logging, parece instrumentación de profiling dejada en el código de producción. — evidencia: `rayflow/api.py#execute_async`
+
+### Sistema server (rayflow/server.py, rayflow.api)
+
+- **sistema-server#envelope-gana-sobre-body-contradice-comentario**: En POST /flows/{name}/run, flow_inputs se construye como {**inputs, 'headers': headers, 'query': query, 'body': inputs, 'method': method} — al estar los literales DESPUÉS del spread de **inputs, son ellos los que ganan en colisión, no las claves del body. Esto contradice el comentario adyacente ('Keys present in the body win over the envelope on collision'): si el body trae una clave llamada 'headers', su valor es sobreescrito por el header real de la request. — evidencia: `rayflow/server.py#run_flow`
+- **sistema-server#ui-traversal-guard-string-prefix**: El guard anti-traversal de /flows/{name}/ui/{rest:path} (str(target).startswith(str(bundle_dir.resolve()))) es un chequeo de prefijo de string, no de segmento de path — un directorio hermano cuyo nombre empiece con el nombre de bundle_dir es alcanzable con un rest tipo '../ui_internal/secret.txt'. — evidencia: `rayflow/server.py#flow_ui`
+- **sistema-server#autoload-distinto-api-vs-http**: rayflow.api.execute() auto-carga un flow no cargado (if not is_flow_loaded(name): load(name)) antes de ejecutarlo, mientras que POST /flows/{name}/run en server.py devuelve 404 si is_served(name) es False, sin auto-cargar nunca — los dos puntos de entrada 'ejecutar un flow por nombre' tienen semánticas de auto-load opuestas. — evidencia: `rayflow/api.py#execute`, `rayflow/server.py#run_flow`
+
+### Sistema CLI (rayflow/cli, claude_tools)
+
+- **sistema-cli#serve-runtime-env-none-si-no-hay-custom-nodes**: rayflow serve solo pasa runtime_env a ray.init() si runtime_env() (workspace.py) detecta al menos un archivo .py en custom_nodes/ además de __init__.py; si la carpeta está vacía o no existe, Ray arranca sin runtime_env en absoluto (no con uno vacío). — evidencia: `rayflow/workspace.py#runtime_env`, `rayflow/cli/main.py#serve`
+
+### Docs > README
+
+- **sistema-docs-readme#readme-python-api-surface-nombre-parametro-informal**: README.md documenta la superficie pública como load(source), execute(name, inputs), unload(name), serve_events(source), stop(graph_id, events) — el nombre de parámetro 'events' es prosa informal: la firma real es stop(graph_id: str, event_names: list[str]). — evidencia: `rayflow/api.py#stop`, `README.md`
+
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
-_Ningún issue abierto en rayflow_issues.json menciona este sistema._
+- **ISSUE-0005** (medium): server.py: el comentario sobre precedencia body-vs-envelope en run_flow describe el comportamiento opuesto al que hace el código
+- **ISSUE-0006** (high): flow_ui: el guard anti path-traversal compara prefijo de string, no segmento de path — un directorio hermano con nombre superpuesto lo esquiva
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

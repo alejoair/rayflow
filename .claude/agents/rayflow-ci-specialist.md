@@ -35,11 +35,23 @@ Es dependencia de: _(ningún otro sistema)_
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
-_Ningún claim de RAYFLOW_SOURCE_OF_TRUTH.json tiene evidencia en archivos de este sistema todavía (evidencia vacía o no localizada, o el sistema no está cubierto por el SOT)._
+### Sistema de CI
+
+- **sistema-ci#cla-maintainer-bypass**: El workflow de CLA (cla.yml) se salta la verificación por completo cuando el PR o el comentario 'recheck' proviene del usuario alejoair (maintainer), en ambos triggers — workaround documentado porque commits con autoría automatizada (ej. Claude <noreply@anthropic.com>) no tienen login de GitHub para matchear. — evidencia: `.github/workflows/cla.yml`
+- **sistema-ci#cla-usa-pull-request-target-permisos-elevados**: cla.yml dispara sobre pull_request_target (no pull_request), dándole acceso a secrets del repo base incluso para PRs de forks — necesario para poder escribir el archivo de firmas (signatures/cla.json) en la rama master. — evidencia: `.github/workflows/cla.yml`
+- **sistema-ci#pypi-workflow-corre-tests-antes-de-publicar**: pypi.yaml tiene un job test (needs del job publish); si los tests fallan, publish nunca corre. El job test de pypi.yaml NO construye el frontend antes de correr pytest (a diferencia de publish, que sí corre npm ci && npm run build) — el test suite depende del bundle ya commiteado en dist/, no de un build fresco. — evidencia: `.github/workflows/pypi.yaml`
+- **sistema-ci#pypi-solo-dispara-en-release-published**: pypi.yaml solo se dispara con on: release: types: [published] — publicar a PyPI requiere crear un GitHub Release manualmente, no basta con pushear un tag. — evidencia: `.github/workflows/pypi.yaml`
+- **sistema-ci#pypi-usa-trusted-publishing-oidc**: El job publish de pypi.yaml declara permissions: id-token: write y usa pypa/gh-action-pypi-publish sin ningún token/secret explícito — usa 'trusted publishing' (OIDC) contra PyPI en vez de un API token almacenado como secret. — evidencia: `.github/workflows/pypi.yaml`
+- **sistema-ci#test-workflow-branches-limitadas**: test.yml dispara push solo en [master, main, feature/*, refactor/*] y pull_request solo hacia [master, main] — un push a una rama que no matchee ninguno de esos 4 patrones no dispara CI vía push. — evidencia: `.github/workflows/test.yml`
+- **sistema-ci#test-workflow-no-construye-frontend**: test.yml (el workflow de cada push/PR) tampoco construye el frontend — depende enteramente de que dist/ esté commiteado y actualizado; si alguien edita editor/frontend/src/ sin regenerar dist/ y commitear el resultado, CI no lo detecta ni lo reconstruye. — evidencia: `.github/workflows/test.yml`
+
+### Docs > Licenciamiento (CLA, LICENSE, licencia comercial)
+
+- **sistema-docs-licenciamiento#firma-cla-automatizada-por-bot**: La firma se registra automáticamente: en la primera PR de un externo, el workflow cla.yml pide comentar el texto exacto "I have read the CLA Document and I hereby sign the CLA", y la firma se persiste en signatures/cla.json (rama master). — evidencia: `.github/workflows/cla.yml`, `signatures/cla.json`
 
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

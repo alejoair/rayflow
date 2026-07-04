@@ -51,9 +51,21 @@ Es dependencia de: _(ningún otro sistema)_
 - **comandos-de-desarrollo#hooks-ty-diff-pre-py-ty**: Los hooks `ty_diff_pre.py`/`ty_diff_post.py` en `.claude/hooks/` filtran ese ruido automáticamente comparando diagnósticos antes/después de cada edit. — evidencia: `pyproject.toml`, `rayflow/cli/main.py`, `rayflow/server.py`, `.claude/hooks/ty_diff_pre.py`, `.claude/hooks/ty_diff_post.py`, `.claude/hooks/_ty_check.py`
 - **comandos-de-desarrollo#servidor-sirve-editor-visual-editor-api**: El servidor sirve: editor visual en /editor, API REST en /flows, health check en /health. — evidencia: `pyproject.toml`, `rayflow/cli/main.py`, `rayflow/server.py`, `.claude/hooks/ty_diff_pre.py`, `.claude/hooks/ty_diff_post.py`, `.claude/hooks/_ty_check.py`
 
+### Sistema CLI (rayflow/cli, claude_tools)
+
+- **sistema-cli#install-claude-tools-copia-desde-package-data-md-mcp-json**: rayflow install claude-tools copia archivos desde rayflow/claude_tools/ (declarado como package_data en pyproject.toml) — el comando funciona también sobre una instalación pip install rayflow normal (no editable), porque los templates viajan empaquetados, no leídos desde un checkout de fuente. — evidencia: `pyproject.toml#package-data`, `rayflow/cli/main.py#_claude_tools_dir`
+
+### Sistema de packaging
+
+- **sistema-packaging#package-data-tres-reglas**: pyproject.toml declara tres reglas [tool.setuptools.package-data] independientes: rayflow.editor.static incluye dist/**/* (bundle del editor), rayflow.claude_tools incluye **/*.md + mcp.json (skills/agents/mcp.json), y rayflow.nodes.builtin incluye *_frontend/**/* (bundles de UI de entry nodes como ChatTrigger). — evidencia: `pyproject.toml#tool.setuptools.package-data`
+- **sistema-packaging#manifest-excluye-tooling-interno-no-docs**: MANIFEST.in excluye del sdist/wheel publicado: CLAUDE.md, rayflow_system_prompt.md, todo docs/, y 5 JSON de tooling LLM (rayflow_file_map.json, rayflow_workflows.json, rayflow_scenarios.json, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json) — son 'internal tooling artifacts, not user docs'. — evidencia: `MANIFEST.in`
+- **sistema-packaging#dependencias-runtime-vs-dev**: Las dependencias de runtime declaradas (ray>=2.40, fastapi>=0.110, uvicorn>=0.29, fastmcp>=2.3) no incluyen pytest/httpx/ty/pre-commit, que viven exclusivamente en [project.optional-dependencies].dev — consistente con que no hay pydantic en ninguna lista de deps. — evidencia: `pyproject.toml#dependencies`
+- **sistema-packaging#entry-point-cli-unico**: El único entry point de consola declarado es rayflow = "rayflow.cli.main:cli"; no hay otros scripts ([project.scripts] tiene una sola entrada). — evidencia: `pyproject.toml#project.scripts`
+- **sistema-packaging#pytest-asyncio-mode-auto**: [tool.pytest.ini_options] fija asyncio_mode = "auto", por lo que los tests async def de tests/test_mcp.py y tests/test_editor.py::test_concurrent_executions_are_isolated corren sin necesitar @pytest.mark.asyncio explícito. — evidencia: `pyproject.toml#tool.pytest.ini_options`
+
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

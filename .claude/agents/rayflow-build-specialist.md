@@ -53,9 +53,24 @@ Es dependencia de: `editor-api`, `engine`, `mcp`, `server`, `tests`
 
 - **archivos-clave-del-backend#rayflow-build-validator-py-flatten-build**: rayflow/build/validator.py: flatten(), build(), validación de tipos. — evidencia: `rayflow/build/validator.py`
 
+### Sistema de build (validación y BuiltFlow)
+
+- **sistema-build#null-literal-bypassea-required-y-tipo**: Un literal null explícito en inputs ({'pin': null}) NO dispara el chequeo de 'required' (raw no es _MISSING) NI el chequeo de tipo (_check_literal_type retorna temprano si value is None) — mientras que OMITIR la misma clave sí dispara el chequeo de required. Mismo valor efectivo (None), dos resultados de build distintos según presencia de la clave. — evidencia: `rayflow/build/validator.py#_validate_data_inputs`, `rayflow/build/validator.py#_check_literal_type`
+- **sistema-build#callflow-extra-inputs-siempre-any**: Los pines dinámicos que _with_dynamic_pins agrega para las 'extra inputs' de un CallFlow se tipan incondicionalmente como PinSpec(type='Any', ...) — la validación de tipos queda deshabilitada por diseño para cualquier valor pasado a un subflow por este mecanismo. — evidencia: `rayflow/build/validator.py#_with_dynamic_pins`
+- **sistema-build#callflow-flow-dinamico-bypassea-error-collector**: El chequeo de flatten() de que el 'flow' de un CallFlow sea estático (no una referencia con '.') hace raise BuildError directo, sin pasar por el objeto _Errors — así que incluso validate_all() (que en general acumula TODOS los errores) retorna solo ese único mensaje y aborta el resto de la validación cuando este caso ocurre. — evidencia: `rayflow/build/validator.py#flatten`, `rayflow/build/validator.py#validate_all`
+- **sistema-build#parse-exec-ref-default-silencioso-exec-out**: _parse_exec_ref, para una referencia 'node_id' (sin '.pin') hacia un nodo con exactamente un exec output, o hacia un node_id que NO existe en el grafo, retorna silenciosamente (src_id, 'exec_out') como default adivinado en ambos casos — la ambigüedad solo se reporta como error cuando el source SÍ existe y tiene MÁS de un exec output. — evidencia: `rayflow/build/validator.py#_parse_exec_ref`, `rayflow/build/validator.py#_validate_exec_inputs`
+
+### Sistema de engine (ejecución interna del FlowEngine)
+
+- **sistema-engine#entry-input-requerido-silenciosamente-none**: Un Input requerido del entry raíz sin valor en flow_inputs (body HTTP) resuelve a None en runtime sin error: build.py salta el chequeo de 'required' para el entry raíz (rnode.node_def.subflow_of is None) en _validate_data_inputs, y _resolve_inputs en el engine cae a val=None cuando el pin no está en run.flow_inputs y no tiene default — no hay validación de 'required' ni en build-time ni en runtime para pines del entry raíz. — evidencia: `rayflow/build/validator.py#_validate_data_inputs`, `rayflow/engine/executor.py#FlowEngine._resolve_inputs`
+
+### Sistema de state (GraphState)
+
+- **sistema-state#isolation-callflow-es-namespacing-no-actor**: Un CallFlow isolated no obtiene su propio actor GraphState: _var_key namespacea la clave (state_path/var_name) dentro del MISMO actor GraphState del flow raíz. 'Isolated' es una convención de nombres de clave, no aislamiento real de proceso/actor. — evidencia: `rayflow/engine/executor.py#_var_key`, `rayflow/build/validator.py#flatten`
+
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

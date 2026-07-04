@@ -80,9 +80,16 @@ Es dependencia de: `server`
 
 - **archivos-clave-del-backend#rayflow-cli-main-py-cli-rayflow**: rayflow/cli/main.py: CLI — rayflow serve. — evidencia: `rayflow/cli/main.py`
 
+### Sistema CLI (rayflow/cli, claude_tools)
+
+- **sistema-cli#serve-runtime-env-none-si-no-hay-custom-nodes**: rayflow serve solo pasa runtime_env a ray.init() si runtime_env() (workspace.py) detecta al menos un archivo .py en custom_nodes/ además de __init__.py; si la carpeta está vacía o no existe, Ray arranca sin runtime_env en absoluto (no con uno vacío). — evidencia: `rayflow/workspace.py#runtime_env`, `rayflow/cli/main.py#serve`
+- **sistema-cli#install-claude-tools-copia-desde-package-data-md-mcp-json**: rayflow install claude-tools copia archivos desde rayflow/claude_tools/ (declarado como package_data en pyproject.toml) — el comando funciona también sobre una instalación pip install rayflow normal (no editable), porque los templates viajan empaquetados, no leídos desde un checkout de fuente. — evidencia: `pyproject.toml#package-data`, `rayflow/cli/main.py#_claude_tools_dir`
+- **sistema-cli#force-nunca-toca-mcp-json-incluso-si-difiere-de-otro-server**: El test test_install_claude_tools_force_overwrites_skills_but_not_mcp_json confirma que incluso con --force, si .mcp.json ya existe con contenido que no registra rayflow, el comando lo deja completamente intacto. — evidencia: `tests/test_cli.py#test_install_claude_tools_force_overwrites_skills_but_not_mcp_json`, `rayflow/cli/main.py#install_claude_tools`
+- **sistema-cli#copy-tree-status-tres-valores-instalado-sobreescrito-salteado**: _copy_tree reporta tres estados distintos por archivo ("installed", "overwritten", "skipped (already exists, use --force to overwrite)") — el CLI imprime cada archivo individualmente, no un resumen agregado. — evidencia: `rayflow/cli/main.py#_copy_tree`
+
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

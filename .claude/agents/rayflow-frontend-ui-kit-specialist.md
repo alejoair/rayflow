@@ -55,9 +55,14 @@ Es dependencia de: `frontend-app`, `frontend-panels`
 - **reglas-de-ui#usar-buttonvariants-ni-cva-ambos-dependen**: No usar buttonVariants ni cva — ambos dependen de Tailwind. — evidencia: `rayflow/editor/frontend/src/index.css`, `rayflow/editor/frontend/src/components/ui/button.tsx`
 - **reglas-de-ui#usar-componente-badge-shadcn-tiene-problemas**: No usar el componente <Badge> de shadcn (tiene problemas de tipos). Usar spans directos con el estilo inline dado (borderRadius 5, padding 2px 8px, fontSize 11, fontWeight 500, lineHeight 18px, border 1px solid var(--border), color var(--muted-foreground)). — evidencia: `rayflow/editor/frontend/src/index.css`, `rayflow/editor/frontend/src/components/ui/button.tsx`
 
+### Frontend > Primitivas de UI (shadcn/ui adaptado)
+
+- **frontend-ui-kit#solo-3-de-11-primitivas-son-inline-styles-puras**: De los 11 archivos del sistema, solo button.tsx, input.tsx y select.tsx están efectivamente reescritos con style={{}} puro. Los otros 8 (accordion.tsx, badge.tsx, dialog.tsx, scroll-area.tsx, separator.tsx, tabs.tsx, textarea.tsx, tooltip.tsx) siguen usando strings de clases Tailwind extensos sin convertir a style. La descripción del sistema en rayflow_file_map.json ('rewritten to use inline styles instead of Tailwind') es cierta solo para una minoría de archivos. — evidencia: `rayflow/editor/frontend/src/components/ui/button.tsx`, `rayflow/editor/frontend/src/components/ui/dialog.tsx`
+- **frontend-ui-kit#8-de-11-primitivas-no-tienen-ningun-import**: De las 11 primitivas del ui-kit, 7 no tienen ningún import fuera de sus propios archivos de definición: accordion.tsx, badge.tsx, scroll-area.tsx, separator.tsx, tabs.tsx, textarea.tsx, tooltip.tsx — código muerto heredado del scaffold de shadcn/ui. Solo button.tsx, dialog.tsx, input.tsx, select.tsx están efectivamente en uso. — evidencia: `rayflow/editor/frontend/src/components/ui/accordion.tsx`
+
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
-_Ningún issue abierto en rayflow_issues.json menciona este sistema._
+- **ISSUE-0004** (low): El componente Button tiene 6 variantes reales (agrega secondary y link) pero la guía de UI solo documenta 4
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
