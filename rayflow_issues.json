@@ -1,7 +1,7 @@
 {
   "$schema_note": "Cola de issues ABIERTOS detectados al comparar RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del repo. Cada issue enlaza claim_ids (RAYFLOW_SOURCE_OF_TRUTH.json), files (rutas afectadas, típicamente ya en rayflow_file_map.json), y docs (archivos de documentación en prosa que también quedan desactualizados: CLAUDE.md, README.md, SKILL.md, guide.py, etc.). Este archivo NO acumula historial: 'resolver' un issue es eliminarlo del array en el mismo commit que aplica el fix — el historial completo (cuándo se creó, cuándo se resolvió, en qué commit) vive en `git log -p -- rayflow_issues.json` / `git blame`, no acá. `next_id` es un contador monótono que nunca retrocede ni reutiliza ids, aunque el array se achique — por eso puede haber huecos en la numeración. Ver docs/issues_system.md para el diseño completo.",
   "schema_version": 1,
-  "next_id": 5,
+  "next_id": 7,
   "issues": [
     {
       "id": "ISSUE-0001",
@@ -125,6 +125,62 @@
         {
           "file": "rayflow/editor/frontend/src/components/ui/button.tsx",
           "note": "VARIANT_STYLE (líneas 25-32) define 6 keys: default, destructive, outline, secondary, ghost, link — coherentes con el resto del componente (sin Tailwind), no solo las 4 mencionadas por la claim."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0005",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "server.py: el comentario sobre precedencia body-vs-envelope en run_flow describe el comportamiento opuesto al que hace el código",
+      "summary": "En rayflow/server.py, el endpoint POST /flows/{name}/run arma flow_inputs como {**inputs, \"headers\": headers, \"query\": query, \"body\": inputs, \"method\": method} (líneas 208-214). En Python, cuando un dict-literal tiene claves fijas después de un spread, esas claves fijas ganan en caso de colisión — así que si el body (inputs) trae una clave llamada \"headers\", \"query\", \"body\" o \"method\", el valor real del envelope (headers/query_params/inputs/method de la request HTTP) sobreescribe silenciosamente esa clave del body, no al revés. El comentario inmediatamente arriba (líneas 195-199) dice explícitamente: 'Keys present in the body win over the envelope on collision (reserved names like \"headers\"/\"body\"/\"query\"/\"method\" are explicit opt-in)' — lo opuesto de lo que ejecuta el código. No hay una claim del SOT que describa esta precedencia específica (las claims existentes sobre el entry/run_flow no entran en el detalle de colisión de claves), así que esto no contradice ninguna claim ya registrada — es un comentario de código que se desincroniza de su propia implementación, encontrado incidentalmente. No se puede determinar sin una decisión de producto cuál de los dos lados (código o comentario) es el comportamiento pretendido.",
+      "claim_ids": [],
+      "files": [
+        "rayflow/server.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-04T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-04T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/server.py",
+          "note": "Líneas 208-214: flow_inputs = {**inputs, \"headers\": headers, \"query\": query, \"body\": inputs, \"method\": method} — las claves literales van después del spread, así que ganan ellas (el envelope), no las de inputs (el body)."
+        },
+        {
+          "file": "rayflow/server.py",
+          "note": "Líneas 195-199: comentario que dice textualmente 'Keys present in the body win over the envelope on collision' — afirmación contraria al orden real del dict de las líneas 208-214."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0006",
+      "severity": "high",
+      "kind": "claim_contradicted",
+      "title": "flow_ui: el guard anti path-traversal compara prefijo de string, no segmento de path — un directorio hermano con nombre superpuesto lo esquiva",
+      "summary": "rayflow/server.py#flow_ui resuelve target = (bundle_dir / rest).resolve() y luego valida con 'if not str(target).startswith(str(bundle_dir.resolve())): raise 404' (líneas 279-282), inmediatamente después de un comentario que dice '# Prevent path traversal outside bundle_dir.' (línea 280). Ese chequeo es una comparación de PREFIJO DE STRING, no de segmento de path: si existe un directorio hermano de bundle_dir cuyo nombre empieza con el mismo string que el basename de bundle_dir (p.ej. bundle_dir resuelto en '.../my_node/ui' y un hermano '.../my_node/ui_internal' o '.../my_node/uiBackup'), un rest='../ui_internal/secreto.txt' resuelve (via .resolve()) a un path realmente fuera de bundle_dir cuyo str() sigue empezando con str(bundle_dir.resolve()) porque no hay separador de por medio en la comparación — el guard lo deja pasar incorrectamente, contradiciendo su propio comentario. bundle_dir se deriva en _resolve_bundle_dir (líneas 101-109) como node_dir / frontend, donde node_dir es el directorio del archivo .py del nodo custom y frontend es un string arbitrario declarado por el autor del nodo — es plausible que existan otros directorios hermanos bajo el mismo node_dir con nombres relacionados. No hay una claim del SOT que describa el detalle de implementación de este guard (las claims existentes sobre /flows/{name}/ui describen el montaje/desmontaje del bundle, no la lógica anti-traversal), así que esto no contradice ninguna claim ya registrada — es una debilidad de seguridad/robustez encontrada incidentalmente en el propio código y su comentario adyacente.",
+      "claim_ids": [],
+      "files": [
+        "rayflow/server.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-04T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-04T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/server.py",
+          "note": "Líneas 279-282: target = (bundle_dir / rest).resolve(); if not str(target).startswith(str(bundle_dir.resolve())): raise HTTPException(404) — comparación de prefijo de string pura, sin chequeo de separador de path ni uso de Path.is_relative_to."
+        },
+        {
+          "file": "rayflow/server.py",
+          "note": "Líneas 101-109 (_resolve_bundle_dir): bundle_dir = node_dir / frontend, donde frontend es un atributo de clase arbitrario declarado por el autor del nodo custom — node_dir puede tener hermanos con nombres que comparten el mismo prefijo que bundle_dir.name."
         }
       ]
     }
