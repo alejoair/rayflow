@@ -53,6 +53,7 @@ Es dependencia de: `engine`
 - **sistema-de-nodos-runqueue-sse#reconexion-sse-get-flows-name-run**: Reconexión SSE: GET /flows/{name}/run/{run_id}/stream consume la sub-queue existente sin relanzar la ejecución ni cerrarla — funciona igual para un flow servido o uno del editor, ya que solo depende de que el flow esté cargado en Ray (is_flow_loaded). — evidencia: `rayflow/state/queue.py`, `rayflow/engine/executor.py`, `rayflow/server.py`, `rayflow/editor/routes.py`, `rayflow/editor/frontend/src/hooks/useRunStream.ts`
 - **sistema-de-nodos-runqueue-sse#frontend-bundle-flow-get-flows-name**: Frontend bundle por flow (GET /flows/{name}/ui): si el entry de un flow servido declaró frontend, el handler dinámico de rayflow/server.py sirve ese bundle de assets. Aplica a todo flow en el registry (servidos por CLI o cargados desde el editor). — evidencia: `rayflow/state/queue.py`, `rayflow/engine/executor.py`, `rayflow/server.py`, `rayflow/editor/routes.py`, `rayflow/editor/frontend/src/hooks/useRunStream.ts`
 - **sistema-de-nodos-runqueue-sse#ui-habla-flow-mismo-flows-name**: La UI habla con el flow por el mismo /flows/{name}/run de siempre — el atributo frontend solo selecciona "qué UI servir", no es un transporte nuevo. — evidencia: `rayflow/state/queue.py`, `rayflow/engine/executor.py`, `rayflow/server.py`, `rayflow/editor/routes.py`, `rayflow/editor/frontend/src/hooks/useRunStream.ts`
+- **sistema-de-nodos-runqueue-sse#timeout-runqueue-no-capturado-run-endpoint**: RunQueue.get() tiene un timeout hardcodeado de 300s que lanza asyncio.TimeoutError si se excede; ni execute() ni execute_async() (api.py) capturan esa excepción alrededor del loop de queue.get — solo reconnect_async() la atrapa (indirectamente, vía el except Exception genérico) y la convierte en un evento flow_error. Una corrida estancada más de 5 minutos hace crashear el generador principal usado por POST /flows/{name}/run en vez de emitir un error limpio. — evidencia: `rayflow/state/queue.py#RunQueue.get`, `rayflow/api.py#execute`, `rayflow/api.py#execute_async`, `rayflow/api.py#reconnect_async`
 
 ### Sistema de eventos > Triggers por cambio de variable (OnVariableChange)
 
@@ -65,9 +66,18 @@ Es dependencia de: `engine`
 
 - **archivos-clave-del-backend#rayflow-state-actor-py-graphstate-variables**: rayflow/state/actor.py: GraphState — variables persistentes y su vigilancia (watch_variable). Los outputs de nodos viven en el RunContext del engine, no aquí. — evidencia: `rayflow/state/actor.py`
 
+### Sistema de state (GraphState)
+
+- **sistema-state#comparacion-fallida-asume-cambio**: GraphState.set_variable envuelve la comparación old != new en try/except Exception, y en caso de fallo (valores incomparables, __eq__ que lanza, etc.) asume changed=True y publica el evento igual — prioriza no perderse un cambio real sobre evitar falsos positivos. — evidencia: `rayflow/state/actor.py#GraphState.set_variable`
+- **sistema-state#graphstate-sync-vs-runqueue-async**: GraphState declara sus métodos como def (no async def), mientras que FlowEngine y RunQueue son actores con métodos async def — un actor Ray sync procesa una llamada a la vez sin puntos de interleaving posibles dentro de un método, una garantía de serialización más fuerte que la 'secuencialidad del engine' que el docstring de GraphState invoca: incluso dos execute() concurrentes de la MISMA flow que escriben la misma variable simultáneamente quedan serializados por el actor mismo. — evidencia: `rayflow/state/actor.py#GraphState`, `rayflow/state/queue.py#RunQueue`
+
+### Docs > Propuesta RunContext (staleness)
+
+- **sistema-docs-runcontext#graphstate-ya-no-tiene-node-outputs**: Consistente con lo anterior: rayflow/state/actor.py ya no tiene _node_outputs/set_node_outputs/get_node_output/node_has_fired — exactamente lo que la propuesta pedía remover al mover outputs de nodos al RunContext por-run. — evidencia: `rayflow/state/actor.py`, `docs/propuesta-runcontext.md`
+
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

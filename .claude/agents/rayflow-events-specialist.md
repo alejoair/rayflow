@@ -43,6 +43,7 @@ Es dependencia de: `cli`, `nodes`, `server`, `state`, `tests`
 - **sistema-de-eventos#dispara-engine-execute-directamente-varios-eventos**: Como dispara engine.execute directamente, varios eventos sobre el mismo flow generan ejecuciones concurrentes — aisladas por el RunContext de cada una (sin lock). — evidencia: `rayflow/events/bus.py`, `rayflow/api.py`, `rayflow/nodes/builtin/events.py`
 - **sistema-de-eventos#matching-eventbroker-exacto-string-incluyendo-namespace**: El matching del EventBroker es exacto por string (incluyendo namespace, p.ej. "ventas/order_created"). — evidencia: `rayflow/events/bus.py`, `rayflow/api.py`, `rayflow/nodes/builtin/events.py`
 - **sistema-de-eventos#nadie-esta-suscrito-evento-pierde-hay**: Si nadie está suscrito al evento, se pierde — no hay persistencia. — evidencia: `rayflow/events/bus.py`, `rayflow/api.py`, `rayflow/nodes/builtin/events.py`
+- **sistema-de-eventos#publish-ignora-graph-id-guardado**: EventBroker.publish itera self._subscriptions[event_name] como (flow_name, _graph_id) y descarta _graph_id por completo — solo usa flow_name para resolver el actor engine_{flow_name} en _run_event_flow. El graph_id que subscribe() guarda solo se usa para filtrar en unsubscribe()/list_subscriptions(), nunca para decidir a qué actor despachar. — evidencia: `rayflow/events/bus.py#EventBroker.publish`, `rayflow/api.py#_run_event_flow`
 
 ### Archivos clave del backend
 
@@ -53,4 +54,4 @@ Es dependencia de: `cli`, `nodes`, `server`, `state`, `tests`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

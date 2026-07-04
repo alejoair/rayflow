@@ -59,10 +59,14 @@ Es dependencia de: `server`, `tests`
 - **capa-mcp#mcp-json-registra-server-mcp-local**: .mcp.json: registra el server MCP local (http://localhost:8000/mcp/); solo se escribe si el usuario no tiene uno ya (nunca se sobreescribe, ni con --force). — evidencia: `rayflow/mcp/server.py`, `rayflow/cli/main.py`, `rayflow/claude_tools/mcp.json`
 - **capa-mcp#force-sobreescribe-skills-agente-existentes-nunca**: --force sobreescribe skills/agente existentes; nunca .mcp.json. — evidencia: `rayflow/mcp/server.py`, `rayflow/cli/main.py`, `rayflow/claude_tools/mcp.json`
 - **capa-mcp#sin-force-instalacion-idempotente-archivos-existentes**: Sin --force, la instalación es idempotente (archivos existentes se saltean). — evidencia: `rayflow/mcp/server.py`, `rayflow/cli/main.py`, `rayflow/claude_tools/mcp.json`
+- **capa-mcp#mcp-tools-nunca-lanzan-http-exception-devuelven-error-dict**: A diferencia de los endpoints REST equivalentes (que usan HTTPException con códigos 400/404/409), ninguna tool MCP lanza excepciones al cliente — todas devuelven {"error": "..."} con status 200 implícito de FastMCP. Contrato de error completamente distinto entre las dos superficies que reusan la misma lógica. — evidencia: `rayflow/mcp/server.py#get_flow`
+- **capa-mcp#run-flow-test-flow-no-recargan-flow-ya-cargado-optimizacion**: run_flow/test_flow (vía _run_and_collect) solo llaman load_api(data) si not is_flow_loaded(name) — si el flow ya está cargado, ejecutan el grafo existente en Ray tal cual está, sin comparar contra el JSON guardado. Esto es precisamente lo que obliga a update_flow/delete_flow a descargar explícitamente, pero la causa raíz — el chequeo is_flow_loaded como shortcut de performance — no está explicitada como claim propia. — evidencia: `rayflow/mcp/server.py#_run_and_collect`
+- **capa-mcp#trace-solo-filtra-tres-tipos-de-evento**: trace=True en run_flow/test_flow no captura todos los eventos SSE — filtra específicamente node_start, node_done, edge_fire, descartando explícitamente otros tipos de evento del array trace devuelto. — evidencia: `rayflow/mcp/server.py#_run_and_collect`
+- **capa-mcp#flow-catalog-mcp-omite-kind-en-outputs-vs-rest**: La tool MCP flow_catalog devuelve outputs como {"name":..., "type":...} (sin "kind"), mientras que el endpoint REST equivalente (GET /editor/flows/{name}/catalog) sí incluye "kind" en cada output — pequeña divergencia de shape entre las dos superficies que reusan la misma lógica. — evidencia: `rayflow/mcp/server.py#flow_catalog`, `rayflow/editor/routes.py#flow_catalog`
 
 ## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `c7fb55c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `c72b1ed`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

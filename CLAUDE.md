@@ -130,23 +130,46 @@ Cada sección abajo corresponde a un heading de este documento y tiene sus afirm
 | `carpeta-de-pruebas` | Carpeta de pruebas | 2 |
 | `comandos-de-desarrollo` | Comandos de desarrollo | 9 |
 | `arquitectura-general` | Arquitectura general | 5 |
-| `frontend-editor-visual` | Frontend (editor visual) | 19 |
-| `sistema-de-nodos-decoradores` | Sistema de nodos > Decoradores | 6 |
+| `frontend-editor-visual` | Frontend (editor visual) | 40 |
+| `sistema-de-nodos-decoradores` | Sistema de nodos > Decoradores | 11 |
 | `sistema-de-nodos-entrada` | Sistema de nodos > Nodos de entrada (@entry_node) | 18 |
 | `sistema-de-nodos-estado` | Sistema de nodos > Estado en nodos | 6 |
 | `sistema-de-nodos-ctx-fire` | Sistema de nodos > Cómo funciona ctx.fire() internamente | 2 |
 | `sistema-de-nodos-pending-outputs` | Sistema de nodos > Buffer _pending_outputs en engine_nodes | 4 |
-| `sistema-de-nodos-runqueue-sse` | Sistema de nodos > RunQueue y eventos de ejecución (SSE) | 22 |
-| `sistema-de-nodos-descubrimiento` | Sistema de nodos > Descubrimiento de nodos | 1 |
-| `api-rest-flows` | API REST del editor > Flows (rayflow/editor/routes.py) | 21 |
+| `sistema-de-nodos-runqueue-sse` | Sistema de nodos > RunQueue y eventos de ejecución (SSE) | 23 |
+| `sistema-de-nodos-descubrimiento` | Sistema de nodos > Descubrimiento de nodos | 3 |
+| `api-rest-flows` | API REST del editor > Flows (rayflow/editor/routes.py) | 28 |
 | `api-rest-custom-nodes` | API REST del editor > Nodos custom (rayflow/editor/custom_nodes_routes.py) | 8 |
-| `capa-mcp` | Capa MCP (para agentes LLM) | 23 |
-| `schema-de-un-flow` | Schema de un flow (JSON) | 14 |
+| `capa-mcp` | Capa MCP (para agentes LLM) | 28 |
+| `schema-de-un-flow` | Schema de un flow (JSON) | 17 |
 | `reglas-de-ui` | Reglas de UI (frontend Vite) | 9 |
 | `ciclo-de-vida-de-un-flow` | Ciclo de vida de un flow en Ray | 14 |
-| `sistema-de-eventos` | Sistema de eventos | 9 |
+| `sistema-de-eventos` | Sistema de eventos | 12 |
 | `triggers-por-cambio-de-variable` | Sistema de eventos > Triggers por cambio de variable (OnVariableChange) | 8 |
 | `archivos-clave-del-backend` | Archivos clave del backend | 15 |
+| `sistema-de-nodos-pin-descriptors` | Sistema de nodos > Pin descriptors (Input/Output/ExecInput/ExecOutput) | 2 |
+| `sistema-de-nodos-catalogo-builtin` | Sistema de nodos > Catálogo builtin | 4 |
+| `schema-sistema-de-tipos` | Schema > Sistema de tipos (rayflow/types.py) | 4 |
+| `sistema-build` | Sistema de build (validación y BuiltFlow) | 4 |
+| `sistema-engine` | Sistema de engine (ejecución interna del FlowEngine) | 9 |
+| `sistema-state` | Sistema de state (GraphState) | 3 |
+| `sistema-server` | Sistema server (rayflow/server.py, rayflow.api) | 3 |
+| `sistema-cli` | Sistema CLI (rayflow/cli, claude_tools) | 5 |
+| `frontend-state` | Frontend > Estado y acceso a datos del cliente | 8 |
+| `frontend-panels` | Frontend > Paneles del editor (sidebars y footer) | 7 |
+| `frontend-ui-kit` | Frontend > Primitivas de UI (shadcn/ui adaptado) | 5 |
+| `sistema-packaging` | Sistema de packaging | 6 |
+| `sistema-ci` | Sistema de CI | 7 |
+| `sistema-tests` | Sistema de tests | 14 |
+| `sistema-docs-licenciamiento` | Docs > Licenciamiento (CLA, LICENSE, licencia comercial) | 9 |
+| `sistema-docs-repo-meta` | Docs > Meta del repo (.gitignore y similares) | 2 |
+| `meta-generacion-claude-md` | Docs > Generación de CLAUDE.md | 4 |
+| `sistema-docs-auditoria` | Docs > Sistema de auditoría e issues | 3 |
+| `sistema-docs-runcontext` | Docs > Propuesta RunContext (staleness) | 2 |
+| `sistema-docs-agentes-especialistas` | Docs > Sistema de agentes especialistas | 3 |
+| `sistema-docs-analisis-conceptual` | Docs > Análisis conceptual y docs históricas | 2 |
+| `sistema-docs-readme` | Docs > README | 1 |
+| `sistema-hooks-infra` | Sistema de hooks-infra | 15 |
 
 
 ## Índice de sistemas (`rayflow_file_map.json`)
@@ -168,7 +191,7 @@ Agrupación de los archivos del repo en sistemas, con su descripción y cantidad
 | `frontend-panels` | 7 | Sidebar/footer editor panels: node palette, variables panel, custom-nodes CodeMirror editor, properties panel, runs panel, and the flow settings dialog. |
 | `frontend-state` | 5 | Client-side state and data access: the Zustand store (tabs, runs, catalog), the typed HTTP API client, and the SSE run-streaming hook with reconnect logic. |
 | `frontend-ui-kit` | 11 | Design-system primitives adapted from shadcn/ui (Button, Dialog, Select, Tabs, etc.), rewritten to use inline styles instead of Tailwind per this repo's UI conventions. |
-| `hooks-infra` | 48 | Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose. |
+| `hooks-infra` | 49 | Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose. |
 | `mcp` | 3 | The curated FastMCP tool layer exposing a subset of the editor API as MCP tools for LLM agents (get_guide, list_nodes, validate_flow, run_flow, etc.) plus the .mcp.json client registration for this repo. |
 | `nodes` | 13 | The node system: @ray_node/@engine_node/@parallel_node decorators, pin descriptors (Input/Output/ExecInput/ExecOutput), NodeCatalog discovery/loading, and the built-in node library (math, control flow, casting, comparisons, variables, events). |
 | `packaging` | 7 | Controls what actually ships: pyproject.toml package metadata/dependencies, MANIFEST.in inclusion/exclusion rules, and the built frontend bundle (rayflow/editor/static/dist/) that server.py serves. |
@@ -179,4 +202,4 @@ Agrupación de los archivos del repo en sistemas, con su descripción y cantidad
 
 
 ---
-_Generado desde el commit `c7fb55c`._
+_Generado desde el commit `c72b1ed`._
