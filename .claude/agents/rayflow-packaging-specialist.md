@@ -39,11 +39,6 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 |---|---|
 | `MANIFEST.in` | setuptools sdist manifest: excludes CLAUDE.md (a generated file, see docs/claude_md_generation.md) and its hand-maintained source rayflow_system_prompt.md, docs/, and the five generated LLM-orientation JSONs (rayflow_file_map.json, rayflow_workflows.json, rayflow_scenarios.json, RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_issues.json) from the published PyPI package — all internal tooling artifacts, not user docs. |
 | `pyproject.toml` | Python package metadata: dependencies, build system, author/license info, pytest config, and package-data inclusion rules. |
-| `rayflow/editor/static/dist/assets/index-CvkE1x42.css` | Generated build artifact (hashed bundle output of `npm run build`); not hand-edited. |
-| `rayflow/editor/static/dist/assets/index-DtPeFQWl.js` | Generated build artifact (hashed bundle output of `npm run build`); not hand-edited. |
-| `rayflow/editor/static/dist/favicon.svg` | Generated build asset, copied from the frontend's public/ directory. |
-| `rayflow/editor/static/dist/icons.svg` | Generated build asset, copied from the frontend's public/ directory. |
-| `rayflow/editor/static/dist/index.html` | Generated production build output of the editor frontend (run `npm run build`); not meant to be edited by hand. |
 
 ## Dependencias entre sistemas
 
@@ -82,4 +77,4 @@ Es dependencia de: _(ningún otro sistema)_
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `133b575`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `69ea42c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

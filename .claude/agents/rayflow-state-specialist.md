@@ -43,9 +43,9 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 ## Dependencias entre sistemas
 
-Depende de: `events`
+Depende de: _(ningún otro sistema)_
 
-Es dependencia de: `engine`
+Es dependencia de: _(ningún otro sistema)_
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -94,4 +94,4 @@ Es dependencia de: `engine`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `133b575`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `69ea42c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

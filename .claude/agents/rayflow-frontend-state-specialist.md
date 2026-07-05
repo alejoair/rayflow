@@ -47,7 +47,7 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 Depende de: _(ningún otro sistema)_
 
-Es dependencia de: `frontend-app`, `frontend-canvas`, `frontend-panels`, `frontend-ui-kit`
+Es dependencia de: _(ningún otro sistema)_
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -114,4 +114,4 @@ Es dependencia de: `frontend-app`, `frontend-canvas`, `frontend-panels`, `fronte
 - **ISSUE-0003** (medium): CustomNodesPanel.tsx ya no es el editor CodeMirror — solo lista archivos; el editor real es CodeEditor.tsx
 
 ---
-_Generado desde el commit `133b575`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `69ea42c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

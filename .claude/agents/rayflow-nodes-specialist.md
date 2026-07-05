@@ -41,6 +41,7 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 | `rayflow/nodes/builtin/__init__.py` | Imports CallFlow so it's registered as part of the builtin module set. |
 | `rayflow/nodes/builtin/cast.py` | Builtin explicit type-casting nodes: ToInt, ToFloat, ToStr, ToBool. |
 | `rayflow/nodes/builtin/chat_trigger_frontend/index.html` | Static chat UI bundle for the built-in ChatTrigger entry node (declares frontend = "chat_trigger_frontend"); mounted at GET /flows/{name}/ui for any served flow whose entry is ChatTrigger. Self-contained HTML/CSS/JS that POSTs {message: ...} to /flows/{name}/run and renders the response — no build step, no separate transport. |
+| `rayflow/nodes/builtin/claude.py` | [DRAFT sin revisar] Builtin @ray_node Claude node: invokes the Claude Code CLI (`claude -p --output-format json`) as a subprocess (not the Claude Agent SDK, to avoid pydantic/starlette/uvicorn deps), parsing its JSON envelope into result/structured_output/is_error/error/cost_usd/session_id outputs and firing success/failure exec pins; supports multi-turn conversations via resume_session_id. |
 | `rayflow/nodes/builtin/compare.py` | Builtin pure comparison/boolean-logic nodes (no exec pins): GreaterThan, LessThan, Equal, NotEqual, Not, And, Or, etc. |
 | `rayflow/nodes/builtin/control.py` | Builtin control-flow nodes: OnStart (entry, @entry_node, declares body/headers/query/method from the HTTP envelope as Inputs with empty defaults — auto-passthrough since no run()), ChatTrigger (entry with frontend bundle, declares message Input + message_out Output + run() that forwards), FlowOutput, Branch, Sequence, Parallel (fork/join), ForEach, While, Map. OnStart and ChatTrigger now use category="Trigger" (unified with OnEvent/OnVariableChange in events.py) instead of "Control". The EntryX/EntryXY/EntryAB/EntryN/EntryABC/EntryItems/EntryNumbersThreshold/EntryXBool convenience entries that used to live here were removed — re-homed as test-only fixtures in tests/entry_fixtures.py so they no longer ship in the real builtin catalog. |
 | `rayflow/nodes/builtin/events.py` | Builtin event nodes: OnEvent (@entry_node triggered by the event bus; declares event_name config Input + payload Input, auto-passthrough), OnVariableChange (@entry_node triggered by a watched variable; declares variable/source config + value/old Inputs, auto-passthrough), and EmitEvent (@engine_node, publishes to the bus). OnEvent and OnVariableChange both use category="Trigger" (unified with OnStart/ChatTrigger in control.py). |
@@ -53,9 +54,9 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 ## Dependencias entre sistemas
 
-Depende de: `events`, `schema`, `server`
+Depende de: _(ningún otro sistema)_
 
-Es dependencia de: `build`, `editor-api`, `engine`, `mcp`, `server`, `tests`
+Es dependencia de: _(ningún otro sistema)_
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -184,4 +185,4 @@ Es dependencia de: `build`, `editor-api`, `engine`, `mcp`, `server`, `tests`
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
 ---
-_Generado desde el commit `133b575`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `69ea42c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
