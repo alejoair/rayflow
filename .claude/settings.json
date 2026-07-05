@@ -1,5 +1,4 @@
 {
-  "agent": "rayflow-main",
   "env": {
     "ANTHROPIC_API_KEY": "1234",
     "ANTHROPIC_BASE_URL": "http://192.168.59.102:8123/",
