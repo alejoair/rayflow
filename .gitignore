@@ -46,12 +46,18 @@ ray_results/
 Thumbs.db
 
 # Project specific
-flows/          # User flow definitions
-custom_nodes/   # User custom nodes (workspace convention)
-*.json          # Flow JSON files (user-generated)
-node_modules/   # Frontend dependencies
-/nodes/         # User custom nodes (not built-in nodes in rayflow/nodes/)
-rayflow/editor/frontend/@/  # shadcn alias artifact (components viven en src/components/ui/)
+# User flow definitions
+flows/
+# User custom nodes (workspace convention)
+custom_nodes/
+# Flow JSON files (user-generated)
+*.json
+# Frontend dependencies
+node_modules/
+# User custom nodes (not built-in nodes in rayflow/nodes/)
+/nodes/
+# shadcn alias artifact (components viven en src/components/ui/)
+rayflow/editor/frontend/@/
 
 # Claude Code settings
 .claude/settings.local.json
