@@ -73,6 +73,7 @@ conversation on the noisy back-and-forth.
 {
   "name": "my_flow",
   "version": "1",
+  "public": false,
   "outputs": { "result": "int" },
   "variables": [{ "name": "counter", "type": "int", "default": 0 }],
   "events": [],
@@ -105,6 +106,9 @@ conversation on the noisy back-and-forth.
   wire them downstream as `entry.<pin_name>` like any other pin. A
   `FlowOutput` node's inputs become the flow's declared `outputs` (one
   required input per declared output).
+- `public` (bool, default `false`): pure metadata for an external gateway
+  to decide whether this flow should be considered reachable without
+  auth — rayflow itself never reads or enforces it.
 - `variables`/`events` are optional top-level fields: `variables` seeds
   `Get`/`Set`-backed flow state (name/type/default); `events` declares
   which event names an `OnEvent` node in this flow subscribes to (required

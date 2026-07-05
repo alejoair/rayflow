@@ -17,6 +17,7 @@ A flow is a graph of nodes connected by two kinds of wire:
 {
   "name": "my_flow",
   "version": "1",
+  "public": false,
   "outputs": { "result": "int" },
   "variables": [{ "name": "counter", "type": "int", "default": 0 }],
   "events": [],
@@ -27,6 +28,10 @@ A flow is a graph of nodes connected by two kinds of wire:
   ]
 }
 ```
+
+`public` (bool, default `false`) is pure metadata for an external gateway to
+decide whether the flow should be reachable without authentication — rayflow
+itself never reads it or enforces any permission based on it.
 
 ## Wiring rules
 

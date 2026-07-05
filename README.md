@@ -65,6 +65,7 @@ get_catalog().register(SumaEntry)
 # A flow is plain data — here defined inline.
 suma = {
     "name": "suma",
+    "public": False,  # metadata for external gateways only; default False, rayflow itself doesn't read/enforce it
     "outputs": {"result": "int"},
     "nodes": [
         {"id": "entry", "type": "SumaEntry"},
