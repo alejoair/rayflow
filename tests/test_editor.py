@@ -1,11 +1,12 @@
 """Tests for the visual editor backend (/editor/*)."""
 import json
+import sys
 import pytest
 import ray
 from pathlib import Path
 from fastapi.testclient import TestClient
 
-from rayflow.nodes.registry import reset_catalog
+from rayflow.nodes.registry import reset_catalog, get_catalog
 from rayflow.server import load_served_flows, create_app
 from tests import entry_fixtures
 
@@ -137,6 +138,160 @@ def test_get_node_existing(client):
 
 def test_get_node_nonexistent(client):
     r = client.get("/editor/nodes/NoExiste")
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT/DELETE /editor/nodes/{type}/frontend — entry node frontend bundle
+# ---------------------------------------------------------------------------
+
+FRONTEND_NODE_SRC = """\
+from rayflow.nodes.decorators import entry_node, ExecOutput, Input
+
+@entry_node
+class WithFrontend:
+    frontend = "with_frontend_ui"
+    message = Input("str")
+    exec_out = ExecOutput()
+
+@entry_node
+class WithoutFrontend:
+    message = Input("str")
+    exec_out = ExecOutput()
+"""
+
+
+@pytest.fixture
+def client_with_frontend_node(tmp_path, monkeypatch):
+    """A client with two custom entry nodes registered via the real
+    custom_nodes/ workspace convention: one declaring `frontend`, one
+    that doesn't. The bundle dir for WithFrontend resolves to
+    tmp_path/custom_nodes/with_frontend_ui — a test can reconstruct that
+    path itself from `tmp_path` (same instance the fixture used) to
+    assert on-disk state directly.
+
+    Deliberately NOT using `extra_node_dirs`/`load_directory`: that path
+    (NodeCatalog._load_file, rayflow/nodes/loader.py) imports each node
+    file under a synthetic module name and pops it from sys.modules right
+    after registering, to force cloudpickle to serialize the class by
+    value. But `inspect.getfile(cls)` — which `_resolve_frontend_bundle_dir`
+    in rayflow/editor/routes.py needs to find the bundle's sibling
+    directory — looks the class's module up in sys.modules and raises
+    TypeError if it's not there. `load_custom_nodes_package` (real
+    custom_nodes/, importlib.import_module, module stays cached) doesn't
+    have this problem — same as the only real bundle in the repo,
+    ChatTrigger, whose builtin module is always importable.
+    """
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+
+    cn = tmp_path / "custom_nodes"
+    cn.mkdir()
+    (cn / "__init__.py").write_text("", encoding="utf-8")
+    (cn / "frontend_nodes.py").write_text(FRONTEND_NODE_SRC, encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    for key in list(sys.modules):
+        if key == "custom_nodes" or key.startswith("custom_nodes."):
+            sys.modules.pop(key)
+
+    reset_catalog()
+    entry_fixtures.register()
+    get_catalog()  # forces the catalog to (re)load custom_nodes/ from the new cwd
+    served = load_served_flows([])
+    return TestClient(create_app(served))
+
+
+def test_get_entry_frontend_no_frontend_declared(client_with_frontend_node):
+    r = client_with_frontend_node.get("/editor/nodes/WithoutFrontend/frontend")
+    assert r.status_code == 400
+    assert "frontend" in r.json()["detail"]
+
+
+def test_get_entry_frontend_unknown_node_type(client_with_frontend_node):
+    r = client_with_frontend_node.get("/editor/nodes/NoExiste/frontend")
+    assert r.status_code == 404
+
+
+def test_get_entry_frontend_bundle_dir_missing(client_with_frontend_node):
+    """The node declares `frontend`, but nothing has been written to disk yet."""
+    r = client_with_frontend_node.get("/editor/nodes/WithFrontend/frontend")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["exists"] is False
+    assert data["html"] is None
+
+
+def test_get_entry_frontend_dir_exists_without_index(client_with_frontend_node, tmp_path):
+    """The bundle dir exists but has no index.html in it yet."""
+    bundle_dir = tmp_path / "custom_nodes" / "with_frontend_ui"
+    bundle_dir.mkdir()
+    r = client_with_frontend_node.get("/editor/nodes/WithFrontend/frontend")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["exists"] is False
+    assert data["html"] is None
+
+
+def test_save_entry_frontend_creates_new(client_with_frontend_node, tmp_path):
+    html = "<!doctype html><html><body>hi</body></html>"
+    r = client_with_frontend_node.put(
+        "/editor/nodes/WithFrontend/frontend", json={"html": html}
+    )
+    assert r.status_code == 200
+    assert r.json()["saved"] is True
+
+    bundle_dir = tmp_path / "custom_nodes" / "with_frontend_ui"
+    assert (bundle_dir / "index.html").read_text(encoding="utf-8") == html
+
+    r2 = client_with_frontend_node.get("/editor/nodes/WithFrontend/frontend")
+    assert r2.json() == {
+        "node_type": "WithFrontend",
+        "bundle_dir": str(bundle_dir),
+        "exists": True,
+        "html": html,
+    }
+
+
+def test_save_entry_frontend_overwrites_existing(client_with_frontend_node, tmp_path):
+    bundle_dir = tmp_path / "custom_nodes" / "with_frontend_ui"
+    bundle_dir.mkdir()
+    (bundle_dir / "index.html").write_text("<p>old</p>", encoding="utf-8")
+
+    r = client_with_frontend_node.put(
+        "/editor/nodes/WithFrontend/frontend", json={"html": "<p>new</p>"}
+    )
+    assert r.status_code == 200
+    assert (bundle_dir / "index.html").read_text(encoding="utf-8") == "<p>new</p>"
+
+
+def test_save_entry_frontend_no_frontend_declared(client_with_frontend_node):
+    r = client_with_frontend_node.put(
+        "/editor/nodes/WithoutFrontend/frontend", json={"html": "<p>x</p>"}
+    )
+    assert r.status_code == 400
+
+
+def test_save_entry_frontend_empty_html_rejected(client_with_frontend_node):
+    r = client_with_frontend_node.put(
+        "/editor/nodes/WithFrontend/frontend", json={"html": "   "}
+    )
+    assert r.status_code == 422
+
+
+def test_delete_entry_frontend(client_with_frontend_node, tmp_path):
+    bundle_dir = tmp_path / "custom_nodes" / "with_frontend_ui"
+    bundle_dir.mkdir()
+    (bundle_dir / "index.html").write_text("<p>bye</p>", encoding="utf-8")
+
+    r = client_with_frontend_node.delete("/editor/nodes/WithFrontend/frontend")
+    assert r.status_code == 204
+    assert not (bundle_dir / "index.html").exists()
+    assert bundle_dir.exists()  # the bundle directory itself is left in place
+
+
+def test_delete_entry_frontend_nonexistent(client_with_frontend_node):
+    r = client_with_frontend_node.delete("/editor/nodes/WithFrontend/frontend")
     assert r.status_code == 404
 
 
