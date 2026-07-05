@@ -1,7 +1,7 @@
 {
   "$schema_note": "Cola de issues ABIERTOS detectados al comparar RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del repo. Cada issue enlaza claim_ids (RAYFLOW_SOURCE_OF_TRUTH.json), files (rutas afectadas, típicamente ya en rayflow_file_map.json), y docs (archivos de documentación en prosa que también quedan desactualizados: CLAUDE.md, README.md, SKILL.md, guide.py, etc.). Este archivo NO acumula historial: 'resolver' un issue es eliminarlo del array en el mismo commit que aplica el fix — el historial completo (cuándo se creó, cuándo se resolvió, en qué commit) vive en `git log -p -- rayflow_issues.json` / `git blame`, no acá. `next_id` es un contador monótono que nunca retrocede ni reutiliza ids, aunque el array se achique — por eso puede haber huecos en la numeración. Ver docs/issues_system.md para el diseño completo.",
   "schema_version": 1,
-  "next_id": 7,
+  "next_id": 9,
   "issues": [
     {
       "id": "ISSUE-0001",
@@ -181,6 +181,74 @@
         {
           "file": "rayflow/server.py",
           "note": "Líneas 101-109 (_resolve_bundle_dir): bundle_dir = node_dir / frontend, donde frontend es un atributo de clase arbitrario declarado por el autor del nodo custom — node_dir puede tener hermanos con nombres que comparten el mismo prefijo que bundle_dir.name."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0007",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "El bug de comentarios inline en .gitignore que el SOT describe como vigente ya fue corregido (commit b2e1158)",
+      "summary": "El claim afirma, en tiempo presente, que 6 patrones de la sección 'Project specific' de .gitignore (flows/, custom_nodes/, *.json, node_modules/, /nodes/, alias shadcn rayflow/editor/frontend/@/) tienen un comentario '#' pegado al final de la misma línea del patrón, lo cual (según reglas de gitignore, donde '#' solo es comentario al inicio absoluto de línea) los vuelve no-operativos, y lo reproduce afirmando que 'flows/a.json', 'node_modules/c.js', 'nodes/d.py' y cualquier '*.json' NO matchean con git check-ignore -v. Leí el .gitignore real: los 6 patrones (líneas 50, 52, 54, 56, 58, 60) ya están cada uno en su propia línea, con el comentario explicativo en la línea inmediatamente anterior, no pegado al patrón. Confirmé con git log que el commit b2e1158 (mensaje: 'fix(gitignore): separate inline comments from patterns so they actually match') hizo exactamente ese cambio (+12/-6 líneas). Reproduje yo misma la verificación textual que describe el claim, corriendo git check-ignore -v sobre los mismos 4 paths de ejemplo que cita ('flows/a.json', 'custom_nodes/b.py', 'node_modules/c.js', 'nodes/d.py', 'foo.json' para *.json, y el alias shadcn): los 6 matchean correctamente sus patrones respectivos con exit code 0 — resultado opuesto al que describe el claim. El claim quedó desactualizado por este fix.",
+      "claim_ids": [
+        "sistema-docs-repo-meta#gitignore-comentarios-inline-rompen-patrones"
+      ],
+      "files": [
+        ".gitignore"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-05T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-05T00:00:00Z",
+      "evidence": [
+        {
+          "file": ".gitignore",
+          "note": "Líneas 49-60 (sección 'Project specific'): cada uno de los 6 patrones que el claim señala (flows/, custom_nodes/, *.json, node_modules/, /nodes/, rayflow/editor/frontend/@/) está en su propia línea (50, 52, 54, 56, 58, 60), con el comentario explicativo en la línea inmediatamente anterior — ya no hay comentario pegado al final del patrón."
+        },
+        {
+          "file": ".gitignore",
+          "note": "git log --oneline -1 b2e1158 confirma el commit 'fix(gitignore): separate inline comments from patterns so they actually match (flows/, custom_nodes/, *.json, node_modules/, /nodes/, shadcn @/ alias)'; git show --stat b2e1158 muestra '.gitignore | 18 ++++++++++++------' (12 inserciones, 6 eliminaciones), consistente con separar 6 comentarios inline a su propia línea."
+        },
+        {
+          "file": ".gitignore",
+          "note": "Reproduje la verificación del claim yo misma: git check-ignore -v flows/a.json custom_nodes/b.py node_modules/c.js nodes/d.py foo.json rayflow/editor/frontend/@/bar.tsx devuelve match para los 6 paths (ej. '.gitignore:54:*.json foo.json') con exit code 0 — los mismos ejemplos concretos que el claim dice que NO matchean ('flows/a.json', 'node_modules/c.js', 'nodes/d.py', '*.json') ahora sí matchean."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0008",
+      "severity": "low",
+      "kind": "claim_contradicted",
+      "title": "El claim sobre .json esenciales trackeados atribuye la causa a un patrón roto que ya fue corregido — el hecho (siguen trackeados) sigue siendo cierto, la causa citada ya no",
+      "summary": "El claim afirma que RAYFLOW_SOURCE_OF_TRUTH.json, rayflow_file_map.json, rayflow_issues.json y rayflow/editor/frontend/package.json están trackeados en git 'porque el patrón [*.json] nunca fue funcional', remitiendo al claim de comentarios inline (ver ISSUE-0007, ya corregido en el commit b2e1158). Confirmé con git ls-files que los 4 archivos siguen trackeados (el hecho observable central del claim sigue siendo cierto), pero la causa que el claim atribuye ya no aplica: corrí git check-ignore -v --no-index sobre esos mismos 4 paths (--no-index evalúa el patrón puro, ignorando si el archivo ya está en el índice) y los 4 matchean *.json en .gitignore:54 con exit code 0 — el patrón funciona perfectamente a nivel sintáctico post-fix. Sin --no-index (comportamiento default, que sí consulta el índice), git check-ignore no reporta match para esos mismos 4 archivos porque ya están trackeados: este es el comportamiento estándar y documentado de git (un patrón de .gitignore nuevo o recién arreglado no des-trackea retroactivamente un archivo que ya está en el índice; hace falta git rm --cached explícito), no evidencia de que el patrón siga roto. El claim quedó desactualizado en su explicación causal, aunque el hecho que describe (tracked) siga siendo correcto.",
+      "claim_ids": [
+        "sistema-docs-repo-meta#gitignore-json-tracked-pese-a-comentario"
+      ],
+      "files": [
+        ".gitignore"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-05T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-05T00:00:00Z",
+      "evidence": [
+        {
+          "file": ".gitignore",
+          "note": "git ls-files -- RAYFLOW_SOURCE_OF_TRUTH.json rayflow_file_map.json rayflow_issues.json rayflow/editor/frontend/package.json lista los 4 archivos como trackeados — el hecho central del claim (siguen versionados) sigue vigente."
+        },
+        {
+          "file": ".gitignore",
+          "note": "git check-ignore -v --no-index sobre esos mismos 4 paths devuelve match de *.json (.gitignore:54) para los 4, con exit code 0 — el patrón funciona a nivel de sintaxis pura post-fix (commit b2e1158), contradiciendo la premisa causal del claim de que 'el patrón nunca fue funcional'."
+        },
+        {
+          "file": ".gitignore",
+          "note": "git check-ignore -v (sin --no-index, comportamiento default que sí consulta el índice de git) sobre los mismos 4 paths no devuelve ninguna línea de match y sale con exit code 1 — confirma que la razón real por la que siguen trackeados es que git no aplica retroactivamente una regla de exclusión (nueva o recién arreglada) a un archivo ya indexado, un comportamiento estándar de git no relacionado con si el patrón está roto o no."
         }
       ]
     }
