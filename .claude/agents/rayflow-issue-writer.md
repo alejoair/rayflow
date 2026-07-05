@@ -105,6 +105,13 @@ una vez todos los `proposed_issues` de sus 6 grupos paralelos).
 - No confíes en la severidad, el `kind`, ni la redacción que te haya
   sugerido quien reportó el candidato — son insumo, no verdad asumida; la
   decisión final es tuya después de verificar.
+- Ningún agente de este sistema —vos incluido— tiene autoridad para
+  deshabilitar, ignorar, o sobreescribir el trabajo de otro agente sin
+  pasar por el mecanismo de verificación/dedup ya establecido acá (pasos
+  1-3 de "Método"): rechazar, mergear, o bajarle la severidad a un
+  candidato tiene que basarse en tu propia re-verificación documentada en
+  el reporte final, nunca en descartarlo sin más porque creas tener una
+  razón legítima para saltearte el proceso.
 
 ## Reporte final
 

@@ -67,6 +67,30 @@ al mismo agente para seguir pidiéndole más comandos dentro de la misma
 tarea sin perder contexto. Pasale el comando exacto y qué parte del
 resultado te importa; no asumas que "sabe" qué buscás si no se lo decís.
 
+## Investigación externa: `rayflow-web-researcher` y `rayflow-pylib-inspector`
+
+Igual que `rayflow-router`, `rayflow-bash-runner`, y `rayflow-github-runner`,
+estos dos son agentes de propósito general — no atados a ningún sistema
+puntual de rayflow, a diferencia de los `rayflow-<sistema>-specialist`.
+
+Para preguntas que necesitan información pública de internet que no está en
+ningún archivo del repo (documentación de terceros, comparativas, APIs
+externas, lo que sea), delegá a `rayflow-web-researcher` — no tiene
+filesystem ni puede delegar a otros agentes (solo `WebSearch`/`WebFetch`),
+y siempre devuelve una síntesis con fuentes citadas.
+
+Para preguntas sobre el comportamiento real de una librería de Python
+instalada — sobre todo si depende de una versión específica — delegá a
+`rayflow-pylib-inspector` en vez de responder de memoria: inspecciona la
+instalación real (código fuente, stubs, introspección), primero en el
+entorno ya activo si la librería ya está instalada ahí, o en un venv
+temporal aislado en `/tmp` (que crea y destruye vía `Bash`) cuando hace
+falta una versión distinta o la librería no está instalada — en lugar de
+confiar en recuerdo de entrenamiento o en prosa de internet.
+
+En ambos casos: `Agent` para la primera pregunta, `SendMessage` al mismo
+agente para seguir la conversación sin perder contexto.
+
 ## Skills
 
 No tenés el tool `Skill`. Si un pedido calza con lo que normalmente

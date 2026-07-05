@@ -5,10 +5,10 @@ import dataclasses
 from pathlib import Path
 
 from rayflow.nodes.loader import NodeCatalog
-from rayflow.nodes.builtin import control, variables, events, cast, math as math_nodes, flow as flow_nodes, compare as compare_nodes
+from rayflow.nodes.builtin import control, variables, events, cast, math as math_nodes, flow as flow_nodes, compare as compare_nodes, claude as claude_nodes
 
 # Already-decorated builtin classes (avoids re-importing them with importlib).
-_BUILTIN_MODULES = (control, variables, events, cast, math_nodes, flow_nodes, compare_nodes)
+_BUILTIN_MODULES = (control, variables, events, cast, math_nodes, flow_nodes, compare_nodes, claude_nodes)
 
 # Singleton catalog — loaded once.
 _catalog: NodeCatalog | None = None

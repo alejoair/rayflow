@@ -11,6 +11,34 @@ default_install_hook_types:
 repos:
   - repo: local
     hooks:
+      - id: file-map-generate
+        name: Regenerate rayflow_file_map.json (file set + import-graph edges)
+        description: >
+          See scripts/generate_file_map.py. Mechanical, no LLM: file set via
+          `git ls-files` (excludes rayflow/editor/static/dist/), and
+          depends_on/dependents edges for .py and .ts/.tsx files computed by
+          parsing real import statements with tree-sitter. Brand-new files
+          get a draft stub (description/system candidates, no LLM) for
+          file-map-draft to confirm next. Never blocks. Must run before
+          file-map-draft and before claude-md-generate/agents-generate
+          (both read rayflow_file_map.json).
+        entry: python3 scripts/generate_file_map.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+      - id: file-map-draft
+        name: Confirm/correct draft description+system for new file map entries
+        description: >
+          See scripts/draft_file_map_entries.py. Runs after file-map-generate.
+          No-op, no LLM call, if rayflow_file_map.json has no pending
+          `_draft_candidate`. Otherwise runs one batched
+          `claude -p --agent rayflow-router` call to confirm or correct each
+          pending file's cheap candidate description/system. Never blocks
+          (infra failures leave the drafts as unverified stubs).
+        entry: python3 scripts/draft_file_map_entries.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
       - id: claude-md-generate
         name: Regenerate CLAUDE.md from rayflow_system_prompt.md + SOT + file map
         description: >
