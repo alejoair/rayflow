@@ -7,7 +7,7 @@ from typing import Any
 from rayflow.schema.models import FlowDef, NodeDef, VariableDef
 
 
-_FLOW_KEYS = {"name", "version", "outputs", "variables", "events", "nodes"}
+_FLOW_KEYS = {"name", "version", "outputs", "variables", "events", "nodes", "public"}
 _NODE_KEYS = {"id", "type", "inputs", "exec_in", "ui", "state_path"}
 _VAR_KEYS = {"name", "type", "default"}
 
@@ -73,6 +73,7 @@ def _parse_flow(data: dict[str, Any]) -> FlowDef:
         variables=variables,
         events=data.get("events", []),
         nodes=nodes,
+        public=bool(data.get("public", False)),
     )
 
 

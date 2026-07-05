@@ -210,6 +210,7 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
         variables=flow.variables,
         events=flow.events,
         nodes=out_nodes,
+        public=flow.public,
     )
 
 
