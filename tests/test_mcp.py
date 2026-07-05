@@ -101,6 +101,26 @@ async def test_crud_y_flow_catalog(mcp, flows_dir):
         assert {"x", "y"}.issubset(entry_outputs)
 
 
+async def test_list_flows_incluye_public(mcp, flows_dir):
+    public_flow = {**SUMA, "name": "suma_publica", "public": True}
+    async with Client(mcp) as c:
+        await c.call_tool("create_flow", {"flow": SUMA})
+        await c.call_tool("create_flow", {"flow": public_flow})
+        flows = {f["name"]: f for f in (await c.call_tool("list_flows", {})).data}
+        assert flows["suma"]["public"] is False  # not set in SUMA -> defaults to False
+        assert flows["suma_publica"]["public"] is True
+
+
+async def test_create_flow_public_true_and_get_flow_confirms(mcp, flows_dir):
+    public_flow = {**SUMA, "name": "suma_publica2", "public": True}
+    async with Client(mcp) as c:
+        created = (await c.call_tool("create_flow", {"flow": public_flow})).data
+        assert created["public"] is True
+
+        got = (await c.call_tool("get_flow", {"name": "suma_publica2"})).data
+        assert got["public"] is True
+
+
 async def test_test_flow_verifica_outputs(mcp, flows_dir):
     async with Client(mcp) as c:
         await c.call_tool("create_flow", {"flow": SUMA})

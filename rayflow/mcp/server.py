@@ -124,6 +124,7 @@ def create_mcp():
                 "version": f.get("version", "1"),
                 "inputs": f.get("inputs", {}),
                 "outputs": f.get("outputs", {}),
+                "public": f.get("public", False),
             }
             for f in _list_flows()
         ]
