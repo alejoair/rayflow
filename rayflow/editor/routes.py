@@ -1,6 +1,8 @@
 """Visual editor endpoints: catalog, flow CRUD, validation."""
 from __future__ import annotations
 
+import inspect
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
@@ -99,6 +101,105 @@ async def get_node(node_type: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Node type '{node_type}' not found")
     _cls, meta = entry
     return _node_spec(node_type, meta)
+
+
+# ---------------------------------------------------------------------------
+# Entry node frontend bundle (index.html)
+# ---------------------------------------------------------------------------
+#
+# Manages the on-disk index.html for a node type that already declares
+# `frontend = "some_dir_name"` on its class (NodeMeta.frontend, set in
+# rayflow/nodes/decorators.py). Declaring the `frontend` attribute itself
+# is a code change to the node's class body — done via
+# GET/PUT /editor/custom-nodes/{name}/source for a custom node, or by
+# hand for a builtin one — not something these endpoints do. This is
+# scoped to the single index.html file per the one real bundle in the
+# repo (ChatTrigger's chat_trigger_frontend/index.html, 100% inline
+# CSS/JS, rayflow/nodes/builtin/control.py:81); multi-file bundles aren't
+# supported here.
+
+def _resolve_frontend_bundle_dir(node_type: str) -> Path:
+    """Resolves node_type -> its declared `frontend` bundle directory.
+
+    Raises 404 if node_type isn't in the catalog (same convention as
+    get_node above). Raises 400 if the node doesn't declare `frontend` —
+    surfaced as an explicit error here (unlike server.py's
+    `_resolve_bundle_dir`, which returns None to silently skip mounting
+    /ui for a served flow with no bundle): a caller explicitly asking to
+    manage a node's frontend needs to know why there's nothing to manage.
+
+    The `node_dir / frontend` resolution mirrors `_resolve_bundle_dir` in
+    rayflow/server.py (node_dir = Path(inspect.getfile(py_class)).parent).
+    It's replicated here rather than imported: server.py already imports
+    from rayflow.editor.routes to mount this router, so importing back
+    from rayflow.server would invert that dependency into a cycle.
+    """
+    catalog = get_catalog()
+    entry = catalog.get(node_type)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Node type '{node_type}' not found")
+    cls, meta = entry
+    if not meta.frontend:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Node type '{node_type}' doesn't declare a 'frontend' attribute — it has no associated UI",
+        )
+    try:
+        node_dir = Path(inspect.getfile(cls)).parent
+    except (TypeError, OSError) as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not resolve the source file for node type '{node_type}': {e}",
+        )
+    return node_dir / meta.frontend
+
+
+@router.get("/nodes/{node_type}/frontend")
+async def get_entry_frontend(node_type: str) -> dict[str, Any]:
+    """Returns the entry node's frontend bundle index.html, if any.
+
+    `exists=False` (`html=None`) means the node declares `frontend` but
+    the bundle directory or its index.html don't exist on disk yet — not
+    an error, just nothing written there so far.
+    """
+    bundle_dir = _resolve_frontend_bundle_dir(node_type)
+    index = bundle_dir / "index.html"
+    if not index.is_file():
+        return {"node_type": node_type, "bundle_dir": str(bundle_dir), "exists": False, "html": None}
+    return {
+        "node_type": node_type,
+        "bundle_dir": str(bundle_dir),
+        "exists": True,
+        "html": index.read_text(encoding="utf-8"),
+    }
+
+
+@router.put("/nodes/{node_type}/frontend")
+async def save_entry_frontend(node_type: str, body: dict = Body(...)) -> dict[str, Any]:
+    """Creates or overwrites the entry node's frontend bundle index.html.
+
+    Body: {"html": "<!doctype html>..."}. Creates the bundle directory
+    (sibling to the node's source file, named after its `frontend`
+    attribute) if it doesn't exist yet.
+    """
+    bundle_dir = _resolve_frontend_bundle_dir(node_type)
+    html = body.get("html")
+    if not isinstance(html, str) or not html.strip():
+        raise HTTPException(status_code=422, detail="The 'html' field is required and cannot be empty")
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    (bundle_dir / "index.html").write_text(html, encoding="utf-8")
+    return {"node_type": node_type, "bundle_dir": str(bundle_dir), "saved": True}
+
+
+@router.delete("/nodes/{node_type}/frontend", status_code=204)
+async def delete_entry_frontend(node_type: str) -> Response:
+    """Deletes the entry node's index.html (the bundle directory itself is left in place)."""
+    bundle_dir = _resolve_frontend_bundle_dir(node_type)
+    index = bundle_dir / "index.html"
+    if not index.is_file():
+        raise HTTPException(status_code=404, detail=f"Node type '{node_type}' has no index.html to delete")
+    index.unlink()
+    return Response(status_code=204)
 
 
 @router.get("/flows/{name}/catalog")
