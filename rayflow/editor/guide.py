@@ -84,6 +84,37 @@ Canonical types (strings): `int`, `float`, `str`, `bool`, `list`, `dict`,
 same type, or one is `Any`. **int and float are incompatible**: cast with
 `ToInt`/`ToFloat`/`ToStr`/`ToBool`. Check `GET /editor/types`.
 
+## Calling an LLM from a flow: the `Claude` node
+
+`Claude` (category `"AI"`) invokes the Claude Code CLI (`claude -p`)
+headless, as a subprocess — the first building block for using rayflow to
+orchestrate agents. Inputs: `prompt` (str, required), `agent` (str,
+optional — subagent name via `--agent`), `model` (str, optional — model
+alias via `--model`), `json_schema` (str, optional — a JSON Schema string;
+if set, forces structured output via `--json-schema`), `timeout_seconds`
+(int, default 300), `working_directory` (str, optional — the subprocess's
+cwd; matters because resolving a project `--agent` by name depends on cwd,
+and because `claude -p` inherits that directory's project context —
+`CLAUDE.md`, `.claude/agents/*.md`, etc. — same as an interactive session;
+it is not a blank-slate call), `resume_session_id` (str, optional — resumes
+an existing conversation via `--resume <id>`; an unknown/invalid id fails
+explicitly with a stderr message and empty stdout, same as any other
+CLI-argument-parsing failure). Outputs: `result` (str), `structured_output`
+(dict — populated only when `json_schema` was set, `{}` otherwise),
+`is_error` (bool), `error` (str — diagnostic message, empty on success),
+`cost_usd` (float), `session_id` (str — this call's conversation id). It
+has two exec outputs instead of one: `success` (the CLI returned a
+well-formed envelope with `is_error: false`) and `failure` (everything else
+— CLI argument-parsing failures, a timeout, a missing `claude` binary,
+malformed CLI output, or an envelope with `is_error: true`) — wire each to
+its own downstream handling instead of assuming the call always works.
+
+**Multi-turn conversations**: wire the `session_id` output into a `Set`
+node writing a GraphState variable, and feed that variable into the next
+call's `resume_session_id` input (typically inside a `While` loop) to carry
+a conversation across invocations — this works because rayflow nodes are
+already stateful via GraphState, no extra machinery needed.
+
 ## Recommended workflow for an agent
 
 1. `GET /editor/guide` and `GET /editor/nodes` to learn the catalog.
