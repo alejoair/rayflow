@@ -187,6 +187,27 @@ se cree será `ISSUE-0002`. No hay ningún hueco todavía (para ver el caso de
 un hueco — un issue creado y después resuelto/eliminado — hace falta que se
 resuelva al menos uno primero).
 
+### 5.1. Principio: revisión incremental, nunca reset masivo
+
+Toda corrección al SOT — resolviendo un issue de `rayflow_issues.json`, un
+reporte incidental a `rayflow-issue-writer`, o cualquiera de los cuatro
+canales descritos en §6.4 — tiene que ser **incremental**: referenciar
+`claim_ids`/archivos puntuales y tocar exactamente esos claims. Nunca una
+reescritura masiva de secciones enteras del SOT de una sola vez, ni
+siquiera con la excusa de "limpiar" o "modernizar" el documento. Este
+mismo archivo documenta una migración inicial de ~215 claims (§4/§7); el
+SOT ya creció bastante más allá de eso desde entonces (ver el índice de
+secciones en `CLAUDE.md`, que hoy suma 384). Si en algún momento hace
+falta repetir un salto de esa escala, tiene que hacerse de forma
+consciente y documentada como una **migración deliberada** — con su
+propio doc de diseño y su propia revisión — nunca colada como si fuera
+"un issue más" resuelto por el flujo normal. Una reescritura masiva no
+declarada rompe justamente lo que le da valor al `evidence` de cada
+claim: la trazabilidad línea-a-línea vía `git log -p` / `git blame` que
+permite auditar qué cambió y por qué (el mismo motivo, en espíritu, por
+el que `rayflow_issues.json` tampoco acumula historial en el propio
+archivo — ver §5 arriba).
+
 ## 6. Flujo previsto (agente auditor + pre-commit)
 
 ### 6.1. Agente auditor — implementado y confirmado
@@ -387,6 +408,24 @@ incrustado a mano.
    `subagent_type: rayflow-issue-writer`), sin necesidad de disparar una
    auditoría formal sobre todo el SOT ni esperar a que la note el hook de
    pre-commit.
+
+### 6.5. Política: preferir auditoría paralela para cambios de alto impacto sobre el documento raíz
+
+Cualquier revisión que toque contenido usado para construir el documento
+raíz (`rayflow_system_prompt.md`, o una sección del SOT con alto
+impacto/muchos claims — ver el índice de secciones que `CLAUDE.md`
+genera desde acá) debería preferir correr
+`.claude/workflows/audit-sot-parallel.js` (varias instancias
+independientes de `rayflow-auditor`, una por grupo de secciones, con una
+única etapa de consolidación vía `rayflow-issue-writer` — ver §6.4) en
+vez de una sola pasada secuencial de auditoría. `rayflow_system_prompt.md`
+es lo que termina leyendo, vía `CLAUDE.md`, todo agente que trabaje en
+este repo — dejar que una sola voz/perspectiva de auditoría decida qué
+está bien o mal ahí sesga en silencio el contexto compartido de todo el
+sistema. Varios auditores independientes seguidos de una consolidación
+explícita que dedupea y resuelve entre ellos es una salvaguarda barata
+contra ese sesgo cuando el contenido en juego tiene este nivel de
+impacto.
 
 ## 7. Pendientes
 
