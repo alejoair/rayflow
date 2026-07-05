@@ -25,6 +25,7 @@ def flow_to_dict(flow: FlowDef) -> dict[str, Any]:
         ],
         "events": flow.events,
         "nodes": [_node_to_dict(n) for n in flow.nodes],
+        "public": flow.public,
     }
 
 

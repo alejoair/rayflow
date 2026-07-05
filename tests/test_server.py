@@ -55,12 +55,43 @@ def test_list_flows(client):
     # EntryXY declares x and y as int (required).
     assert flows[0]["inputs"] == {"x": {"type": "int", "required": True}, "y": {"type": "int", "required": True}}
     assert flows[0]["outputs"] == {"resultado": {"type": "int"}}
+    # SUMA has no `public` key in its JSON -> FlowDef.public defaults to False.
+    assert flows[0]["public"] is False
 
 
 def test_flow_detail(client):
     r = client.get("/flows/suma")
     assert r.status_code == 200
     assert r.json()["name"] == "suma"
+    assert r.json()["public"] is False
+
+
+PUBLIC_SUMA = {**SUMA, "name": "suma_publico", "public": True}
+
+
+def test_list_flows_reports_public_true():
+    """A flow with `public: true` in its JSON is reported as public in
+    GET /flows."""
+    served = load_served_flows([PUBLIC_SUMA])
+    client = TestClient(create_app(served))
+
+    r = client.get("/flows")
+    assert r.status_code == 200
+    flows = r.json()["flows"]
+    assert len(flows) == 1
+    assert flows[0]["name"] == "suma_publico"
+    assert flows[0]["public"] is True
+
+
+def test_flow_detail_reports_public_true():
+    """A flow with `public: true` in its JSON is reported as public in
+    GET /flows/{name}."""
+    served = load_served_flows([PUBLIC_SUMA])
+    client = TestClient(create_app(served))
+
+    r = client.get("/flows/suma_publico")
+    assert r.status_code == 200
+    assert r.json()["public"] is True
 
 
 def test_flow_detail_404(client):

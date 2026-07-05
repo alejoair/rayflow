@@ -124,6 +124,7 @@ def create_mcp():
                 "version": f.get("version", "1"),
                 "inputs": f.get("inputs", {}),
                 "outputs": f.get("outputs", {}),
+                "public": f.get("public", False),
             }
             for f in _list_flows()
         ]
@@ -308,6 +309,86 @@ def create_mcp():
         on the filesystem) and list_nodes still shows the old version."""
         from rayflow.editor.custom_nodes_routes import _reload_catalog
         return _reload_catalog()
+
+    # ----- Entry node frontend bundle -----
+
+    @mcp.tool
+    def get_entry_frontend(node_type: str) -> dict[str, Any]:
+        """Reads the index.html of an entry node's frontend bundle (the
+        static UI Rayflow serves at /flows/{name}/ui when a flow using this
+        entry node is served). Only applies to entry nodes (@entry_node)
+        that declare a `frontend = "<dir>"` class attribute — e.g.
+        ChatTrigger, whose bundle is a single self-contained index.html
+        with inline CSS/JS (see rayflow/nodes/builtin/control.py). Only
+        that one file is managed here; multi-file bundles aren't supported.
+
+        Returns {"node_type", "bundle_dir", "exists", "html"} —
+        `exists=False`/`html=None` means the node declares `frontend` but
+        nothing has been written to disk yet (not an error). Returns
+        {"error": ...} if node_type doesn't exist, or if it exists but
+        doesn't declare `frontend` — in that case, add
+        `frontend = "some_dir_name"` as a class attribute first (for a
+        custom node, via update_custom_node_source) before calling this."""
+        from fastapi import HTTPException
+        from rayflow.editor.routes import _resolve_frontend_bundle_dir
+        try:
+            bundle_dir = _resolve_frontend_bundle_dir(node_type)
+        except HTTPException as e:
+            return {"error": e.detail}
+        index = bundle_dir / "index.html"
+        if not index.is_file():
+            return {"node_type": node_type, "bundle_dir": str(bundle_dir), "exists": False, "html": None}
+        return {
+            "node_type": node_type,
+            "bundle_dir": str(bundle_dir),
+            "exists": True,
+            "html": index.read_text(encoding="utf-8"),
+        }
+
+    @mcp.tool
+    def update_entry_frontend(node_type: str, html: str) -> dict[str, Any]:
+        """Creates or overwrites the index.html of an entry node's frontend
+        bundle. Only applies to entry nodes that declare `frontend =
+        "<dir>"` (see get_entry_frontend). Creates the bundle directory
+        (sibling to the node's source file, named after its `frontend`
+        attribute) if it doesn't exist yet. `html` should be a complete,
+        self-contained document (inline CSS/JS) — the same pattern as the
+        built-in ChatTrigger's bundle — since only this single file is
+        managed here.
+
+        Returns {"error": ...} if node_type doesn't exist, doesn't declare
+        `frontend` (add it via update_custom_node_source first), or if
+        `html` is empty."""
+        from fastapi import HTTPException
+        from rayflow.editor.routes import _resolve_frontend_bundle_dir
+        try:
+            bundle_dir = _resolve_frontend_bundle_dir(node_type)
+        except HTTPException as e:
+            return {"error": e.detail}
+        if not isinstance(html, str) or not html.strip():
+            return {"error": "The 'html' field is required and cannot be empty"}
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        (bundle_dir / "index.html").write_text(html, encoding="utf-8")
+        return {"node_type": node_type, "bundle_dir": str(bundle_dir), "saved": True}
+
+    @mcp.tool
+    def delete_entry_frontend(node_type: str) -> dict[str, Any]:
+        """Deletes an entry node's index.html (the bundle directory itself
+        is left in place). Only applies to entry nodes that declare
+        `frontend = "<dir>"` (see get_entry_frontend). Returns
+        {"error": ...} if node_type doesn't exist, doesn't declare
+        `frontend`, or has no index.html to delete."""
+        from fastapi import HTTPException
+        from rayflow.editor.routes import _resolve_frontend_bundle_dir
+        try:
+            bundle_dir = _resolve_frontend_bundle_dir(node_type)
+        except HTTPException as e:
+            return {"error": e.detail}
+        index = bundle_dir / "index.html"
+        if not index.is_file():
+            return {"error": f"Node type '{node_type}' has no index.html to delete"}
+        index.unlink()
+        return {"node_type": node_type, "deleted": True}
 
     # ----- Events -----
 

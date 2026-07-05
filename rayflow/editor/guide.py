@@ -39,7 +39,16 @@ A flow is a graph of nodes connected by two kinds of wire:
   entry node may optionally declare `frontend = "<dir>"` to serve a static
   UI bundle at `/flows/{name}/ui` when the flow is served (`rayflow serve
   --file`) — the bundle's JS talks to the flow over the normal
-  `/flows/{name}/run` endpoint.
+  `/flows/{name}/run` endpoint. That bundle is a single self-contained
+  `index.html` (inline CSS/JS — see `ChatTrigger` in
+  `rayflow/nodes/builtin/control.py` for the one built-in example); manage
+  it with `get_entry_frontend`/`update_entry_frontend`/
+  `delete_entry_frontend` (or `GET`/`PUT`/`DELETE
+  /editor/nodes/{node_type}/frontend`) instead of touching the filesystem
+  directly — this is the only way a remote MCP client with no filesystem
+  access can create or edit it. If the node doesn't declare `frontend` yet,
+  add it as a class attribute first (for a custom node, via
+  `update_custom_node_source`) before calling these.
 - **Entry nodes declare their own `Input` pins** like any other node. The
   engine populates them from the request body (POST `{name: value, ...}`
   → entry's `Input` of that name). When an entry doesn't define `run()`,

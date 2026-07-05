@@ -81,3 +81,8 @@ class FlowDef:
     # Events this flow may emit (informational)
     events: list[str] = field(default_factory=list)
     nodes: list[NodeDef] = field(default_factory=list)
+    # Whether an external gateway may consider this flow visible without
+    # authentication. Purely descriptive metadata for callers outside this
+    # repo — the engine/build system does not read or enforce it. Default
+    # False so flows saved before this field existed stay private on load.
+    public: bool = False

@@ -475,6 +475,31 @@ def test_delete_flow_nonexistent(client):
 
 
 # ---------------------------------------------------------------------------
+# `public` field — persistence through storage.py
+# ---------------------------------------------------------------------------
+
+def test_public_field_persists_through_save_and_load(flows_dir):
+    """FlowDef.public must round-trip through flow_to_dict()/save_flow() and
+    back through schema.loader.load_flow() — regression test for
+    flow_to_dict() being a hand-written field list rather than something
+    generic like dataclasses.asdict().
+    """
+    from rayflow.schema.loader import load_flow
+    from rayflow.editor.storage import save_flow, get_flow_dict
+
+    flow = load_flow(MINIMAL)
+    flow.public = True
+    save_flow(flow)
+
+    saved_dict = get_flow_dict(flow.name)
+    assert saved_dict is not None
+    assert saved_dict["public"] is True
+
+    reloaded_flow = load_flow(saved_dict)
+    assert reloaded_flow.public is True
+
+
+# ---------------------------------------------------------------------------
 # `ui` field — canvas metadata
 # ---------------------------------------------------------------------------
 

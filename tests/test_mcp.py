@@ -101,6 +101,26 @@ async def test_crud_y_flow_catalog(mcp, flows_dir):
         assert {"x", "y"}.issubset(entry_outputs)
 
 
+async def test_list_flows_incluye_public(mcp, flows_dir):
+    public_flow = {**SUMA, "name": "suma_publica", "public": True}
+    async with Client(mcp) as c:
+        await c.call_tool("create_flow", {"flow": SUMA})
+        await c.call_tool("create_flow", {"flow": public_flow})
+        flows = {f["name"]: f for f in (await c.call_tool("list_flows", {})).data}
+        assert flows["suma"]["public"] is False  # not set in SUMA -> defaults to False
+        assert flows["suma_publica"]["public"] is True
+
+
+async def test_create_flow_public_true_and_get_flow_confirms(mcp, flows_dir):
+    public_flow = {**SUMA, "name": "suma_publica2", "public": True}
+    async with Client(mcp) as c:
+        created = (await c.call_tool("create_flow", {"flow": public_flow})).data
+        assert created["public"] is True
+
+        got = (await c.call_tool("get_flow", {"name": "suma_publica2"})).data
+        assert got["public"] is True
+
+
 async def test_test_flow_verifica_outputs(mcp, flows_dir):
     async with Client(mcp) as c:
         await c.call_tool("create_flow", {"flow": SUMA})
@@ -227,6 +247,107 @@ async def test_run_flow_trace_returns_ordered_node_events(mcp, flows_dir):
         assert r["outputs"] == {"resultado": 5}
         assert r["trace"], "trace should not be empty when trace=True"
         assert all(e["event"] in ("node_start", "node_done", "edge_fire") for e in r["trace"])
+
+
+FRONTEND_NODE_SRC = """\
+from rayflow.nodes.decorators import entry_node, ExecOutput, Input
+
+@entry_node
+class WithFrontend:
+    frontend = "with_frontend_ui"
+    message = Input("str")
+    exec_out = ExecOutput()
+
+@entry_node
+class WithoutFrontend:
+    message = Input("str")
+    exec_out = ExecOutput()
+"""
+
+
+@pytest.fixture
+async def mcp_with_frontend_node(mcp, custom_nodes_dir):
+    """Registers WithFrontend (declares `frontend = "with_frontend_ui"`) and
+    WithoutFrontend (doesn't) as real custom nodes via create_custom_node,
+    the same hot-reload path a remote MCP client would use — this keeps the
+    node's module importable (in sys.modules) afterwards, which
+    _resolve_frontend_bundle_dir needs (inspect.getfile) to find the
+    bundle's sibling directory. Mirrors client_with_frontend_node in
+    tests/test_editor.py, but built through the MCP tool instead of writing
+    the file directly, since that's the realistic path being tested here."""
+    async with Client(mcp) as c:
+        created = (await c.call_tool(
+            "create_custom_node", {"name": "frontend_nodes", "source": FRONTEND_NODE_SRC}
+        )).data
+        assert created["created"] is True
+    return mcp
+
+
+async def test_get_entry_frontend_no_frontend_declared(mcp_with_frontend_node):
+    async with Client(mcp_with_frontend_node) as c:
+        r = (await c.call_tool("get_entry_frontend", {"node_type": "WithoutFrontend"})).data
+    assert "error" in r
+    assert "frontend" in r["error"]
+
+
+async def test_get_entry_frontend_unknown_node_type(mcp_with_frontend_node):
+    async with Client(mcp_with_frontend_node) as c:
+        r = (await c.call_tool("get_entry_frontend", {"node_type": "NoExiste"})).data
+    assert "error" in r
+
+
+async def test_get_entry_frontend_bundle_dir_missing(mcp_with_frontend_node):
+    async with Client(mcp_with_frontend_node) as c:
+        r = (await c.call_tool("get_entry_frontend", {"node_type": "WithFrontend"})).data
+    assert r["exists"] is False
+    assert r["html"] is None
+
+
+async def test_update_and_delete_entry_frontend(mcp_with_frontend_node, custom_nodes_dir):
+    html = "<!doctype html><html><body>hi</body></html>"
+    async with Client(mcp_with_frontend_node) as c:
+        saved = (await c.call_tool(
+            "update_entry_frontend", {"node_type": "WithFrontend", "html": html}
+        )).data
+        assert saved["saved"] is True
+
+        bundle_dir = custom_nodes_dir / "custom_nodes" / "with_frontend_ui"
+        assert (bundle_dir / "index.html").read_text(encoding="utf-8") == html
+
+        got = (await c.call_tool("get_entry_frontend", {"node_type": "WithFrontend"})).data
+        assert got == {
+            "node_type": "WithFrontend",
+            "bundle_dir": str(bundle_dir),
+            "exists": True,
+            "html": html,
+        }
+
+        overwritten = (await c.call_tool(
+            "update_entry_frontend", {"node_type": "WithFrontend", "html": "<p>new</p>"}
+        )).data
+        assert overwritten["saved"] is True
+        assert (bundle_dir / "index.html").read_text(encoding="utf-8") == "<p>new</p>"
+
+        deleted = (await c.call_tool("delete_entry_frontend", {"node_type": "WithFrontend"})).data
+        assert deleted["deleted"] is True
+        assert not (bundle_dir / "index.html").exists()
+        assert bundle_dir.exists()  # the bundle directory itself is left in place
+
+        redelete = (await c.call_tool("delete_entry_frontend", {"node_type": "WithFrontend"})).data
+        assert "error" in redelete
+
+
+async def test_update_entry_frontend_rejects_empty_html_and_no_frontend_declared(mcp_with_frontend_node):
+    async with Client(mcp_with_frontend_node) as c:
+        empty = (await c.call_tool(
+            "update_entry_frontend", {"node_type": "WithFrontend", "html": "   "}
+        )).data
+        assert "error" in empty
+
+        no_frontend = (await c.call_tool(
+            "update_entry_frontend", {"node_type": "WithoutFrontend", "html": "<p>x</p>"}
+        )).data
+        assert "error" in no_frontend
 
 
 async def test_serve_and_stop_flow_events(mcp, flows_dir):
