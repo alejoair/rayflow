@@ -90,6 +90,7 @@ class ServedFlow:
             "version": self.flow_def.version,
             "endpoint": f"/flows/{self.flow_def.name}/run",
             "method": "POST",
+            "public": self.flow_def.public,
             "inputs": entry_inputs,
             "outputs": {
                 name: {"type": type_str}
