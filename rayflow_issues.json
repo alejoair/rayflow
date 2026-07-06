@@ -286,43 +286,6 @@
       ]
     },
     {
-      "id": "ISSUE-0010",
-      "severity": "high",
-      "kind": "claim_contradicted",
-      "title": "create_custom_node/update_custom_node_source devuelven éxito aunque el nodo custom nunca llegue a registrarse en el catálogo",
-      "summary": "Confirmado en vivo con 2 causas raíz distintas: (1) un @entry_node sin ExecOutput declarado, y (2) un import path roto (ImportError) en el source del nodo. En ambos casos, create_custom_node devolvió {\"created\": true, ...} y una llamada posterior a get_node/list_nodes mostró que el nodo nunca se registró. Causa confirmada en el código: create_custom_node/update_custom_node_source (rayflow/editor/custom_nodes_routes.py) solo validan sintaxis con ast.parse() antes de escribir el archivo; el registro real ocurre después, dentro de _reload_catalog() -> get_catalog() -> NodeCatalog.load_custom_nodes_package(), que envuelve el import de cada módulo custom en un bare `except Exception: continue` (rayflow/nodes/loader.py líneas 43-46) — cualquier excepción en tiempo de import (ImportError, o el ValueError que @entry_node lanza en decorators.py líneas 425-429 si la clase no declara al menos un ExecOutput) se descarta silenciosamente, sin propagarse como error. El endpoint retorna {\"name\": name, \"created\": True, **reload_result} incondicionalmente (línea 139), sin verificar si `name` efectivamente aparece en reload_result[\"custom_nodes\"]. La claim del SOT sobre este endpoint (api-rest-custom-nodes#endpoint-guardar-crear-valida-sintaxis-python) describe la validación de sintaxis y el hot-reload como si agotaran la superficie de fallo, sin mencionar que el hot-reload puede fallar en silencio después de esa validación — un lector que confíe en esa descripción asumiría que 'created: true' implica que el nodo quedó disponible, lo cual es falso en ambos escenarios reproducidos.",
-      "claim_ids": [
-        "api-rest-custom-nodes#endpoint-guardar-crear-valida-sintaxis-python",
-        "capa-mcp#create-custom-node-update-custom-node"
-      ],
-      "files": [
-        "rayflow/editor/custom_nodes_routes.py",
-        "rayflow/nodes/loader.py",
-        "rayflow/nodes/decorators.py"
-      ],
-      "docs": [],
-      "detected_by": {
-        "agent": "rayflow-issue-writer",
-        "run_id": "issue-writer-2026-07-06T00:00:00Z",
-        "trigger": "reported"
-      },
-      "detected_at": "2026-07-06T00:00:00Z",
-      "evidence": [
-        {
-          "file": "rayflow/editor/custom_nodes_routes.py",
-          "note": "create_custom_node (líneas 113-139) solo llama _validate_syntax(source) (ast.parse) antes de escribir el archivo; luego _reload_catalog() y retorna {\"name\": name, \"created\": True, **reload_result} sin chequear si `name` está en reload_result[\"custom_nodes\"]. update_custom_node_source (líneas 142-159) tiene el mismo patrón con \"saved\": True."
-        },
-        {
-          "file": "rayflow/nodes/loader.py",
-          "note": "load_custom_nodes_package (líneas 39-54): `try: module = importlib.import_module(module_name) except Exception: continue` — cualquier excepción de import (ImportError por un import path incorrecto, o cualquier ValueError lanzado por los decoradores de rayflow.nodes.decorators al definir la clase) hace que el archivo se salte sin dejar rastro de error."
-        },
-        {
-          "file": "rayflow/nodes/decorators.py",
-          "note": "entry_node (líneas 419-429): `if not meta.exec_outputs: raise ValueError(...)` — se ejecuta en el momento de decoración de la clase, es decir durante el import del módulo, cayendo directo en el except Exception de loader.py."
-        }
-      ]
-    },
-    {
       "id": "ISSUE-0011",
       "severity": "medium",
       "kind": "claim_contradicted",
