@@ -250,10 +250,23 @@ export default function App() {
     setCodeSaving(true)
     setCodeError(null)
     try {
-      await updateCustomNodeSource(activeTab.name, activeTab.source)
+      const res = await updateCustomNodeSource(activeTab.name, activeTab.source)
+      // El archivo se guardó en disco ("saved") independientemente de si el
+      // catálogo pudo registrarlo o no, así que el tab deja de estar dirty
+      // en cualquier caso.
       markCodeSaved(activeTab.name)
       refreshCatalog()
-      addToast('Nodo guardado', 'success')
+      if (res.registered) {
+        addToast('Nodo guardado', 'success')
+      } else {
+        // ISSUE-0013: el backend devuelve 200 con registered:false cuando el
+        // archivo se guardó pero el import/registro en el catálogo falló
+        // (import error, falta ExecOutput en @entry_node, nombre duplicado,
+        // etc.) — no lo tratamos como éxito silencioso.
+        const message = res.error || 'se guardó en disco pero no se registró en el catálogo (sin detalle de error)'
+        setCodeError(message)
+        addToast(`Nodo "${res.name}" guardado pero no registrado: ${message}`, 'error')
+      }
     } catch (e) {
       setCodeError((e as Error).message)
     } finally {
@@ -527,7 +540,7 @@ export default function App() {
             variables={tab?.flowDef?.variables ?? []}
             onChange={updateVariables}
           />
-          <CustomNodesPanel onReload={refreshCatalog} />
+          <CustomNodesPanel onReload={refreshCatalog} onToast={addToast} />
           {/* Handle de resize */}
           <div
             style={leftSidebar.handleStyle}
