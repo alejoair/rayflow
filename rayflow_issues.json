@@ -253,39 +253,6 @@
       ]
     },
     {
-      "id": "ISSUE-0009",
-      "severity": "medium",
-      "kind": "claim_contradicted",
-      "title": "get_guide termina con un workflow recomendado en rutas REST, inaccionable para un cliente 100% MCP",
-      "summary": "La sección final de rayflow/editor/guide.py ('## Recommended workflow for an agent', líneas 132-142) lista 5 pasos usando rutas REST crudas (GET /editor/guide, GET /editor/nodes, POST /editor/validate, POST /editor/flows, PUT /editor/flows/{name}, POST /editor/flows/{name}/test, POST /flows/{name}/run) sin mencionar ninguna de las tools MCP equivalentes (get_guide, list_nodes, validate_flow, create_flow/update_flow, test_flow/run_flow). Confirmado invocando get_guide vía MCP: rayflow/mcp/server.py devuelve el mismo string GUIDE sin ninguna adaptación para el canal MCP, así que un cliente MCP puro (sin capacidad de hacer requests HTTP directos) recibe, al final de la guía que se le recomienda leer primero, una lista de pasos que no puede ejecutar tal cual. Esto contradice directamente el loop documentado en el propio SOT para la capa MCP (capa-mcp#loop-tipico-agente-get-guide-list: 'get_guide -> list_nodes -> validate_flow -> create_flow/update_flow -> test_flow/run_flow'), que sí usa nombres de tool.",
-      "claim_ids": [
-        "capa-mcp#loop-tipico-agente-get-guide-list",
-        "capa-mcp#discovery-tools-get-guide-list-nodes",
-        "capa-mcp#flow-crud-tools-list-flows-get",
-        "capa-mcp#execution-tools-run-flow-test-flow"
-      ],
-      "files": [
-        "rayflow/editor/guide.py"
-      ],
-      "docs": [],
-      "detected_by": {
-        "agent": "rayflow-issue-writer",
-        "run_id": "issue-writer-2026-07-06T00:00:00Z",
-        "trigger": "reported"
-      },
-      "detected_at": "2026-07-06T00:00:00Z",
-      "evidence": [
-        {
-          "file": "rayflow/editor/guide.py",
-          "note": "Líneas 132-142 ('Recommended workflow for an agent'): los 5 pasos citan únicamente rutas REST (GET /editor/guide, GET /editor/nodes, POST /editor/validate, POST /editor/flows, PUT /editor/flows/{name}, POST /editor/flows/{name}/test, POST /flows/{name}/run); ninguna tool MCP (get_guide, list_nodes, validate_flow, create_flow, update_flow, test_flow, run_flow) aparece nombrada en esa sección, a diferencia de otras secciones del mismo archivo (p.ej. líneas 49-56, que sí listan explícitamente get_entry_frontend/update_entry_frontend/delete_entry_frontend junto a su equivalente REST)."
-        },
-        {
-          "file": "rayflow/mcp/server.py",
-          "note": "get_guide (líneas 66-76) retorna literalmente GUIDE (importado de rayflow.editor.guide) sin ningún post-procesamiento — confirma que un cliente MCP recibe exactamente esos mismos pasos REST-only citados arriba."
-        }
-      ]
-    },
-    {
       "id": "ISSUE-0011",
       "severity": "medium",
       "kind": "claim_contradicted",
