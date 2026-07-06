@@ -304,55 +304,62 @@ def create_mcp():
         return {"name": name, "source": path.read_text(encoding="utf-8")}
 
     @mcp.tool
-    def create_custom_node(name: str, source: str | None = None) -> dict[str, Any]:
+    async def create_custom_node(name: str, source: str | None = None) -> dict[str, Any]:
         """Writes a new custom node .py file under custom_nodes/ and
         immediately hot-reloads the catalog — no separate call to
         reload_custom_nodes or server restart needed; list_nodes/
         validate_flow see it right away.
+
+        Delegates directly to the same handler as POST
+        /editor/custom-nodes (rayflow/editor/custom_nodes_routes.py)
+        instead of reimplementing its write+reload logic, so the response
+        matches it exactly: on top of "created" (only means the file was
+        written to disk — nothing about whether it actually loaded), it
+        includes "registered" (whether `name` shows up in the reloaded
+        catalog) and "error" (the real exception message from
+        NodeCatalog.load_errors when the module failed to import/register,
+        or None otherwise). A node can be "created": true but
+        "registered": false if, e.g., the class raises on import (missing
+        decorator requirement, bad pin config, etc.) — check "error" for
+        why.
 
         Omit `source` to get a minimal @engine_node template to fill in;
         when supplying your own, decorate the class with @ray_node,
         @engine_node, or @parallel_node (see get_guide). Example:
         create_custom_node(name="DoubleIt", source="<python source
         defining class DoubleIt>")."""
+        from fastapi import HTTPException
         from rayflow.editor.custom_nodes_routes import (
-            NODE_TEMPLATE, _ensure_package, _node_file, _reload_catalog, _validate_syntax,
+            create_custom_node as _create_custom_node,
         )
-        name = name.strip()
-        if not name:
-            return {"error": "The 'name' field is required"}
-        if not name.isidentifier():
-            return {"error": f"'{name}' is not a valid Python identifier"}
-        _ensure_package()
-        path = _node_file(name)
-        if path.exists():
-            return {"error": f"A custom node named '{name}' already exists"}
-        code = source or NODE_TEMPLATE.format(name=name)
-        err = _validate_syntax(code)
-        if err:
-            return {"error": err}
-        path.write_text(code, encoding="utf-8")
-        return {"name": name, "created": True, **_reload_catalog()}
+        try:
+            return await _create_custom_node(body={"name": name, "source": source})
+        except HTTPException as e:
+            return {"error": e.detail}
 
     @mcp.tool
-    def update_custom_node_source(name: str, source: str) -> dict[str, Any]:
+    async def update_custom_node_source(name: str, source: str) -> dict[str, Any]:
         """Overwrites an existing custom node's source and hot-reloads the
         catalog (same automatic reload as create_custom_node — no separate
         reload_custom_nodes call needed). This is also how to make an
         entry node support a frontend bundle: add a `frontend = "<dir>"`
         class attribute here, then manage its index.html with
-        get_entry_frontend/update_entry_frontend."""
-        from rayflow.editor.custom_nodes_routes import _node_file, _reload_catalog, _validate_syntax
-        path = _node_file(name)
-        if not path.exists():
-            return {"error": f"Custom node '{name}' not found"}
-        if not source.strip():
-            return {"error": "The 'source' field cannot be empty"}
-        err = _validate_syntax(source)
-        if err:
-            return {"error": err}
-        path.write_text(source, encoding="utf-8")
-        return {"name": name, "saved": True, **_reload_catalog()}
+        get_entry_frontend/update_entry_frontend.
+
+        Delegates directly to the same handler as PUT
+        /editor/custom-nodes/{name}/source instead of reimplementing its
+        write+reload logic, so the response includes "registered"/"error"
+        exactly like create_custom_node above — "saved": true only means
+        the file was written; check "registered"/"error" for whether the
+        edited source actually imports and registers under `name`."""
+        from fastapi import HTTPException
+        from rayflow.editor.custom_nodes_routes import (
+            update_custom_node_source as _update_custom_node_source,
+        )
+        try:
+            return await _update_custom_node_source(name=name, body={"source": source})
+        except HTTPException as e:
+            return {"error": e.detail}
 
     @mcp.tool
     def delete_custom_node(name: str) -> dict[str, Any]:
