@@ -102,7 +102,14 @@ export interface CustomNodeFile {
 
 export const listCustomNodes = () => apiFetch<CustomNodeFile[]>('/editor/custom-nodes')
 export const getCustomNodeSource = (name: string) => apiFetch<{ name: string; source: string }>(`/editor/custom-nodes/${encodeURIComponent(name)}/source`)
-export const createCustomNode = (name: string, source?: string) => apiFetch<{ name: string; created: boolean; custom_nodes: string[] }>('/editor/custom-nodes', { method: 'POST', ...json({ name, source }) })
-export const updateCustomNodeSource = (name: string, source: string) => apiFetch<{ name: string; saved: boolean; custom_nodes: string[] }>(`/editor/custom-nodes/${encodeURIComponent(name)}/source`, { method: 'PUT', ...json({ source }) })
+// "registered" reflects whether `name` actually showed up in the reloaded
+// catalog (not just that the file was written to disk) and "error" carries
+// the real import/registration exception message from
+// NodeCatalog.load_errors, or null when there wasn't one — see the
+// create_custom_node/update_custom_node_source docstrings in
+// rayflow/editor/custom_nodes_routes.py. Both fields are always present in
+// the response (error is `null`, never omitted, when there's no error).
+export const createCustomNode = (name: string, source?: string) => apiFetch<{ name: string; created: boolean; registered: boolean; error: string | null; custom_nodes: string[] }>('/editor/custom-nodes', { method: 'POST', ...json({ name, source }) })
+export const updateCustomNodeSource = (name: string, source: string) => apiFetch<{ name: string; saved: boolean; registered: boolean; error: string | null; custom_nodes: string[] }>(`/editor/custom-nodes/${encodeURIComponent(name)}/source`, { method: 'PUT', ...json({ source }) })
 export const deleteCustomNode = (name: string) => apiFetch<null>(`/editor/custom-nodes/${encodeURIComponent(name)}`, { method: 'DELETE' })
 export const reloadCustomNodes = () => apiFetch<{ reloaded: boolean; custom_nodes: string[] }>('/editor/custom-nodes/reload', { method: 'POST' })
