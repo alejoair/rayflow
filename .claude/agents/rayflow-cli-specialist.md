@@ -41,15 +41,19 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 | `rayflow/claude_tools/agents/rayflow-debugger.md` | Installable Claude Code subagent (end-user template): diagnoses why a user's flow fails/misbehaves. Deliberately restricted to read-only tools (Read/Grep/Glob + diagnostic-only MCP tools, no create_flow/update_flow/Write) so it can only report a diagnosis, never silently modify the flow it's investigating. |
 | `rayflow/claude_tools/mcp.json` | Template copied to <cwd>/.mcp.json by `rayflow install claude-tools`, identical in shape to this repo's own .mcp.json — registers the local rayflow MCP server at http://localhost:8000/mcp/. Only written if the destination doesn't already have one. |
 | `rayflow/claude_tools/skills/rayflow-flow/SKILL.md` | Installable Claude Code skill (end-user template): the MCP tool loop for building/editing/testing a flow (get_guide -> list_nodes -> validate_flow iterate -> create_flow/update_flow -> test_flow/run_flow), CallFlow composition, event-reactive flows, and the HTTP request/response mechanism (OnStart's headers/query/body/method, ctx.set_response_status/set_response_header) for flows served via rayflow serve. |
+| `rayflow/claude_tools/skills/rayflow-flow/scripts/batch_test.py` | [DRAFT sin revisar] Standalone script (installable Claude Code skill asset, not imported by rayflow itself): runs a flow against a batch of test cases via HTTP against a running `rayflow serve`'s POST /editor/flows/{name}/test endpoint, printing PASS/FAIL/INFO per case and exiting 1 on any failure or connection error. |
+| `rayflow/claude_tools/skills/rayflow-flow/scripts/validate_flow.py` | [DRAFT sin revisar] Standalone script (installable Claude Code skill asset): offline flow validator that runs the same logic as the MCP validate_flow tool (rayflow.schema.loader + rayflow.build.validator.validate_all) locally without a running server, printing {valid, errors, warnings} as JSON and exiting 1 if invalid. |
 | `rayflow/claude_tools/skills/rayflow-node/SKILL.md` | Installable Claude Code skill (end-user template, not for this repo's own dev process): how to create/edit a custom Rayflow node in a user's own project — decorator choice, pin contract, create_custom_node/update_custom_node_source MCP tools, hot reload. |
+| `rayflow/claude_tools/skills/rayflow-node/scripts/check_node.py` | [DRAFT sin revisar] Standalone script (installable Claude Code skill asset): locally validates a custom node source file's syntax and decorator/pin contract by executing it as a module and inspecting get_node_meta(), without touching the running server's live catalog; prints {ok, errors, nodes} as JSON. |
+| `rayflow/claude_tools/skills/rayflow-node/scripts/scaffold_node.py` | [DRAFT sin revisar] Standalone script (installable Claude Code skill asset): scaffolds a Rayflow custom node class (decorator import, ExecInput/ExecOutput, Input/Output pins, run() boilerplate) from CLI-specified pin specs, optionally writing directly to custom_nodes/<Name>.py. |
 | `rayflow/cli/__init__.py` | Re-exports the click CLI group as `main`. |
 | `rayflow/cli/main.py` | Click-based CLI: `rayflow serve` initializes Ray and starts the REST/editor/MCP server; `rayflow install claude-tools` copies packaged Claude Code skills/agent templates (rayflow/claude_tools/) into the current working directory's .claude/ and drops a .mcp.json registering the local MCP server, for an end user's own project (not this repo's own dev tooling). |
 
 ## Dependencias entre sistemas
 
-Depende de: _(ningún otro sistema)_
+Depende de: `build`, `events`, `nodes`, `schema`, `server`
 
-Es dependencia de: _(ningún otro sistema)_
+Es dependencia de: `server`, `tests`
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -105,5 +109,15 @@ Es dependencia de: _(ningún otro sistema)_
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
+## Contactos
+
+| agente | descripción |
+|---|---|
+| `rayflow-bash-runner` | El único agente de este repo con el tool Bash en su frontmatter. Cualquier otro agente (los rayflow-<sistema>-specialist, rayflow-auditor, o el loop principal) que necesite correr un comando de shell (pytest, ty check, pre-commit, git, pip install, npm, etc.) le delega la ejecución a este agente en vez de tener Bash él mismo — mantiene el blast radius de ejecución de shell concentrado en un solo lugar auditable. Invocalo con el comando exacto y para qué sirve (primera vez vía Agent; para seguir pidiéndole más comandos en la misma conversación, vía SendMessage). |
+| `rayflow-github-runner` | El único agente de este repo con acceso a las tools mcp__github__* (PRs, issues, reviews, CI, branches). Mismo patrón que rayflow-bash-runner pero para GitHub en vez de shell — concentra el blast radius de operaciones remotas contra el repo en un solo lugar auditable. Cualquier otro agente (rayflow-main incluido, que ya no tiene estas tools directamente) que necesite crear/actualizar un PR, comentar, chequear CI, revisar, o cualquier operación de GitHub, le delega acá — Agent para el primer pedido, SendMessage al mismo agente para seguir la conversación (ej. "¿ya pasó el CI?", "respondé este comentario") sin perder contexto. |
+| `rayflow-issue-writer` | El único agente de este repo con permiso para escribir en rayflow_issues.json. Cualquier otro agente (rayflow-auditor, los rayflow-<sistema>-specialist, rayflow-router, o quien sea) que detecte una posible discrepancia entre un claim de RAYFLOW_SOURCE_OF_TRUTH.json y el código real le reporta el hallazgo acá en vez de editar el archivo directamente — no importa si el hallazgo vino de una auditoría formal o fue incidental durante otro trabajo. Verifica cada candidato de forma independiente antes de escribir nada; no confía ciegamente en el reporte que recibe. |
+
+Esta es tu agenda de contactos — no invoques ningún otro subagente. Es una convención de diseño, no un bloqueo técnico (Claude Code no soporta restringir programáticamente qué puede invocar un subagente spawneado; solo el hilo principal puede tener esa restricción real).
+
 ---
-_Generado desde el commit `69ea42c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ad04fee`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

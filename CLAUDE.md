@@ -120,6 +120,30 @@ abiertos que lo mencionan.
   releer archivos. Preferí este camino sobre investigar vos mismo cuando ya
   hay un especialista de ese sistema conversando en la sesión.
 
+## Macro-agentes (grupos de sistemas)
+
+Los 21 sistemas se agrupan además en 4 **macrosistemas** (campo
+`macrosistemas` de `rayflow_file_map.json`, muchos-a-muchos — `packaging`
+cae tanto en `interfaces` como en `frontend`): `runtime-core`, `interfaces`,
+`frontend`, `repo-quality`. Cada uno tiene un
+`.claude/agents/rayflow-macro-<macrosistema>.md` regenerado en cada commit
+(`scripts/generate_macro_agents.py`, hook `macro-agents-generate`).
+
+El modelo de delegación tiene dos niveles con garantías distintas:
+
+- **`rayflow-main` → los 4 macro-agents**: esto es enforcement técnico real.
+  `rayflow-main` corre como hilo principal (`.claude/settings.json` fija
+  `"agent": "rayflow-main"`) y su toolset no incluye Read/Grep/Glob/Edit/Bash
+  propios — solo puede delegar.
+- **Macro-agent → especialistas de su macrosistema**: esto es convención
+  documentada, no bloqueo técnico. Un macro-agent spawneado como subagente
+  (`tools: Agent, SendMessage`) técnicamente podría invocar cualquier
+  subagente del repo — Claude Code no soporta restringir programáticamente
+  qué invoca un subagente ya spawneado, solo el hilo principal tiene esa
+  restricción real. Cada macro-agent lista su "agenda de contactos" (los
+  especialistas de sus sistemas miembro + los otros 3 macro-agents) con esa
+  aclaración explícita.
+
 
 ## Índice de `RAYFLOW_SOURCE_OF_TRUTH.json`
 
@@ -180,7 +204,7 @@ Agrupación de los archivos del repo en sistemas, con su descripción y cantidad
 |---|---|---|
 | `build` | 2 | Validates a parsed FlowDef against the node catalog and produces an executable BuiltFlow: flattens CallFlow subflows into one namespace, checks type/wiring/cycle correctness, and either raises on first error or collects every error in one pass for editor/MCP clients. |
 | `ci` | 3 | GitHub Actions workflows: CLA enforcement, test suite, and PyPI publishing. |
-| `cli` | 7 | The `rayflow` command-line entry point (serve, and future subcommands) built on top of rayflow.api and rayflow.server. |
+| `cli` | 11 | The `rayflow` command-line entry point (serve, and future subcommands) built on top of rayflow.api and rayflow.server. |
 | `docs` | 21 | Long-form prose: README, CLAUDE.md (this repo's own agent-facing architecture guide), design-decision docs, and licensing/contribution documents (LICENSE, CLA.md, COMMERCIAL-LICENSE.md, CONTRIBUTING.md). |
 | `editor-api` | 5 | The REST surface for the visual editor: flow CRUD, validation, catalog resolution, custom-node CRUD with hot reload, and the curated markdown guide served to LLM agents. |
 | `engine` | 2 | The FlowEngine Ray actor and LoadedFlow lifecycle: executes a BuiltFlow node-by-node (sequential exec pins, parallel data pins), manages per-run scratch state (RunContext), and is the runtime core every other backend system ultimately drives. |
@@ -191,7 +215,7 @@ Agrupación de los archivos del repo en sistemas, con su descripción y cantidad
 | `frontend-panels` | 7 | Sidebar/footer editor panels: node palette, variables panel, custom-nodes CodeMirror editor, properties panel, runs panel, and the flow settings dialog. |
 | `frontend-state` | 5 | Client-side state and data access: the Zustand store (tabs, runs, catalog), the typed HTTP API client, and the SSE run-streaming hook with reconnect logic. |
 | `frontend-ui-kit` | 11 | Design-system primitives adapted from shadcn/ui (Button, Dialog, Select, Tabs, etc.), rewritten to use inline styles instead of Tailwind per this repo's UI conventions. |
-| `hooks-infra` | 54 | Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose. |
+| `hooks-infra` | 55 | Repo-quality tooling infrastructure: Claude Code hooks that read rayflow_file_map.json to give an LLM agent per-file/per-system context, staleness reminders, live symbol/type-diagnostic info, and workflow checklists (plus settings.json wiring them in); the rayflow-auditor subagent and its _sot_scope.py helper; and the git/pre-commit-level SOT edit-blocking mechanism (scripts/check_sot_commit_message.py, .pre-commit-config.yaml) — a different mechanism (git hooks, not Claude Code hooks) serving the same repo-quality purpose. |
 | `mcp` | 3 | The curated FastMCP tool layer exposing a subset of the editor API as MCP tools for LLM agents (get_guide, list_nodes, validate_flow, run_flow, etc.) plus the .mcp.json client registration for this repo. |
 | `nodes` | 14 | The node system: @ray_node/@engine_node/@parallel_node decorators, pin descriptors (Input/Output/ExecInput/ExecOutput), NodeCatalog discovery/loading, and the built-in node library (math, control flow, casting, comparisons, variables, events). |
 | `packaging` | 2 | Controls what actually ships: pyproject.toml package metadata/dependencies, MANIFEST.in inclusion/exclusion rules, and the built frontend bundle (rayflow/editor/static/dist/) that server.py serves. |
@@ -202,4 +226,4 @@ Agrupación de los archivos del repo en sistemas, con su descripción y cantidad
 
 
 ---
-_Generado desde el commit `69ea42c`._
+_Generado desde el commit `ad04fee`._

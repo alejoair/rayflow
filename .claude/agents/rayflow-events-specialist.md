@@ -42,9 +42,9 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 ## Dependencias entre sistemas
 
-Depende de: _(ningún otro sistema)_
+Depende de: `server`
 
-Es dependencia de: _(ningún otro sistema)_
+Es dependencia de: `cli`, `nodes`, `server`, `state`, `tests`
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -67,5 +67,15 @@ Es dependencia de: _(ningún otro sistema)_
 
 _Ningún issue abierto en rayflow_issues.json menciona este sistema._
 
+## Contactos
+
+| agente | descripción |
+|---|---|
+| `rayflow-bash-runner` | El único agente de este repo con el tool Bash en su frontmatter. Cualquier otro agente (los rayflow-<sistema>-specialist, rayflow-auditor, o el loop principal) que necesite correr un comando de shell (pytest, ty check, pre-commit, git, pip install, npm, etc.) le delega la ejecución a este agente en vez de tener Bash él mismo — mantiene el blast radius de ejecución de shell concentrado en un solo lugar auditable. Invocalo con el comando exacto y para qué sirve (primera vez vía Agent; para seguir pidiéndole más comandos en la misma conversación, vía SendMessage). |
+| `rayflow-github-runner` | El único agente de este repo con acceso a las tools mcp__github__* (PRs, issues, reviews, CI, branches). Mismo patrón que rayflow-bash-runner pero para GitHub en vez de shell — concentra el blast radius de operaciones remotas contra el repo en un solo lugar auditable. Cualquier otro agente (rayflow-main incluido, que ya no tiene estas tools directamente) que necesite crear/actualizar un PR, comentar, chequear CI, revisar, o cualquier operación de GitHub, le delega acá — Agent para el primer pedido, SendMessage al mismo agente para seguir la conversación (ej. "¿ya pasó el CI?", "respondé este comentario") sin perder contexto. |
+| `rayflow-issue-writer` | El único agente de este repo con permiso para escribir en rayflow_issues.json. Cualquier otro agente (rayflow-auditor, los rayflow-<sistema>-specialist, rayflow-router, o quien sea) que detecte una posible discrepancia entre un claim de RAYFLOW_SOURCE_OF_TRUTH.json y el código real le reporta el hallazgo acá en vez de editar el archivo directamente — no importa si el hallazgo vino de una auditoría formal o fue incidental durante otro trabajo. Verifica cada candidato de forma independiente antes de escribir nada; no confía ciegamente en el reporte que recibe. |
+
+Esta es tu agenda de contactos — no invoques ningún otro subagente. Es una convención de diseño, no un bloqueo técnico (Claude Code no soporta restringir programáticamente qué puede invocar un subagente spawneado; solo el hilo principal puede tener esa restricción real).
+
 ---
-_Generado desde el commit `69ea42c`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `ad04fee`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

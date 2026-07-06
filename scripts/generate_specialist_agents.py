@@ -18,6 +18,15 @@ templating over already-existing, already-maintained sources:
                                files, or whose `claim_ids` belong to a claim
                                already surfaced above.
 
+Each generated file also carries a "## Contactos" section listing the three
+repo-dev subagents every specialist may delegate to (rayflow-bash-runner,
+rayflow-github-runner, rayflow-issue-writer) with their real frontmatter
+descriptions read live off their own .md files (read_agent_description
+below) — not hardcoded copies. The section ends with a fixed disclaimer
+(CONTACTS_PHRASE) making explicit that this contact list is a design
+convention, not a technical restriction Claude Code actually enforces on a
+spawned subagent.
+
 Earlier design (rayflow_agents_system.md §2-3) recommended AGAINST
 embedding content in these files, specifically to avoid the staleness risk
 of a hand-copied snapshot going stale the moment the source changes. That
@@ -164,17 +173,81 @@ def _issues_section(system_files: list[str], relevant_claims: list[dict], issues
     return "\n".join(lines) + "\n"
 
 
+# The three repo-dev subagents every specialist is allowed to delegate to —
+# same "concentrate a sensitive tool surface in one auditable place" pattern
+# for all three (Bash / GitHub MCP tools / rayflow_issues.json write access).
+# Note the underscore in the bash-runner's filename (rayflow_bash_runner.md,
+# unlike every other hyphenated agent filename here) — that's the real
+# on-disk name, not a typo.
+CONTACT_AGENTS = [
+    ("rayflow-bash-runner", AGENTS_DIR / "rayflow_bash_runner.md"),
+    ("rayflow-github-runner", AGENTS_DIR / "rayflow-github-runner.md"),
+    ("rayflow-issue-writer", AGENTS_DIR / "rayflow-issue-writer.md"),
+]
+
+CONTACTS_PHRASE = (
+    "Esta es tu agenda de contactos — no invoques ningún otro subagente. Es "
+    "una convención de diseño, no un bloqueo técnico (Claude Code no soporta "
+    "restringir programáticamente qué puede invocar un subagente spawneado; "
+    "solo el hilo principal puede tener esa restricción real)."
+)
+
+
+def read_agent_description(path: Path) -> str:
+    """Extracts the frontmatter `description:` value live off an already
+    -written agent .md file on disk, instead of hardcoding a copy here that
+    could go stale the moment that agent's own description changes. Handles
+    both a plain YAML scalar (rest of the line, verbatim) and a
+    json.dumps()-quoted one (the format this same generator uses for its own
+    specialist frontmatter — see specialist_frontmatter_description below)."""
+    text = path.read_text(encoding="utf-8")
+    _, frontmatter, _ = text.split("---", 2)
+    for line in frontmatter.splitlines():
+        if line.startswith("description:"):
+            value = line[len("description:"):].strip()
+            if value.startswith('"'):
+                return json.loads(value)
+            return value
+    return ""
+
+
+def _contacts_section() -> str:
+    lines = ["| agente | descripción |", "|---|---|"]
+    for name, path in CONTACT_AGENTS:
+        desc = _md_table_cell(read_agent_description(path))
+        lines.append(f"| `{name}` | {desc} |")
+    lines.append("")
+    lines.append(CONTACTS_PHRASE)
+    return "\n".join(lines) + "\n"
+
+
+def short_description(text: str, max_len: int = 220) -> str:
+    """Truncates at a word boundary and appends '...' if `text` exceeds
+    `max_len` — factored out so scripts/generate_macro_agents.py can reuse
+    the exact same truncation behavior for its own frontmatter descriptions."""
+    return text if len(text) <= max_len else text[: max_len - 3].rsplit(" ", 1)[0] + "..."
+
+
+def specialist_frontmatter_description(system: str, description: str) -> str:
+    """Builds the frontmatter `description:` for a rayflow-<system>-specialist
+    — factored out (not just inlined in generate_one) so
+    scripts/generate_macro_agents.py can build the exact same description
+    text for its own "## Contactos" listing of member-system specialists,
+    without duplicating the wording by hand."""
+    short_desc = short_description(description)
+    return (
+        f"Especialista en el sistema `{system}` de rayflow. {short_desc} "
+        f"Usar para tareas/issues que el file map o rayflow_issues.json marcan "
+        f"como pertenecientes a este sistema."
+    )
+
+
 def generate_one(system: str, info: dict, file_map: dict, sot: dict, issues: dict) -> str:
     files = file_map["files"]
     description = info.get("description", "").strip()
     sot_body, relevant_claims = _sot_section(info.get("files", []), sot)
 
-    short_desc = description if len(description) <= 220 else description[:217].rsplit(" ", 1)[0] + "..."
-    frontmatter_desc = (
-        f"Especialista en el sistema `{system}` de rayflow. {short_desc} "
-        f"Usar para tareas/issues que el file map o rayflow_issues.json marcan "
-        f"como pertenecientes a este sistema."
-    )
+    frontmatter_desc = specialist_frontmatter_description(system, description)
 
     parts = [
         "---",
@@ -207,6 +280,9 @@ def generate_one(system: str, info: dict, file_map: dict, sot: dict, issues: dic
         "## Issues abiertos que mencionan este sistema (`rayflow_issues.json`)",
         "",
         _issues_section(info.get("files", []), relevant_claims, issues),
+        "## Contactos",
+        "",
+        _contacts_section(),
         "---",
         f"_Generado desde el commit `{_git_short_head()}`. No asumas que conocés el "
         f"contenido de tus archivos de memoria — leélos con tus propios tools, "

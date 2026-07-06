@@ -39,6 +39,26 @@ repos:
         language: system
         stages: [pre-commit]
         pass_filenames: false
+      - id: macro-agents-generate
+        name: Regenerate macrosistema-level agents (.claude/agents/rayflow-macro-*.md)
+        description: >
+          See scripts/generate_macro_agents.py. One
+          .claude/agents/rayflow-macro-<macrosistema>.md per macrosistema
+          declared in rayflow_file_map.json's `systems.<system>.macrosistemas`
+          field (a many-to-many grouping, e.g. `packaging` belongs to both
+          `interfaces` and `frontend`). Deterministic, no LLM. Runs after
+          file-map-draft (needs a settled rayflow_file_map.json) and before
+          agents-generate: this generator only reads rayflow_file_map.json,
+          never the per-system specialist .md files themselves, so it has no
+          ordering dependency on agents-generate having already run in this
+          commit — but it makes sense to regenerate the higher-level
+          macro-agents before the per-system ones in the file, mirroring the
+          top-down order a human would read `.claude/agents/` in. Never
+          blocks.
+        entry: python3 scripts/generate_macro_agents.py
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
       - id: claude-md-generate
         name: Regenerate CLAUDE.md from rayflow_system_prompt.md + SOT + file map
         description: >
