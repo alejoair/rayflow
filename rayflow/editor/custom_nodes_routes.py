@@ -76,7 +76,11 @@ def _reload_catalog() -> dict[str, Any]:
         name for name, _cls, _meta in catalog
         if name not in _BUILTIN_TYPES
     ]
-    return {"reloaded": True, "custom_nodes": custom_names}
+    return {
+        "reloaded": True,
+        "custom_nodes": custom_names,
+        "errors": catalog.load_errors,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +120,30 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
 
     Body: { "name": "MyNode", "source": "..." (optional) }
     If source isn't provided, the default template is used.
+
+    The response includes "registered": whether `name` shows up in the
+    reloaded catalog after writing the file to disk. "created" only means
+    the file was written successfully to disk — it says nothing about
+    whether the module loaded and its class got registered in the node
+    catalog. A file can be "created" but not "registered" if, e.g., the
+    module raises on import (missing decorator requirement, bad pin
+    config, etc.).
+
+    The response also includes "error": the real exception message from
+    NodeCatalog.load_errors (rayflow/nodes/loader.py) when the module
+    failed to import or register, or None otherwise. load_errors is keyed
+    by `path.stem` (the filename without ".py"), which is exactly `name`
+    here since `_node_file()` writes the file as f"{name}.py" — so
+    `reload_result["errors"].get(name)` is a direct, untransformed lookup.
+
+    Known remaining gap: "registered" is derived by checking
+    `name in reload_result["custom_nodes"]`, and the catalog is keyed by
+    `cls.__name__` — not necessarily the same string as the file/API `name`
+    used to create it. A custom node file that loads without error but
+    declares a class with a different name than the one passed here will
+    show "registered": false with "error": None (the import genuinely
+    succeeded, just under another name) — a false negative that "error"
+    does not resolve, since there was no exception to record.
     """
     name: str = body.get("name", "").strip()
     if not name:
@@ -136,12 +164,41 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
 
     path.write_text(source, encoding="utf-8")
     reload_result = _reload_catalog()
-    return {"name": name, "created": True, **reload_result}
+    return {
+        "name": name,
+        "created": True,
+        "registered": name in reload_result["custom_nodes"],
+        "error": reload_result["errors"].get(name),
+        **reload_result,
+    }
 
 
 @router.put("/{name}/source")
 async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[str, Any]:
-    """Saves the edited source code and reloads the catalog."""
+    """Saves the edited source code and reloads the catalog.
+
+    The response includes "registered": whether `name` shows up in the
+    reloaded catalog after writing the file to disk. "saved" only means
+    the file was written successfully to disk — it says nothing about
+    whether the module loaded and its class got registered in the node
+    catalog. A file can be "saved" but not "registered" if the edited
+    source raises on import (e.g. a decoration error).
+
+    The response also includes "error": the real exception message from
+    NodeCatalog.load_errors (rayflow/nodes/loader.py) when the module
+    failed to import or register, or None otherwise. load_errors is keyed
+    by `path.stem` (the filename without ".py"), which is exactly `name`
+    here since `_node_file()` reads/writes the file as f"{name}.py" — so
+    `reload_result["errors"].get(name)` is a direct, untransformed lookup.
+
+    Known remaining gap (same as create_custom_node above): "registered"
+    is derived from `name in reload_result["custom_nodes"]`, and the
+    catalog is keyed by `cls.__name__`, not necessarily the file/API
+    `name`. A node whose class got renamed in the edited source (but still
+    loads fine) will report "registered": false with "error": None here —
+    a false negative that "error" does not resolve, since there was no
+    exception: the module imported successfully, just under another name.
+    """
     path = _node_file(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Custom node '{name}' not found")
@@ -156,7 +213,13 @@ async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[s
 
     path.write_text(source, encoding="utf-8")
     reload_result = _reload_catalog()
-    return {"name": name, "saved": True, **reload_result}
+    return {
+        "name": name,
+        "saved": True,
+        "registered": name in reload_result["custom_nodes"],
+        "error": reload_result["errors"].get(name),
+        **reload_result,
+    }
 
 
 @router.delete("/{name}", status_code=204)

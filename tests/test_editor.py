@@ -660,6 +660,164 @@ def test_custom_engine_node_runs(client_with_custom_node):
 
 
 # ---------------------------------------------------------------------------
+# POST/PUT /editor/custom-nodes — "registered" reports whether the class
+# actually landed in the reloaded catalog, distinct from "created"/"saved"
+# (which only mean the file was written to disk). ISSUE-0010.
+# ---------------------------------------------------------------------------
+
+GOOD_CUSTOM_NODE_SRC = """\
+from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput
+
+@engine_node
+class GoodNode:
+    exec_in = ExecInput()
+    exec_out = ExecOutput()
+
+    async def run(self, ctx: ExecContext) -> None:
+        await ctx.fire("exec_out")
+"""
+
+# @entry_node requires at least one ExecOutput (rayflow/nodes/decorators.py,
+# entry_node); this class doesn't declare one, so the decorator raises
+# ValueError at import time and the module never registers a class, even
+# though its Python syntax is perfectly valid.
+BROKEN_CUSTOM_NODE_SRC = """\
+from rayflow.nodes.decorators import entry_node, Input
+
+@entry_node
+class BrokenEntry:
+    message = Input("str")
+"""
+
+
+@pytest.fixture
+def client_cn(tmp_path, monkeypatch):
+    """A client chdir'd into a temp workspace so custom_nodes_path()
+    (rayflow/workspace.py — resolves off Path.cwd(), not off flows_path())
+    points at tmp_path/custom_nodes. Needed to exercise the
+    /editor/custom-nodes CRUD endpoints, which write files there and then
+    hot-reload the catalog from that directory."""
+    import rayflow.editor.storage as storage_mod
+    monkeypatch.setattr(storage_mod, "flows_path", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    served = load_served_flows([])
+    return TestClient(create_app(served))
+
+
+def test_create_custom_node_reports_registered_true(client_cn):
+    """The default template (no `source` in the body) is a valid
+    @engine_node, so it lands in the catalog after the hot reload."""
+    r = client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["created"] is True
+    assert data["registered"] is True
+    assert "GoodNode" in data["custom_nodes"]
+
+
+def test_create_custom_node_reports_registered_false_on_decoration_error(client_cn):
+    """The file is still written to disk (valid Python syntax passes
+    ast.parse), so "created" is true — but the decorator raises on import,
+    so the class never reaches the catalog and "registered" must be false."""
+    r = client_cn.post("/editor/custom-nodes", json={
+        "name": "BrokenEntry", "source": BROKEN_CUSTOM_NODE_SRC,
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["created"] is True
+    assert data["registered"] is False
+    assert "BrokenEntry" not in data["custom_nodes"]
+
+
+def test_update_custom_node_source_reports_registered_true(client_cn):
+    client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    r = client_cn.put(
+        "/editor/custom-nodes/GoodNode/source", json={"source": GOOD_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["saved"] is True
+    assert data["registered"] is True
+    assert "GoodNode" in data["custom_nodes"]
+
+
+def test_update_custom_node_source_reports_registered_false_on_decoration_error(client_cn):
+    """Start from a node that registers fine, then overwrite its source
+    with a decoration error — "saved" (file written) stays true, but
+    "registered" flips to false since the class no longer makes it into
+    the reloaded catalog."""
+    client_cn.post("/editor/custom-nodes", json={"name": "ToBreak"})
+    r = client_cn.put(
+        "/editor/custom-nodes/ToBreak/source", json={"source": BROKEN_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["saved"] is True
+    assert data["registered"] is False
+    assert "ToBreak" not in data["custom_nodes"]
+
+
+# ---------------------------------------------------------------------------
+# POST/PUT /editor/custom-nodes — "error" surfaces the real exception message
+# from NodeCatalog.load_errors (rayflow/nodes/loader.py), keyed by
+# path.stem == the API `name` here. Full fix for ISSUE-0010, on top of the
+# "registered" field above.
+# ---------------------------------------------------------------------------
+
+
+def test_create_custom_node_reports_error_message_on_decoration_error(client_cn):
+    """On top of "registered": false, "error" must carry the actual
+    exception raised by the @entry_node decorator (rayflow/nodes/
+    decorators.py, entry_node) when the class doesn't declare an
+    ExecOutput — not just a generic/empty value."""
+    r = client_cn.post("/editor/custom-nodes", json={
+        "name": "BrokenEntry", "source": BROKEN_CUSTOM_NODE_SRC,
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["registered"] is False
+    assert data["error"] is not None
+    assert "ExecOutput" in data["error"]
+
+
+def test_create_custom_node_reports_error_none_on_success(client_cn):
+    """A node that registers successfully has nothing to report in
+    "error" — it must be None (or absent), not some falsy stand-in."""
+    r = client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["registered"] is True
+    assert data.get("error") is None
+
+
+def test_update_custom_node_source_reports_error_message_on_decoration_error(client_cn):
+    """Same as the create_custom_node case: overwriting a good node's
+    source with a decoration error must surface the real message in
+    "error", alongside "registered": false."""
+    client_cn.post("/editor/custom-nodes", json={"name": "ToBreak"})
+    r = client_cn.put(
+        "/editor/custom-nodes/ToBreak/source", json={"source": BROKEN_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["registered"] is False
+    assert data["error"] is not None
+    assert "ExecOutput" in data["error"]
+
+
+def test_update_custom_node_source_reports_error_none_on_success(client_cn):
+    """Successfully saving valid source must report "error": None."""
+    client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    r = client_cn.put(
+        "/editor/custom-nodes/GoodNode/source", json={"source": GOOD_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["registered"] is True
+    assert data.get("error") is None
+
+
+# ---------------------------------------------------------------------------
 # Concurrency — several flows at once don't interfere with each other
 # ---------------------------------------------------------------------------
 

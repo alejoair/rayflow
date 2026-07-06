@@ -1,7 +1,7 @@
 {
   "$schema_note": "Cola de issues ABIERTOS detectados al comparar RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del repo. Cada issue enlaza claim_ids (RAYFLOW_SOURCE_OF_TRUTH.json), files (rutas afectadas, típicamente ya en rayflow_file_map.json), y docs (archivos de documentación en prosa que también quedan desactualizados: CLAUDE.md, README.md, SKILL.md, guide.py, etc.). Este archivo NO acumula historial: 'resolver' un issue es eliminarlo del array en el mismo commit que aplica el fix — el historial completo (cuándo se creó, cuándo se resolvió, en qué commit) vive en `git log -p -- rayflow_issues.json` / `git blame`, no acá. `next_id` es un contador monótono que nunca retrocede ni reutiliza ids, aunque el array se achique — por eso puede haber huecos en la numeración. Ver docs/issues_system.md para el diseño completo.",
   "schema_version": 1,
-  "next_id": 9,
+  "next_id": 14,
   "issues": [
     {
       "id": "ISSUE-0001",
@@ -249,6 +249,171 @@
         {
           "file": ".gitignore",
           "note": "git check-ignore -v (sin --no-index, comportamiento default que sí consulta el índice de git) sobre los mismos 4 paths no devuelve ninguna línea de match y sale con exit code 1 — confirma que la razón real por la que siguen trackeados es que git no aplica retroactivamente una regla de exclusión (nueva o recién arreglada) a un archivo ya indexado, un comportamiento estándar de git no relacionado con si el patrón está roto o no."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0009",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "get_guide termina con un workflow recomendado en rutas REST, inaccionable para un cliente 100% MCP",
+      "summary": "La sección final de rayflow/editor/guide.py ('## Recommended workflow for an agent', líneas 132-142) lista 5 pasos usando rutas REST crudas (GET /editor/guide, GET /editor/nodes, POST /editor/validate, POST /editor/flows, PUT /editor/flows/{name}, POST /editor/flows/{name}/test, POST /flows/{name}/run) sin mencionar ninguna de las tools MCP equivalentes (get_guide, list_nodes, validate_flow, create_flow/update_flow, test_flow/run_flow). Confirmado invocando get_guide vía MCP: rayflow/mcp/server.py devuelve el mismo string GUIDE sin ninguna adaptación para el canal MCP, así que un cliente MCP puro (sin capacidad de hacer requests HTTP directos) recibe, al final de la guía que se le recomienda leer primero, una lista de pasos que no puede ejecutar tal cual. Esto contradice directamente el loop documentado en el propio SOT para la capa MCP (capa-mcp#loop-tipico-agente-get-guide-list: 'get_guide -> list_nodes -> validate_flow -> create_flow/update_flow -> test_flow/run_flow'), que sí usa nombres de tool.",
+      "claim_ids": [
+        "capa-mcp#loop-tipico-agente-get-guide-list",
+        "capa-mcp#discovery-tools-get-guide-list-nodes",
+        "capa-mcp#flow-crud-tools-list-flows-get",
+        "capa-mcp#execution-tools-run-flow-test-flow"
+      ],
+      "files": [
+        "rayflow/editor/guide.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-06T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-06T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/guide.py",
+          "note": "Líneas 132-142 ('Recommended workflow for an agent'): los 5 pasos citan únicamente rutas REST (GET /editor/guide, GET /editor/nodes, POST /editor/validate, POST /editor/flows, PUT /editor/flows/{name}, POST /editor/flows/{name}/test, POST /flows/{name}/run); ninguna tool MCP (get_guide, list_nodes, validate_flow, create_flow, update_flow, test_flow, run_flow) aparece nombrada en esa sección, a diferencia de otras secciones del mismo archivo (p.ej. líneas 49-56, que sí listan explícitamente get_entry_frontend/update_entry_frontend/delete_entry_frontend junto a su equivalente REST)."
+        },
+        {
+          "file": "rayflow/mcp/server.py",
+          "note": "get_guide (líneas 66-76) retorna literalmente GUIDE (importado de rayflow.editor.guide) sin ningún post-procesamiento — confirma que un cliente MCP recibe exactamente esos mismos pasos REST-only citados arriba."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0011",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "_BUILTIN_TYPES desactualizado: ChatTrigger/OnVariableChange/Claude aparecen como si fueran nodos custom en las respuestas de create/update/delete/reload_custom_nodes",
+      "summary": "Confirmado en vivo repetidas veces: el campo `custom_nodes` de las respuestas de create_custom_node/update_custom_node_source/delete_custom_node/reload_custom_nodes siempre incluye 'ChatTrigger', 'OnVariableChange' y 'Claude' — los 3 son nodos builtin reales (is_builtin=True), no custom — junto con los nodos custom genuinos. Causa confirmada en el código: _BUILTIN_TYPES (rayflow/editor/custom_nodes_routes.py líneas 19-25) es un frozenset hardcodeado de 27 nombres que ya no coincide con el catálogo builtin real: le faltan exactamente 'ChatTrigger' (rayflow/nodes/builtin/control.py), 'OnVariableChange' (rayflow/nodes/builtin/events.py) y 'Claude' (rayflow/nodes/builtin/claude.py). _reload_catalog() (líneas 65-79) calcula custom_names filtrando todo lo que NO esté en _BUILTIN_TYPES, así que estos 3 nodos builtin quedan mal clasificados como custom en el campo devuelto. list_custom_nodes (líneas 87-101), que en cambio lista los archivos .py reales bajo custom_nodes/, no tiene este problema — confirma que la discrepancia es específica del campo `custom_nodes` derivado de _BUILTIN_TYPES, no del catálogo en general.",
+      "claim_ids": [],
+      "files": [
+        "rayflow/editor/custom_nodes_routes.py",
+        "rayflow/nodes/builtin/control.py",
+        "rayflow/nodes/builtin/events.py",
+        "rayflow/nodes/builtin/claude.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-06T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-06T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/custom_nodes_routes.py",
+          "note": "_BUILTIN_TYPES (líneas 19-25) lista 27 nombres builtin pero omite 'ChatTrigger', 'OnVariableChange' y 'Claude'; _reload_catalog (líneas 75-79) construye custom_names = [name for name, _cls, _meta in catalog if name not in _BUILTIN_TYPES], incluyendo por lo tanto esos 3 nombres builtin en el campo `custom_nodes` de la respuesta."
+        },
+        {
+          "file": "rayflow/nodes/builtin/control.py",
+          "note": "ChatTrigger (líneas 70-88) es un @entry_node builtin real, registrado vía _BUILTIN_MODULES en rayflow/nodes/registry.py y marcado is_builtin=True — no un nodo custom."
+        },
+        {
+          "file": "rayflow/nodes/builtin/events.py",
+          "note": "OnVariableChange (@entry_node, línea 31) es igualmente builtin, mismo mecanismo de registro."
+        },
+        {
+          "file": "rayflow/nodes/builtin/claude.py",
+          "note": "Claude (@ray_node, línea 138) es igualmente builtin, mismo mecanismo de registro."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0012",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "CallFlow.flow no documenta su formato real (ruta de archivo, no nombre de flow guardado) y una referencia inválida filtra un FileNotFoundError crudo",
+      "summary": "Confirmado en vivo: pasar como input 'flow' de un CallFlow el NOMBRE de un flow guardado tal como lo devuelven list_flows/create_flow (p.ej. 'test_subflow', sin punto) hace que validate_flow devuelva {\"valid\": false, \"errors\": [\"Parse error: [Errno 2] No such file or directory: 'test_subflow'\"]}. Confirmado en el código: en rayflow/build/validator.py, flatten() (líneas 164-170) solo rechaza 'flow' cuando es una referencia con punto (dynamic ref); un nombre plano pasa ese chequeo y sigue a `load_flow(sub_src)` (rayflow/schema/loader.py líneas 45-54), que para cualquier string no-dict hace `Path(source).open(...)` DIRECTO sobre el string recibido — sin resolverlo contra el workspace. Los flows guardados en cambio viven en `<cwd>/flows/{name}.json` (rayflow/editor/storage.py `_flow_path`), y existe una función dedicada exactamente para este tipo de resolución — `rayflow.workspace.resolve_flow(name_or_path)` (líneas 72-87), que sí sabe buscar `flows/<name>.json` — pero _splice_subflow/flatten llama a `schema.loader.load_flow` directo, sin pasar por `workspace.resolve_flow`, así que esa resolución nunca se aplica al input 'flow' de un CallFlow. El resultado es un OSError crudo de Python, no un mensaje de dominio, y ni rayflow/editor/guide.py (que solo dice 'CallFlow: accepts arbitrary inputs mapped to the subflow', sin detallar el formato de 'flow') ni la docstring de CallFlow en rayflow/nodes/builtin/flow.py documentan qué formato de string se espera. Esto es una manifestación relacionada, en la misma función, de un defecto ya documentado en el SOT (sistema-build#callflow-flow-dinamico-bypassea-error-collector: el chequeo de 'flow' dinámico hace raise BuildError directo sin pasar por el colector de errores) — pero en este caso ni siquiera es un BuildError de dominio: es una excepción de filesystem sin capturar.",
+      "claim_ids": [
+        "sistema-build#callflow-flow-dinamico-bypassea-error-collector"
+      ],
+      "files": [
+        "rayflow/build/validator.py",
+        "rayflow/schema/loader.py",
+        "rayflow/nodes/builtin/flow.py",
+        "rayflow/editor/guide.py",
+        "rayflow/workspace.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-06T00:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-06T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/build/validator.py",
+          "note": "flatten() líneas 164-170: `if sub_src is None or (isinstance(sub_src, str) and \".\" in sub_src): raise BuildError(...)` seguido de `sub_flow = load_flow(sub_src)` sin resolución de nombre — un nombre de flow guardado sin punto pasa el guard y llega directo a load_flow."
+        },
+        {
+          "file": "rayflow/schema/loader.py",
+          "note": "load_flow() líneas 45-54: para un source no-dict hace `path = Path(source); with path.open(...)` directo, sin intentar `flows_path()/f'{source}.json'` ni capturar el OSError resultante."
+        },
+        {
+          "file": "rayflow/workspace.py",
+          "note": "resolve_flow() líneas 72-87 SÍ implementa la resolución 'nombre plano -> flows/<name>.json', pero no es llamada desde el path de CallFlow en validator.py — existe pero no se usa ahí."
+        },
+        {
+          "file": "rayflow/editor/guide.py",
+          "note": "Única mención de CallFlow (sección 'Dynamic pins', línea 81): 'CallFlow: accepts arbitrary inputs mapped to the subflow.' — no especifica el formato esperado del input 'flow' (ruta de archivo vs. nombre de flow guardado vs. dict inline)."
+        },
+        {
+          "file": "rayflow/nodes/builtin/flow.py",
+          "note": "La docstring de CallFlow (líneas 23-36) tampoco documenta el formato de 'flow', solo el comportamiento de 'isolated' y 'result'."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0013",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "El fix planeado para ISSUE-0010 (campos `registered`/`error` en create/update de nodos custom) no será visible ni por MCP ni por el frontend sin un cambio adicional en cada uno",
+      "summary": "Seguimiento del plan de solución consolidado para ISSUE-0010 (agregar `registered: bool` y `error: str|None` a las respuestas de create_custom_node/update_custom_node_source en rayflow/editor/custom_nodes_routes.py, respaldados por un NodeCatalog.load_errors nuevo en rayflow/nodes/loader.py) — ese fix todavía NO está implementado; este issue documenta, de forma preventiva, que aun implementado tal cual está planeado, dos consumidores no lo van a mostrar sin tocarlos también. Verificado en el código actual: (1) las tools MCP create_custom_node/update_custom_node_source (rayflow/mcp/server.py líneas 306-355) NO llaman a las funciones REST homónimas de custom_nodes_routes.py — reimplementan su propia lógica y retornan `{\"name\": name, \"created\": True, **_reload_catalog()}` (mismo patrón para \"saved\"); como `registered`/`error` se calculan por nombre específico (comparando `name` contra `reload_result[\"custom_nodes\"]` y contra `load_errors`), esa lógica naturalmente vive en el handler REST — no en `_reload_catalog()`, que también sirve al endpoint genérico `/reload` sin un `name` de interés — así que el spread de MCP no los heredaría automáticamente. Esto además vuelve inexacta, una vez implementado el fix, la claim capa-mcp#create-custom-node-update-custom-node ('mismo mecanismo que el endpoint REST'): divergirían en qué información devuelven sobre el mismo hot-reload. (2) En el frontend, rayflow/editor/frontend/src/lib/api.ts declara los tipos de retorno de createCustomNode/updateCustomNodeSource sin `registered`/`error` (líneas 105-106), y apiFetch (líneas 1-9) solo lanza excepción si `!r.ok` — un 200/201 con `registered: false` no dispara ningún catch. Confirmé en los dos consumidores reales: CustomNodesPanel.tsx `handleCreate()` (líneas 49-64) usa `res.name` sin mirar ningún campo de éxito, y App.tsx `handleSaveCode()` (líneas 248-262) muestra el toast 'Nodo guardado' apenas la promesa no lanza excepción. Severidad medium (no high) porque hoy los campos ni existen — es un seguimiento de un fix en curso, no un bug activo.",
+      "claim_ids": [
+        "capa-mcp#create-custom-node-update-custom-node",
+        "api-rest-custom-nodes#endpoint-guardar-crear-valida-sintaxis-python"
+      ],
+      "files": [
+        "rayflow/mcp/server.py",
+        "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+        "rayflow/editor/frontend/src/App.tsx",
+        "rayflow/editor/frontend/src/lib/api.ts",
+        "rayflow/editor/custom_nodes_routes.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "rayflow-issue-writer",
+        "run_id": "issue-writer-2026-07-06T15:00:00Z",
+        "trigger": "reported"
+      },
+      "detected_at": "2026-07-06T15:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/mcp/server.py",
+          "note": "create_custom_node (líneas 306-335) y update_custom_node_source (líneas 337-355) reimplementan su propia lógica de escritura+reload en vez de invocar las funciones REST de custom_nodes_routes.py; retornan `{\"name\": name, \"created\"/\"saved\": True, **_reload_catalog()}` — cualquier campo que el fix agregue solo dentro del handler REST (no dentro de `_reload_catalog()`) no llega acá."
+        },
+        {
+          "file": "rayflow/editor/custom_nodes_routes.py",
+          "note": "`_reload_catalog()` (líneas 65-79) retorna `{\"reloaded\": True, \"custom_nodes\": custom_names}` sin ningún `name` puntual de interés — también lo usa el endpoint genérico /reload, así que una comparación por-nombre como `registered`/`error` encaja naturalmente en create_custom_node/update_custom_node_source, no en este helper compartido."
+        },
+        {
+          "file": "rayflow/editor/frontend/src/lib/api.ts",
+          "note": "apiFetch (líneas 1-9) solo lanza si `!r.ok`, devolviendo el body tal cual en cualquier otro caso; createCustomNode/updateCustomNodeSource (líneas 105-106) tipan la respuesta como `{ name, created/saved, custom_nodes }`, sin `registered`/`error`."
+        },
+        {
+          "file": "rayflow/editor/frontend/src/components/CustomNodesPanel.tsx",
+          "note": "handleCreate() (líneas 49-64) usa únicamente `res.name` tras el await; no inspecciona ningún campo de éxito/error del body."
+        },
+        {
+          "file": "rayflow/editor/frontend/src/App.tsx",
+          "note": "handleSaveCode() (líneas 248-262) llama `await updateCustomNodeSource(...)` y, si no lanza, ejecuta `markCodeSaved`, `refreshCatalog` y `addToast('Nodo guardado', 'success')` sin mirar el body de la respuesta."
         }
       ]
     }
