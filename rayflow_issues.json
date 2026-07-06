@@ -286,45 +286,6 @@
       ]
     },
     {
-      "id": "ISSUE-0011",
-      "severity": "medium",
-      "kind": "claim_contradicted",
-      "title": "_BUILTIN_TYPES desactualizado: ChatTrigger/OnVariableChange/Claude aparecen como si fueran nodos custom en las respuestas de create/update/delete/reload_custom_nodes",
-      "summary": "Confirmado en vivo repetidas veces: el campo `custom_nodes` de las respuestas de create_custom_node/update_custom_node_source/delete_custom_node/reload_custom_nodes siempre incluye 'ChatTrigger', 'OnVariableChange' y 'Claude' — los 3 son nodos builtin reales (is_builtin=True), no custom — junto con los nodos custom genuinos. Causa confirmada en el código: _BUILTIN_TYPES (rayflow/editor/custom_nodes_routes.py líneas 19-25) es un frozenset hardcodeado de 27 nombres que ya no coincide con el catálogo builtin real: le faltan exactamente 'ChatTrigger' (rayflow/nodes/builtin/control.py), 'OnVariableChange' (rayflow/nodes/builtin/events.py) y 'Claude' (rayflow/nodes/builtin/claude.py). _reload_catalog() (líneas 65-79) calcula custom_names filtrando todo lo que NO esté en _BUILTIN_TYPES, así que estos 3 nodos builtin quedan mal clasificados como custom en el campo devuelto. list_custom_nodes (líneas 87-101), que en cambio lista los archivos .py reales bajo custom_nodes/, no tiene este problema — confirma que la discrepancia es específica del campo `custom_nodes` derivado de _BUILTIN_TYPES, no del catálogo en general.",
-      "claim_ids": [],
-      "files": [
-        "rayflow/editor/custom_nodes_routes.py",
-        "rayflow/nodes/builtin/control.py",
-        "rayflow/nodes/builtin/events.py",
-        "rayflow/nodes/builtin/claude.py"
-      ],
-      "docs": [],
-      "detected_by": {
-        "agent": "rayflow-issue-writer",
-        "run_id": "issue-writer-2026-07-06T00:00:00Z",
-        "trigger": "reported"
-      },
-      "detected_at": "2026-07-06T00:00:00Z",
-      "evidence": [
-        {
-          "file": "rayflow/editor/custom_nodes_routes.py",
-          "note": "_BUILTIN_TYPES (líneas 19-25) lista 27 nombres builtin pero omite 'ChatTrigger', 'OnVariableChange' y 'Claude'; _reload_catalog (líneas 75-79) construye custom_names = [name for name, _cls, _meta in catalog if name not in _BUILTIN_TYPES], incluyendo por lo tanto esos 3 nombres builtin en el campo `custom_nodes` de la respuesta."
-        },
-        {
-          "file": "rayflow/nodes/builtin/control.py",
-          "note": "ChatTrigger (líneas 70-88) es un @entry_node builtin real, registrado vía _BUILTIN_MODULES en rayflow/nodes/registry.py y marcado is_builtin=True — no un nodo custom."
-        },
-        {
-          "file": "rayflow/nodes/builtin/events.py",
-          "note": "OnVariableChange (@entry_node, línea 31) es igualmente builtin, mismo mecanismo de registro."
-        },
-        {
-          "file": "rayflow/nodes/builtin/claude.py",
-          "note": "Claude (@ray_node, línea 138) es igualmente builtin, mismo mecanismo de registro."
-        }
-      ]
-    },
-    {
       "id": "ISSUE-0012",
       "severity": "medium",
       "kind": "claim_contradicted",
