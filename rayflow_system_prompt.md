@@ -109,3 +109,27 @@ abiertos que lo mencionan.
   misma sesión con todo su contexto, así que puede responder directo sin
   releer archivos. Preferí este camino sobre investigar vos mismo cuando ya
   hay un especialista de ese sistema conversando en la sesión.
+
+## Macro-agentes (grupos de sistemas)
+
+Los 21 sistemas se agrupan además en 4 **macrosistemas** (campo
+`macrosistemas` de `rayflow_file_map.json`, muchos-a-muchos — `packaging`
+cae tanto en `interfaces` como en `frontend`): `runtime-core`, `interfaces`,
+`frontend`, `repo-quality`. Cada uno tiene un
+`.claude/agents/rayflow-macro-<macrosistema>.md` regenerado en cada commit
+(`scripts/generate_macro_agents.py`, hook `macro-agents-generate`).
+
+El modelo de delegación tiene dos niveles con garantías distintas:
+
+- **`rayflow-main` → los 4 macro-agents**: esto es enforcement técnico real.
+  `rayflow-main` corre como hilo principal (`.claude/settings.json` fija
+  `"agent": "rayflow-main"`) y su toolset no incluye Read/Grep/Glob/Edit/Bash
+  propios — solo puede delegar.
+- **Macro-agent → especialistas de su macrosistema**: esto es convención
+  documentada, no bloqueo técnico. Un macro-agent spawneado como subagente
+  (`tools: Agent, SendMessage`) técnicamente podría invocar cualquier
+  subagente del repo — Claude Code no soporta restringir programáticamente
+  qué invoca un subagente ya spawneado, solo el hilo principal tiene esa
+  restricción real. Cada macro-agent lista su "agenda de contactos" (los
+  especialistas de sus sistemas miembro + los otros 3 macro-agents) con esa
+  aclaración explícita.
