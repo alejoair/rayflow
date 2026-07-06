@@ -76,7 +76,11 @@ def _reload_catalog() -> dict[str, Any]:
         name for name, _cls, _meta in catalog
         if name not in _BUILTIN_TYPES
     ]
-    return {"reloaded": True, "custom_nodes": custom_names}
+    return {
+        "reloaded": True,
+        "custom_nodes": custom_names,
+        "errors": catalog.load_errors,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -125,17 +129,21 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
     module raises on import (missing decorator requirement, bad pin
     config, etc.).
 
-    Known gap (tracked as the follow-up/full fix for ISSUE-0010, blocked on
-    NodeCatalog.load_errors existing in rayflow.nodes.registry): "registered"
-    is derived by checking `name in reload_result["custom_nodes"]`, and the
-    catalog is keyed by `cls.__name__` — not necessarily the same string as
-    the file/API `name` used to create it. So a custom node file that loads
-    without error but declares a class with a different name than the one
-    passed here will show "registered": false even though it *did* load
-    successfully (just under another name) — a false negative from this
-    endpoint's point of view. Once load_errors is available, "registered"
-    should be replaced/complemented by a dedicated "error" field sourced
-    from load_errors instead of this name-presence heuristic.
+    The response also includes "error": the real exception message from
+    NodeCatalog.load_errors (rayflow/nodes/loader.py) when the module
+    failed to import or register, or None otherwise. load_errors is keyed
+    by `path.stem` (the filename without ".py"), which is exactly `name`
+    here since `_node_file()` writes the file as f"{name}.py" — so
+    `reload_result["errors"].get(name)` is a direct, untransformed lookup.
+
+    Known remaining gap: "registered" is derived by checking
+    `name in reload_result["custom_nodes"]`, and the catalog is keyed by
+    `cls.__name__` — not necessarily the same string as the file/API `name`
+    used to create it. A custom node file that loads without error but
+    declares a class with a different name than the one passed here will
+    show "registered": false with "error": None (the import genuinely
+    succeeded, just under another name) — a false negative that "error"
+    does not resolve, since there was no exception to record.
     """
     name: str = body.get("name", "").strip()
     if not name:
@@ -160,6 +168,7 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
         "name": name,
         "created": True,
         "registered": name in reload_result["custom_nodes"],
+        "error": reload_result["errors"].get(name),
         **reload_result,
     }
 
@@ -175,13 +184,20 @@ async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[s
     catalog. A file can be "saved" but not "registered" if the edited
     source raises on import (e.g. a decoration error).
 
-    Known gap (same as create_custom_node above, tracked as the follow-up
-    fix for ISSUE-0010 pending NodeCatalog.load_errors): "registered" is
-    derived from `name in reload_result["custom_nodes"]", and the catalog
-    is keyed by `cls.__name__`, not necessarily the file/API `name`. A node
-    whose class got renamed in the edited source (but still loads fine)
-    will report "registered": false here — a false negative, not evidence
-    the module actually failed to import.
+    The response also includes "error": the real exception message from
+    NodeCatalog.load_errors (rayflow/nodes/loader.py) when the module
+    failed to import or register, or None otherwise. load_errors is keyed
+    by `path.stem` (the filename without ".py"), which is exactly `name`
+    here since `_node_file()` reads/writes the file as f"{name}.py" — so
+    `reload_result["errors"].get(name)` is a direct, untransformed lookup.
+
+    Known remaining gap (same as create_custom_node above): "registered"
+    is derived from `name in reload_result["custom_nodes"]`, and the
+    catalog is keyed by `cls.__name__`, not necessarily the file/API
+    `name`. A node whose class got renamed in the edited source (but still
+    loads fine) will report "registered": false with "error": None here —
+    a false negative that "error" does not resolve, since there was no
+    exception: the module imported successfully, just under another name.
     """
     path = _node_file(name)
     if not path.exists():
@@ -201,6 +217,7 @@ async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[s
         "name": name,
         "saved": True,
         "registered": name in reload_result["custom_nodes"],
+        "error": reload_result["errors"].get(name),
         **reload_result,
     }
 

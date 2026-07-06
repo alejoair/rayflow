@@ -758,6 +758,66 @@ def test_update_custom_node_source_reports_registered_false_on_decoration_error(
 
 
 # ---------------------------------------------------------------------------
+# POST/PUT /editor/custom-nodes — "error" surfaces the real exception message
+# from NodeCatalog.load_errors (rayflow/nodes/loader.py), keyed by
+# path.stem == the API `name` here. Full fix for ISSUE-0010, on top of the
+# "registered" field above.
+# ---------------------------------------------------------------------------
+
+
+def test_create_custom_node_reports_error_message_on_decoration_error(client_cn):
+    """On top of "registered": false, "error" must carry the actual
+    exception raised by the @entry_node decorator (rayflow/nodes/
+    decorators.py, entry_node) when the class doesn't declare an
+    ExecOutput — not just a generic/empty value."""
+    r = client_cn.post("/editor/custom-nodes", json={
+        "name": "BrokenEntry", "source": BROKEN_CUSTOM_NODE_SRC,
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["registered"] is False
+    assert data["error"] is not None
+    assert "ExecOutput" in data["error"]
+
+
+def test_create_custom_node_reports_error_none_on_success(client_cn):
+    """A node that registers successfully has nothing to report in
+    "error" — it must be None (or absent), not some falsy stand-in."""
+    r = client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["registered"] is True
+    assert data.get("error") is None
+
+
+def test_update_custom_node_source_reports_error_message_on_decoration_error(client_cn):
+    """Same as the create_custom_node case: overwriting a good node's
+    source with a decoration error must surface the real message in
+    "error", alongside "registered": false."""
+    client_cn.post("/editor/custom-nodes", json={"name": "ToBreak"})
+    r = client_cn.put(
+        "/editor/custom-nodes/ToBreak/source", json={"source": BROKEN_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["registered"] is False
+    assert data["error"] is not None
+    assert "ExecOutput" in data["error"]
+
+
+def test_update_custom_node_source_reports_error_none_on_success(client_cn):
+    """Successfully saving valid source must report "error": None."""
+    client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    r = client_cn.put(
+        "/editor/custom-nodes/GoodNode/source", json={"source": GOOD_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["registered"] is True
+    assert data.get("error") is None
+
+
+# ---------------------------------------------------------------------------
 # Concurrency — several flows at once don't interfere with each other
 # ---------------------------------------------------------------------------
 
