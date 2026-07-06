@@ -39,7 +39,20 @@ def create_mcp():
         flow_to_dict,
     )
 
-    mcp = FastMCP("Rayflow")
+    mcp = FastMCP(
+        "Rayflow",
+        instructions=(
+            "Rayflow is a workflow orchestration engine: a flow is a JSON "
+            "graph of nodes connected by exec edges (sequential control "
+            "flow) and data edges (values evaluated in parallel), executed "
+            "on Ray actors/tasks.\n\n"
+            "Call get_guide FIRST — it explains the flow JSON structure, "
+            "wiring rules, and type system. Then list_nodes to see which "
+            "node types are available. Typical loop: get_guide -> "
+            "list_nodes -> validate_flow (iterate until valid=true) -> "
+            "create_flow/update_flow -> run_flow/test_flow."
+        ),
+    )
 
     def _unload_if_loaded(name: str) -> bool:
         from rayflow.api import is_flow_loaded, unload as unload_api
@@ -52,22 +65,32 @@ def create_mcp():
 
     @mcp.tool
     def get_guide() -> str:
-        """Guide to Rayflow's model (flow JSON structure, wiring rules,
-        dynamic pins, types). CALL THIS FIRST to learn how a flow is
-        built."""
+        """START HERE: markdown guide to Rayflow's flow model — read this
+        before calling any other tool.
+
+        Covers the flow JSON structure (nodes, exec vs. data wiring),
+        dynamic pins (FlowOutput, Parallel branches, CallFlow), the type
+        system, and the recommended build loop (get_guide -> list_nodes ->
+        validate_flow -> create_flow/update_flow -> run_flow/test_flow)."""
         from rayflow.editor.guide import GUIDE
         return GUIDE
 
     @mcp.tool
     def list_nodes() -> list[dict[str, Any]]:
-        """Full catalog of node types with their input/output pins, exec
-        outputs, category, description, and dynamic pins. Use it to learn
-        which nodes exist and how they connect."""
+        """Full catalog of every node type (built-in and custom) with its
+        pins — call this after get_guide, before writing any flow JSON.
+
+        Each entry lists input/output pins with their types, exec outputs,
+        category, description, and any dynamic-pin notes. Use get_node
+        instead if you already know the type name and just need its spec."""
         return [_node_spec(name, meta) for name, _cls, meta in get_catalog()]
 
     @mcp.tool
     def get_node(node_type: str) -> dict[str, Any]:
-        """Spec of a specific node type (pins, types, defaults, description)."""
+        """Spec (pins, types, defaults, description) of one node type by
+        name — a single-entry shortcut for list_nodes when you already know
+        which type you want. Example: get_node(node_type="Add") returns its
+        `a`/`b` int inputs and `result` int output."""
         entry = get_catalog().get(node_type)
         if entry is None:
             return {"error": f"Node type '{node_type}' not found"}
@@ -76,7 +99,10 @@ def create_mcp():
 
     @mcp.tool
     def list_types() -> dict[str, Any]:
-        """Available canonical types and strict compatibility rules."""
+        """Canonical type names (`int`, `str`, `list[T]`, ...) and Rayflow's
+        strict compatibility rule: two pins connect only if they're the
+        same type or one of them is `Any`. See type_check to test one
+        specific pair instead of reading the whole rule set."""
         from rayflow.types import PRIMITIVES
         return {
             "primitives": sorted(PRIMITIVES),
@@ -89,7 +115,11 @@ def create_mcp():
 
     @mcp.tool
     def type_check(from_type: str, to_type: str) -> dict[str, Any]:
-        """Checks whether a pin of type from_type can connect to one of type to_type."""
+        """Checks whether a pin of type `from_type` can be wired into a pin
+        declared `to_type`, without building a whole flow just to find out.
+        Example: type_check(from_type="int", to_type="float") returns
+        compatible=false — int and float need an explicit ToInt/ToFloat
+        cast (see list_types)."""
         try:
             ok = compatible(to_type, from_type)
         except Exception as e:
@@ -100,9 +130,12 @@ def create_mcp():
 
     @mcp.tool
     def validate_flow(flow: dict) -> dict[str, Any]:
-        """Validates a FlowDef WITHOUT running it. Returns ALL errors and
-        warnings in a single pass. Use it in a loop until valid=true before
-        saving the flow. `flow` is the flow's full JSON object."""
+        """Validates a flow's full JSON WITHOUT running or saving it — run
+        this before create_flow/update_flow/run_flow. Returns every error
+        and warning in ONE pass, so you can loop on this tool (fix, re-call)
+        until `valid` is true instead of discovering problems one at a time
+        during a real run. `flow` is the complete flow JSON object (see
+        get_guide for its shape)."""
         if not isinstance(flow, dict):
             return {"valid": False, "errors": ["The flow must be a JSON object"], "warnings": []}
         warnings = unknown_keys(flow)
@@ -117,7 +150,9 @@ def create_mcp():
 
     @mcp.tool
     def list_flows() -> list[dict[str, Any]]:
-        """Lists saved flows with their public interface (inputs/outputs)."""
+        """Lists every saved flow's name and public interface (version,
+        inputs, outputs) — a lightweight index. Use get_flow for one flow's
+        full JSON, or flow_catalog for its already-resolved node pins."""
         return [
             {
                 "name": f.get("name"),
@@ -131,7 +166,9 @@ def create_mcp():
 
     @mcp.tool
     def get_flow(name: str) -> dict[str, Any]:
-        """Returns the full JSON FlowDef of a saved flow."""
+        """Returns one saved flow's complete JSON, in the same shape
+        validate_flow/update_flow expect back. Use list_flows first if you
+        don't already know the exact `name`."""
         data = get_flow_dict(name)
         if data is None:
             return {"error": f"Flow '{name}' not found"}
@@ -139,8 +176,12 @@ def create_mcp():
 
     @mcp.tool
     def create_flow(flow: dict) -> dict[str, Any]:
-        """Creates and saves a new flow. Validate first with validate_flow.
-        Fails if a flow with that name already exists (use update_flow to edit)."""
+        """Saves a brand-new flow — run validate_flow on the same JSON
+        first, since this tool only does structural parsing, not the full
+        error/warning sweep validate_flow gives you. Fails if
+        `flow["name"]` already exists (use update_flow to edit that flow
+        instead). Example: create_flow(flow={"name": "suma",
+        "outputs": {"resultado": "int"}, "nodes": [...]})."""
         if not isinstance(flow, dict):
             return {"error": "The flow must be a JSON object"}
         try:
@@ -154,10 +195,13 @@ def create_mcp():
 
     @mcp.tool
     def update_flow(name: str, flow: dict) -> dict[str, Any]:
-        """Updates (or creates) the flow `name` with the given FlowDef.
-        If the flow was already loaded (e.g. by a prior run_flow/test_flow
-        call), it's unloaded so the next run picks up this change instead
-        of silently reusing the old graph."""
+        """Overwrites (or creates) the saved flow `name` with `flow`'s
+        JSON — validate_flow first to avoid saving a broken graph. If
+        `name` was already loaded into Ray (e.g. by an earlier
+        run_flow/test_flow), it is automatically unloaded here so the NEXT
+        run rebuilds from this new JSON instead of silently reusing the
+        stale graph — no need to call unload_flow yourself for this. If
+        `flow` includes a "name" key, it must match `name`."""
         if not isinstance(flow, dict):
             return {"error": "The flow must be a JSON object"}
         if "name" not in flow:
@@ -174,27 +218,34 @@ def create_mcp():
 
     @mcp.tool
     def delete_flow(name: str) -> dict[str, Any]:
-        """Deletes a saved flow, unloading it from Ray first if it was
-        loaded (otherwise its actors/GraphState would keep running,
-        orphaned, with no saved flow left to reference them)."""
+        """Permanently deletes a saved flow's JSON (no confirmation step —
+        unlike unload_flow, which only frees runtime resources and keeps
+        the saved JSON). Unloads it from Ray first if it was loaded,
+        otherwise its actors/GraphState would keep running orphaned with no
+        saved flow left to reference them."""
         _unload_if_loaded(name)
         ok = _delete_flow(name)
         return {"deleted": ok, "flow": name}
 
     @mcp.tool
     def unload_flow(name: str) -> dict[str, Any]:
-        """Unloads a flow from Ray (destroys its actors/GraphState) without
-        touching the saved JSON. Use it to free resources, or to force the
-        next run_flow/test_flow to rebuild the graph from scratch."""
+        """Frees a flow's Ray actors/GraphState WITHOUT touching its saved
+        JSON — use it to release resources, or to force the next
+        run_flow/test_flow to rebuild the graph from scratch (e.g. right
+        after editing a custom node the flow uses). Safe to call even if
+        the flow isn't currently loaded; check the returned `was_loaded`."""
         was_loaded = _unload_if_loaded(name)
         return {"flow": name, "was_loaded": was_loaded}
 
     @mcp.tool
     def flow_catalog(name: str) -> dict[str, Any]:
-        """Resolved catalog of a flow: each node with its REAL pins in this
-        context, including the dynamic ones (OnStart's outputs = the
-        flow's inputs, Parallel's branch_N branches, etc.). Use it to know
-        exactly what you can wire up."""
+        """Resolved, node-by-node pin list for one SAVED flow — unlike
+        list_nodes/get_node (which describe a node type in the abstract),
+        this shows the REAL pins in THIS flow's context, including dynamic
+        ones not in the static catalog (FlowOutput's per-output inputs,
+        Parallel's branch_N branches, CallFlow's subflow inputs). Call this
+        right before wiring a new node into an existing flow, to see
+        exactly what's available to reference."""
         from rayflow.build.validator import flatten, _with_dynamic_pins
         from rayflow.editor.routes import _pin_spec
 
@@ -227,9 +278,10 @@ def create_mcp():
 
     @mcp.tool
     def list_custom_nodes() -> list[dict[str, Any]]:
-        """Lists the custom node .py files in custom_nodes/ (name, filename,
-        size). Use it before creating a node to check one doesn't already
-        exist under that name."""
+        """Lists user-defined custom node .py files under custom_nodes/
+        (name, filename, size). Check this before create_custom_node to
+        avoid a name collision, or before get_custom_node_source /
+        update_custom_node_source to confirm the exact name."""
         from rayflow.editor.custom_nodes_routes import custom_nodes_path
         cn = custom_nodes_path()
         if not cn.exists():
@@ -242,7 +294,9 @@ def create_mcp():
 
     @mcp.tool
     def get_custom_node_source(name: str) -> dict[str, Any]:
-        """Returns the source code of a custom node file."""
+        """Returns one custom node's full Python source — read it before
+        editing with update_custom_node_source, or use list_custom_nodes
+        first if you don't know the exact name."""
         from rayflow.editor.custom_nodes_routes import _node_file
         path = _node_file(name)
         if not path.exists():
@@ -251,11 +305,16 @@ def create_mcp():
 
     @mcp.tool
     def create_custom_node(name: str, source: str | None = None) -> dict[str, Any]:
-        """Creates a new custom node .py file under custom_nodes/ and
-        hot-reloads the catalog so list_nodes/validate_flow see it
-        immediately — no server restart needed. If `source` is omitted, a
-        minimal @engine_node template is used. The node must be decorated
-        with @ray_node, @engine_node, or @parallel_node (see get_guide)."""
+        """Writes a new custom node .py file under custom_nodes/ and
+        immediately hot-reloads the catalog — no separate call to
+        reload_custom_nodes or server restart needed; list_nodes/
+        validate_flow see it right away.
+
+        Omit `source` to get a minimal @engine_node template to fill in;
+        when supplying your own, decorate the class with @ray_node,
+        @engine_node, or @parallel_node (see get_guide). Example:
+        create_custom_node(name="DoubleIt", source="<python source
+        defining class DoubleIt>")."""
         from rayflow.editor.custom_nodes_routes import (
             NODE_TEMPLATE, _ensure_package, _node_file, _reload_catalog, _validate_syntax,
         )
@@ -277,8 +336,12 @@ def create_mcp():
 
     @mcp.tool
     def update_custom_node_source(name: str, source: str) -> dict[str, Any]:
-        """Saves edited source for an existing custom node and hot-reloads
-        the catalog."""
+        """Overwrites an existing custom node's source and hot-reloads the
+        catalog (same automatic reload as create_custom_node — no separate
+        reload_custom_nodes call needed). This is also how to make an
+        entry node support a frontend bundle: add a `frontend = "<dir>"`
+        class attribute here, then manage its index.html with
+        get_entry_frontend/update_entry_frontend."""
         from rayflow.editor.custom_nodes_routes import _node_file, _reload_catalog, _validate_syntax
         path = _node_file(name)
         if not path.exists():
@@ -293,7 +356,10 @@ def create_mcp():
 
     @mcp.tool
     def delete_custom_node(name: str) -> dict[str, Any]:
-        """Deletes a custom node's .py file and hot-reloads the catalog."""
+        """Deletes a custom node's .py file and hot-reloads the catalog, so
+        it disappears from list_nodes immediately. Any saved flow still
+        referencing this node type will start failing validate_flow/
+        run_flow afterwards."""
         from rayflow.editor.custom_nodes_routes import _node_file, _reload_catalog
         path = _node_file(name)
         if not path.exists():
@@ -303,10 +369,12 @@ def create_mcp():
 
     @mcp.tool
     def reload_custom_nodes() -> dict[str, Any]:
-        """Re-scans custom_nodes/ and rebuilds the node catalog from disk.
-        Call this if a custom node file was edited by some means other
-        than create_custom_node/update_custom_node_source (e.g. directly
-        on the filesystem) and list_nodes still shows the old version."""
+        """Re-scans custom_nodes/ and rebuilds the node catalog from disk —
+        rarely needed directly, since create_custom_node/
+        update_custom_node_source/delete_custom_node already trigger this
+        automatically. Call it manually only if a node file was edited some
+        other way (e.g. directly on the filesystem) and list_nodes still
+        shows a stale version."""
         from rayflow.editor.custom_nodes_routes import _reload_catalog
         return _reload_catalog()
 
@@ -314,13 +382,14 @@ def create_mcp():
 
     @mcp.tool
     def get_entry_frontend(node_type: str) -> dict[str, Any]:
-        """Reads the index.html of an entry node's frontend bundle (the
-        static UI Rayflow serves at /flows/{name}/ui when a flow using this
-        entry node is served). Only applies to entry nodes (@entry_node)
-        that declare a `frontend = "<dir>"` class attribute — e.g.
-        ChatTrigger, whose bundle is a single self-contained index.html
-        with inline CSS/JS (see rayflow/nodes/builtin/control.py). Only
-        that one file is managed here; multi-file bundles aren't supported.
+        """Reads the index.html of an entry node's optional static UI
+        bundle (served at /flows/{name}/ui when a flow using this entry
+        node is served) — pair with update_entry_frontend to write or
+        replace it. Only applies to entry nodes (@entry_node) that declare
+        a `frontend = "<dir>"` class attribute — e.g. ChatTrigger, whose
+        bundle is a single self-contained index.html with inline CSS/JS
+        (see rayflow/nodes/builtin/control.py). Only that one file is
+        managed here; multi-file bundles aren't supported.
 
         Returns {"node_type", "bundle_dir", "exists", "html"} —
         `exists=False`/`html=None` means the node declares `frontend` but
@@ -348,8 +417,10 @@ def create_mcp():
     @mcp.tool
     def update_entry_frontend(node_type: str, html: str) -> dict[str, Any]:
         """Creates or overwrites the index.html of an entry node's frontend
-        bundle. Only applies to entry nodes that declare `frontend =
-        "<dir>"` (see get_entry_frontend). Creates the bundle directory
+        bundle (see get_entry_frontend) — the only way a remote MCP client
+        with no filesystem access can author this UI. Only applies to
+        entry nodes that declare `frontend = "<dir>"` (see
+        get_entry_frontend). Creates the bundle directory
         (sibling to the node's source file, named after its `frontend`
         attribute) if it doesn't exist yet. `html` should be a complete,
         self-contained document (inline CSS/JS) — the same pattern as the
@@ -373,11 +444,12 @@ def create_mcp():
 
     @mcp.tool
     def delete_entry_frontend(node_type: str) -> dict[str, Any]:
-        """Deletes an entry node's index.html (the bundle directory itself
-        is left in place). Only applies to entry nodes that declare
-        `frontend = "<dir>"` (see get_entry_frontend). Returns
-        {"error": ...} if node_type doesn't exist, doesn't declare
-        `frontend`, or has no index.html to delete."""
+        """Deletes an entry node's index.html, leaving the bundle directory
+        itself in place (see get_entry_frontend) — call update_entry_frontend
+        afterwards to write a new one. Only applies to entry nodes that
+        declare `frontend = "<dir>"`. Returns {"error": ...} if node_type
+        doesn't exist, doesn't declare `frontend`, or has no index.html to
+        delete."""
         from fastapi import HTTPException
         from rayflow.editor.routes import _resolve_frontend_bundle_dir
         try:
@@ -394,12 +466,13 @@ def create_mcp():
 
     @mcp.tool
     def serve_flow_events(name: str) -> dict[str, Any]:
-        """Loads a saved flow and subscribes it to the event bus so it
-        stays resident and reacts whenever one of its declared `events` is
-        emitted (via an OnEvent node) or a watched variable changes (via
-        OnVariableChange). The flow must declare its events in its `events`
-        field — see get_guide. Returns graph_id; save it to unsubscribe
-        later with stop_flow_events."""
+        """Loads a saved flow and keeps it resident, subscribed to the
+        event bus, so it reacts whenever one of its declared `events` fires
+        (via an EmitEvent node elsewhere) or a watched variable changes
+        (OnVariableChange) — unlike run_flow, this doesn't run once and
+        return outputs; it registers a standing listener. The flow's own
+        JSON must declare its `events` (see get_guide). Save the returned
+        `graph_id` to unsubscribe later with stop_flow_events."""
         from rayflow.api import serve_events
         data = get_flow_dict(name)
         if data is None:
@@ -412,8 +485,9 @@ def create_mcp():
 
     @mcp.tool
     def stop_flow_events(name: str, graph_id: str) -> dict[str, Any]:
-        """Unsubscribes a resident flow (registered via serve_flow_events)
-        from the event bus and unloads it."""
+        """Unsubscribes a flow previously registered with serve_flow_events
+        and unloads it from Ray. Pass the same `graph_id` that
+        serve_flow_events returned."""
         from rayflow.api import stop
         data = get_flow_dict(name)
         if data is None:
@@ -462,11 +536,15 @@ def create_mcp():
 
     @mcp.tool
     async def run_flow(name: str, inputs: dict | None = None, trace: bool = False) -> dict[str, Any]:
-        """Runs a saved flow (loading it if needed) and returns its
-        outputs. `inputs` maps each declared input of the flow to its
-        value. Set `trace=True` to also get the ordered node_start/
-        node_done/edge_fire events — use it when the final output is wrong
-        and you need to see what each node along the way actually produced."""
+        """Runs a saved flow end-to-end (loading it into Ray first if
+        needed) and returns its final outputs — run validate_flow
+        beforehand to avoid runtime surprises. `inputs` maps each of the
+        flow's declared input names to a value, e.g. {"x": 2, "y": 3}. Set
+        `trace=True` to also get the ordered node_start/node_done/
+        edge_fire events for every node touched — use it when the final
+        output looks wrong and you need to see what an intermediate node
+        actually produced. If you already know the expected outputs, use
+        test_flow instead to get a pass/fail comparison for free."""
         return await _run_and_collect(name, inputs, trace)
 
     @mcp.tool
@@ -474,11 +552,15 @@ def create_mcp():
         name: str, inputs: dict | None = None, expected_outputs: dict | None = None,
         trace: bool = False,
     ) -> dict[str, Any]:
-        """Runs a flow and compares its outputs against expected_outputs.
-        Use it to verify the flow DOES what was asked (not just that it's
-        valid). Returns passed, actual, expected, and the mismatches. Set
-        `trace=True` to also get per-node events when a mismatch needs
-        localizing."""
+        """Like run_flow, but also compares the outputs against
+        `expected_outputs` — use this instead of run_flow whenever you
+        already know what a flow SHOULD produce (e.g. right after
+        update_flow, to confirm the edit did what was intended). Returns
+        `passed`/`actual`/`expected`/`mismatches`; omit `expected_outputs`
+        to just capture `actual` with `passed=None`. Same `trace=True`
+        option as run_flow, for localizing a mismatch to a specific node.
+        Example: test_flow(name="suma", inputs={"x": 2, "y": 3},
+        expected_outputs={"resultado": 5})."""
         out = await _run_and_collect(name, inputs, trace)
         if "error" in out:
             return {"passed": False, "actual": {}, "expected": expected_outputs,
