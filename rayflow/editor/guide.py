@@ -78,7 +78,11 @@ itself never reads it or enforces any permission based on it.
 - `Parallel`: its branches `branch_0`, `branch_1`, … are discovered from the
   wiring (nodes whose `exec_in` is `parallel_id.branch_N`); `joined` fires
   once they're all done.
-- `CallFlow`: accepts arbitrary inputs mapped to the subflow.
+- `CallFlow`: accepts arbitrary inputs mapped to the subflow. Its `flow`
+  input takes the NAME of a saved flow (as returned by `list_flows`/
+  `create_flow`, e.g. `"my_subflow"`, no extension), a literal file path, or
+  an inline subflow dict — never a `"node.pin"` reference. An unknown
+  name/path is reported as a build error.
 
 Entry nodes (`@entry_node` like `OnStart`, `OnEvent`, `ChatTrigger`, …) used
 to carry dynamic pins derived from `flow.inputs`; they now declare their

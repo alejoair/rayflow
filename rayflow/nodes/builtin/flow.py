@@ -22,6 +22,15 @@ from rayflow.nodes.decorators import (
 class CallFlow:
     """Runs another flow as a subgraph, already flattened inline by the build.
 
+    'flow' accepts, resolved at build time by `rayflow.workspace.resolve_flow`:
+    - the NAME of a saved flow, exactly as returned by list_flows/create_flow
+      (e.g. "my_subflow", no extension) — resolved against the workspace's
+      flows/ directory.
+    - a literal file path to a flow JSON file.
+    - an inline subflow dict (the parsed FlowDef as JSON), not a reference.
+    Referencing an unknown name/path raises a BuildError at validation time
+    ("CallFlow '<id>': the 'flow' input references unknown flow '<name>'").
+
     Modes per 'isolated' (resolved at build time as the subgraph's state_path):
     - False (default): the subgraph shares the parent's GraphState.
     - True: the subgraph gets its own GraphState (a path segment).

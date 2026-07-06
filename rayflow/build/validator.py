@@ -150,6 +150,7 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
       root flow's). An isolated CallFlow opens a new state_path.
     """
     from rayflow.schema.loader import load_flow
+    from rayflow.workspace import resolve_flow
 
     out_nodes: list[NodeDef] = []
 
@@ -167,7 +168,24 @@ def flatten(flow: FlowDef, catalog: NodeCatalog, prefix: str = "",
                 f"CallFlow '{full_id}': the 'flow' input must be a static "
                 f"subflow (a dict or a path), not a dynamic reference"
             )
-        sub_flow = load_flow(sub_src)
+        if isinstance(sub_src, dict):
+            sub_flow = load_flow(sub_src)
+        else:
+            # sub_src is a saved flow's name (as returned by list_flows/
+            # create_flow, e.g. "my_subflow") or a literal file path —
+            # resolve_flow knows both (workspace.py). Resolving here (instead
+            # of handing the raw string to load_flow's Path(...).open())
+            # turns an unresolvable name into a domain BuildError instead of
+            # a raw filesystem OSError leaking out of validate_flow.
+            try:
+                resolved_path = resolve_flow(sub_src)
+            except FileNotFoundError:
+                raise BuildError(
+                    f"CallFlow '{full_id}': the 'flow' input references unknown "
+                    f"flow '{sub_src}' (no saved flow with that name, and no "
+                    f"such file path)"
+                )
+            sub_flow = load_flow(resolved_path)
         isolated = bool(nd.inputs.get("isolated", False))
 
         # Subgraph state: its own if isolated, inherited if shared.

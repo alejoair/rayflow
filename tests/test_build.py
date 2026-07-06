@@ -178,6 +178,65 @@ def test_build_type_mismatch():
         build(flow, catalog)
 
 
+def test_callflow_resolves_saved_flow_by_name(tmp_path, monkeypatch):
+    """CallFlow's 'flow' input accepts a saved flow's NAME exactly as
+    returned by list_flows/create_flow (e.g. "my_subflow", no extension),
+    resolved against the workspace's flows/ dir via
+    rayflow.workspace.resolve_flow — not just an inline dict or a raw path
+    handed straight to schema.loader.load_flow (regression: ISSUE-0012)."""
+    import json
+
+    (tmp_path / "flows").mkdir()
+    (tmp_path / "flows" / "my_subflow.json").write_text(
+        json.dumps({
+            "name": "my_subflow",
+            "nodes": [
+                {"id": "sub_start", "type": "OnStart"},
+                {"id": "sub_out", "type": "FlowOutput", "exec_in": "sub_start"},
+            ],
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    flow = load_flow({
+        "name": "parent",
+        "nodes": [
+            {"id": "start", "type": "OnStart"},
+            {"id": "cf", "type": "CallFlow", "exec_in": "start",
+             "inputs": {"flow": "my_subflow"}},
+            {"id": "out", "type": "FlowOutput", "exec_in": "cf"},
+        ],
+    })
+    catalog = _make_catalog()
+    built = build(flow, catalog)
+    assert isinstance(built, BuiltFlow)
+    # The subflow's nodes got flattened/spliced in under the "cf/" prefix.
+    assert "cf/sub_start" in built.nodes
+    assert "cf/sub_out" in built.nodes
+
+
+def test_callflow_unknown_flow_name_raises_domain_error(tmp_path, monkeypatch):
+    """An unresolvable 'flow' name/path must raise a clear domain BuildError
+    ("references unknown flow"), not a raw filesystem OSError/FileNotFoundError
+    leaking out of validate_flow (regression: ISSUE-0012)."""
+    (tmp_path / "flows").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    flow = load_flow({
+        "name": "parent",
+        "nodes": [
+            {"id": "start", "type": "OnStart"},
+            {"id": "cf", "type": "CallFlow", "exec_in": "start",
+             "inputs": {"flow": "does_not_exist"}},
+            {"id": "out", "type": "FlowOutput", "exec_in": "cf"},
+        ],
+    })
+    catalog = _make_catalog()
+    with pytest.raises(BuildError, match="unknown flow 'does_not_exist'"):
+        build(flow, catalog)
+
+
 def test_build_data_cycle_detected():
     """Cycle in the data subgraph."""
     from rayflow.nodes.decorators import ray_node, Input, Output
