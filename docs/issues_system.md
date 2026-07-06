@@ -235,21 +235,24 @@ contra el código real y escribe issues en `rayflow_issues.json`. Diseño:
   una búsqueda activa por texto sí lo encuentra, y ya existe `ISSUE-0001`
   para ese `claim_id` — el flujo de deduplicación funciona como se diseñó.
 
-**Hallazgo — confirmado en una sesión posterior**: invocar
-`rayflow-auditor` vía el tool `Agent`/`Task` en la misma sesión que creó
-`.claude/agents/rayflow-auditor.md` devuelve "Agent type not found" — el
-descubrimiento de subagentes de proyecto vía ese tool sí requiere una
-sesión nueva (no se resuelve en caliente). Pero **`claude -p --agent
-rayflow-auditor "<prompt>"` funciona sin problema, en la misma sesión que
-creó el archivo** — cada invocación de `claude -p` es un proceso nuevo que
-lee `.claude/agents/` del disco al arrancar, así que no hereda la lista de
-agentes ya cargada por la sesión padre. Probado end-to-end con el mismo
-caso de `FlowSettingsDialog.tsx`: escaneó los 18 claims en scope, encontró
-el claim de evidencia vacía por búsqueda activa (tal como estaba
-instruido), confirmó que `ISSUE-0001` ya lo cubre, y no tocó
+**Validado con `claude -p --agent rayflow-auditor "<prompt>"`**: probado
+end-to-end con el caso de `FlowSettingsDialog.tsx`: escaneó los 18 claims
+en scope, encontró el claim de evidencia vacía por búsqueda activa (tal
+como estaba instruido), confirmó que `ISSUE-0001` ya lo cubre, y no tocó
 `rayflow_issues.json` ni ningún otro archivo (verificado con `git status`
 después de la corrida). Esto es exactamente el mecanismo que necesita el
 hook de pre-commit (§6.2) — confirmado, no solo hipotético.
+
+**Nota — afirmación refutada en una sesión posterior.** Esta sección decía
+originalmente que invocar un subagente de proyecto recién creado vía el
+tool `Agent`/`Task` en la misma sesión que creó el archivo devolvía "Agent
+type not found", y que el descubrimiento de subagentes nuevos requería una
+sesión nueva (que solo `claude -p --agent <nombre>`, proceso nuevo,
+funcionaba sin ese problema). Esa observación no se sostuvo: en una sesión
+de trabajo posterior, varios subagentes de proyecto creados en esa misma
+sesión quedaron disponibles para el tool `Agent` de inmediato, sin
+reiniciar nada. Se retira la afirmación; lo validado sobre `claude -p`
+arriba se mantiene porque no depende de esa premisa.
 
 ### 6.2. Hook de pre-commit para el auditor — implementado, bloqueante
 
@@ -438,9 +441,9 @@ impacto.
 - [x] Diseñar el prompt/alcance del agente auditor — `.claude/agents/
       rayflow-auditor.md` + `.claude/hooks/_sot_scope.py` (§6.1). Método
       validado a mano; invocación real confirmada vía `claude -p --agent
-      rayflow-auditor` (el tool `Task`/`Agent` in-session falla con "Agent
-      type not found" hasta una sesión nueva, pero `claude -p` no depende
-      de eso — ver §6.1).
+      rayflow-auditor` (§6.1 — la nota original sobre el tool `Agent`/
+      `Task` in-session que aparecía acá fue refutada en una sesión
+      posterior, ver la nota al final de §6.1).
 - [x] Escribir el script que arma el prompt con el scope del diff
       (`_sot_scope.py`) y llama a `claude -p --agent rayflow-auditor`, y
       agregar la entrada correspondiente en `.pre-commit-config.yaml`
