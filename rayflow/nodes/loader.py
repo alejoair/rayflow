@@ -15,6 +15,9 @@ class NodeCatalog:
     def __init__(self):
         # node_name → (class, NodeMeta)
         self._registry: dict[str, tuple[type, NodeMeta]] = {}
+        # path.stem → error message, for custom node files that failed to
+        # import or register (see load_custom_nodes_package).
+        self.load_errors: dict[str, str] = {}
 
     def load_custom_nodes_package(self) -> None:
         """Imports the cwd's ./custom_nodes/ as a REAL package.
@@ -42,7 +45,8 @@ class NodeCatalog:
             module_name = f"custom_nodes.{path.stem}"
             try:
                 module = importlib.import_module(module_name)
-            except Exception:
+            except Exception as exc:
+                self.load_errors[path.stem] = str(exc)
                 continue
             # Force serialization by value: custom_nodes/ is only on the
             # driver's sys.path, not on Ray workers or the FlowEngine actor.
@@ -51,7 +55,10 @@ class NodeCatalog:
                 _cp.register_pickle_by_value(module)
             except Exception:
                 pass
-            self._register_from_module(module)
+            try:
+                self._register_from_module(module)
+            except Exception as exc:
+                self.load_errors[path.stem] = str(exc)
 
     def load_directory(self, directory: str | Path) -> None:
         """Imports every .py in the directory and registers the nodes found.

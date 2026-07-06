@@ -1,5 +1,6 @@
 """Tests for the node definition and discovery system."""
 import subprocess
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -195,6 +196,98 @@ def test_catalog_registers_claude_node():
     }
     prompt_pin = next(p for p in meta.inputs if p.name == "prompt")
     assert prompt_pin.required
+
+
+# --- ISSUE-0010: load_custom_nodes_package must not let one broken file take
+# down the whole catalog; failures are scoped per file and recorded in
+# NodeCatalog.load_errors (keyed by path.stem) instead of propagating or
+# being silently swallowed. ---
+
+@pytest.fixture
+def isolated_custom_nodes_dir(tmp_path, monkeypatch):
+    """Points custom_nodes_path() at a fresh tmp_path/custom_nodes/ and
+    clears any cached `custom_nodes.*` modules so each test re-imports from
+    scratch (same pattern as tests/test_mcp.py's custom_nodes_dir fixture)."""
+    cn = tmp_path / "custom_nodes"
+    cn.mkdir()
+    (cn / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    for key in list(sys.modules):
+        if key == "custom_nodes" or key.startswith("custom_nodes."):
+            sys.modules.pop(key)
+    return cn
+
+
+def test_load_custom_nodes_package_records_import_error(isolated_custom_nodes_dir):
+    (isolated_custom_nodes_dir / "broken_import.py").write_text(
+        "import this_module_does_not_exist_anywhere_xyz\n",
+        encoding="utf-8",
+    )
+    catalog = NodeCatalog()
+    catalog.load_custom_nodes_package()  # must not raise
+    assert "broken_import" in catalog.load_errors
+    assert "this_module_does_not_exist_anywhere_xyz" in catalog.load_errors["broken_import"]
+
+
+def test_load_custom_nodes_package_records_entry_node_without_exec_output(isolated_custom_nodes_dir):
+    (isolated_custom_nodes_dir / "bad_entry.py").write_text(
+        "from rayflow.nodes.decorators import entry_node, Input\n\n\n"
+        "@entry_node\n"
+        "class BadEntry:\n"
+        "    message = Input('str')\n",
+        encoding="utf-8",
+    )
+    catalog = NodeCatalog()
+    catalog.load_custom_nodes_package()  # must not raise
+    assert "bad_entry" in catalog.load_errors
+    assert "ExecOutput" in catalog.load_errors["bad_entry"]
+    assert "BadEntry" not in catalog
+
+
+def test_load_custom_nodes_package_records_duplicate_node_name(isolated_custom_nodes_dir):
+    node_src = (
+        "from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput\n\n\n"
+        "@engine_node\n"
+        "class DupNode:\n"
+        "    exec_in = ExecInput()\n"
+        "    exec_out = ExecOutput()\n\n"
+        "    def run(self, ctx: ExecContext) -> dict:\n"
+        "        ctx.fire('exec_out')\n"
+        "        return {}\n"
+    )
+    # Sorted alphabetically by load_custom_nodes_package: dup_a loads first
+    # and wins the name; dup_b loses and its error is recorded.
+    (isolated_custom_nodes_dir / "dup_a.py").write_text(node_src, encoding="utf-8")
+    (isolated_custom_nodes_dir / "dup_b.py").write_text(node_src, encoding="utf-8")
+    catalog = NodeCatalog()
+    catalog.load_custom_nodes_package()  # must not raise
+    assert "dup_a" not in catalog.load_errors
+    assert "dup_b" in catalog.load_errors
+    assert "Duplicate node" in catalog.load_errors["dup_b"]
+    # The winner is still registered and usable.
+    assert "DupNode" in catalog
+    entry = catalog.get("DupNode")
+    assert entry is not None
+    cls, _meta = entry
+    assert cls.__module__ == "custom_nodes.dup_a"
+
+
+def test_load_custom_nodes_package_valid_module_has_no_load_error(isolated_custom_nodes_dir):
+    (isolated_custom_nodes_dir / "good_node.py").write_text(
+        "from rayflow.nodes.decorators import engine_node, ExecContext, ExecInput, ExecOutput\n\n\n"
+        "@engine_node\n"
+        "class GoodNode:\n"
+        "    exec_in = ExecInput()\n"
+        "    exec_out = ExecOutput()\n\n"
+        "    def run(self, ctx: ExecContext) -> dict:\n"
+        "        ctx.fire('exec_out')\n"
+        "        return {}\n",
+        encoding="utf-8",
+    )
+    catalog = NodeCatalog()
+    catalog.load_custom_nodes_package()
+    assert catalog.load_errors == {}
+    assert "GoodNode" in catalog
 
 
 def test_catalog_registers_chat_trigger_with_frontend():
