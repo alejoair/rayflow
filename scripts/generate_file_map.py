@@ -686,6 +686,7 @@ def build_systems(files: dict, old_systems: dict) -> dict:
                     dependents_systems.add(dep_sys)
         systems[sysname] = {
             "description": old_info.get("description", ""),
+            "macrosistemas": old_info.get("macrosistemas", []),
             "files": sorted(rel_paths),
             "depends_on_systems": sorted(depends_on_systems),
             "dependents_systems": sorted(dependents_systems),
