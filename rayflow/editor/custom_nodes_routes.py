@@ -116,6 +116,26 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
 
     Body: { "name": "MyNode", "source": "..." (optional) }
     If source isn't provided, the default template is used.
+
+    The response includes "registered": whether `name` shows up in the
+    reloaded catalog after writing the file to disk. "created" only means
+    the file was written successfully to disk — it says nothing about
+    whether the module loaded and its class got registered in the node
+    catalog. A file can be "created" but not "registered" if, e.g., the
+    module raises on import (missing decorator requirement, bad pin
+    config, etc.).
+
+    Known gap (tracked as the follow-up/full fix for ISSUE-0010, blocked on
+    NodeCatalog.load_errors existing in rayflow.nodes.registry): "registered"
+    is derived by checking `name in reload_result["custom_nodes"]`, and the
+    catalog is keyed by `cls.__name__` — not necessarily the same string as
+    the file/API `name` used to create it. So a custom node file that loads
+    without error but declares a class with a different name than the one
+    passed here will show "registered": false even though it *did* load
+    successfully (just under another name) — a false negative from this
+    endpoint's point of view. Once load_errors is available, "registered"
+    should be replaced/complemented by a dedicated "error" field sourced
+    from load_errors instead of this name-presence heuristic.
     """
     name: str = body.get("name", "").strip()
     if not name:
@@ -136,12 +156,33 @@ async def create_custom_node(body: dict = Body(...)) -> dict[str, Any]:
 
     path.write_text(source, encoding="utf-8")
     reload_result = _reload_catalog()
-    return {"name": name, "created": True, **reload_result}
+    return {
+        "name": name,
+        "created": True,
+        "registered": name in reload_result["custom_nodes"],
+        **reload_result,
+    }
 
 
 @router.put("/{name}/source")
 async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[str, Any]:
-    """Saves the edited source code and reloads the catalog."""
+    """Saves the edited source code and reloads the catalog.
+
+    The response includes "registered": whether `name` shows up in the
+    reloaded catalog after writing the file to disk. "saved" only means
+    the file was written successfully to disk — it says nothing about
+    whether the module loaded and its class got registered in the node
+    catalog. A file can be "saved" but not "registered" if the edited
+    source raises on import (e.g. a decoration error).
+
+    Known gap (same as create_custom_node above, tracked as the follow-up
+    fix for ISSUE-0010 pending NodeCatalog.load_errors): "registered" is
+    derived from `name in reload_result["custom_nodes"]", and the catalog
+    is keyed by `cls.__name__`, not necessarily the file/API `name`. A node
+    whose class got renamed in the edited source (but still loads fine)
+    will report "registered": false here — a false negative, not evidence
+    the module actually failed to import.
+    """
     path = _node_file(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Custom node '{name}' not found")
@@ -156,7 +197,12 @@ async def update_custom_node_source(name: str, body: dict = Body(...)) -> dict[s
 
     path.write_text(source, encoding="utf-8")
     reload_result = _reload_catalog()
-    return {"name": name, "saved": True, **reload_result}
+    return {
+        "name": name,
+        "saved": True,
+        "registered": name in reload_result["custom_nodes"],
+        **reload_result,
+    }
 
 
 @router.delete("/{name}", status_code=204)
