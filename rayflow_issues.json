@@ -325,52 +325,6 @@
       ]
     },
     {
-      "id": "ISSUE-0012",
-      "severity": "medium",
-      "kind": "claim_contradicted",
-      "title": "CallFlow.flow no documenta su formato real (ruta de archivo, no nombre de flow guardado) y una referencia inválida filtra un FileNotFoundError crudo",
-      "summary": "Confirmado en vivo: pasar como input 'flow' de un CallFlow el NOMBRE de un flow guardado tal como lo devuelven list_flows/create_flow (p.ej. 'test_subflow', sin punto) hace que validate_flow devuelva {\"valid\": false, \"errors\": [\"Parse error: [Errno 2] No such file or directory: 'test_subflow'\"]}. Confirmado en el código: en rayflow/build/validator.py, flatten() (líneas 164-170) solo rechaza 'flow' cuando es una referencia con punto (dynamic ref); un nombre plano pasa ese chequeo y sigue a `load_flow(sub_src)` (rayflow/schema/loader.py líneas 45-54), que para cualquier string no-dict hace `Path(source).open(...)` DIRECTO sobre el string recibido — sin resolverlo contra el workspace. Los flows guardados en cambio viven en `<cwd>/flows/{name}.json` (rayflow/editor/storage.py `_flow_path`), y existe una función dedicada exactamente para este tipo de resolución — `rayflow.workspace.resolve_flow(name_or_path)` (líneas 72-87), que sí sabe buscar `flows/<name>.json` — pero _splice_subflow/flatten llama a `schema.loader.load_flow` directo, sin pasar por `workspace.resolve_flow`, así que esa resolución nunca se aplica al input 'flow' de un CallFlow. El resultado es un OSError crudo de Python, no un mensaje de dominio, y ni rayflow/editor/guide.py (que solo dice 'CallFlow: accepts arbitrary inputs mapped to the subflow', sin detallar el formato de 'flow') ni la docstring de CallFlow en rayflow/nodes/builtin/flow.py documentan qué formato de string se espera. Esto es una manifestación relacionada, en la misma función, de un defecto ya documentado en el SOT (sistema-build#callflow-flow-dinamico-bypassea-error-collector: el chequeo de 'flow' dinámico hace raise BuildError directo sin pasar por el colector de errores) — pero en este caso ni siquiera es un BuildError de dominio: es una excepción de filesystem sin capturar.",
-      "claim_ids": [
-        "sistema-build#callflow-flow-dinamico-bypassea-error-collector"
-      ],
-      "files": [
-        "rayflow/build/validator.py",
-        "rayflow/schema/loader.py",
-        "rayflow/nodes/builtin/flow.py",
-        "rayflow/editor/guide.py",
-        "rayflow/workspace.py"
-      ],
-      "docs": [],
-      "detected_by": {
-        "agent": "rayflow-issue-writer",
-        "run_id": "issue-writer-2026-07-06T00:00:00Z",
-        "trigger": "reported"
-      },
-      "detected_at": "2026-07-06T00:00:00Z",
-      "evidence": [
-        {
-          "file": "rayflow/build/validator.py",
-          "note": "flatten() líneas 164-170: `if sub_src is None or (isinstance(sub_src, str) and \".\" in sub_src): raise BuildError(...)` seguido de `sub_flow = load_flow(sub_src)` sin resolución de nombre — un nombre de flow guardado sin punto pasa el guard y llega directo a load_flow."
-        },
-        {
-          "file": "rayflow/schema/loader.py",
-          "note": "load_flow() líneas 45-54: para un source no-dict hace `path = Path(source); with path.open(...)` directo, sin intentar `flows_path()/f'{source}.json'` ni capturar el OSError resultante."
-        },
-        {
-          "file": "rayflow/workspace.py",
-          "note": "resolve_flow() líneas 72-87 SÍ implementa la resolución 'nombre plano -> flows/<name>.json', pero no es llamada desde el path de CallFlow en validator.py — existe pero no se usa ahí."
-        },
-        {
-          "file": "rayflow/editor/guide.py",
-          "note": "Única mención de CallFlow (sección 'Dynamic pins', línea 81): 'CallFlow: accepts arbitrary inputs mapped to the subflow.' — no especifica el formato esperado del input 'flow' (ruta de archivo vs. nombre de flow guardado vs. dict inline)."
-        },
-        {
-          "file": "rayflow/nodes/builtin/flow.py",
-          "note": "La docstring de CallFlow (líneas 23-36) tampoco documenta el formato de 'flow', solo el comportamiento de 'isolated' y 'result'."
-        }
-      ]
-    },
-    {
       "id": "ISSUE-0013",
       "severity": "medium",
       "kind": "claim_contradicted",
