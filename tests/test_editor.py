@@ -818,6 +818,84 @@ def test_update_custom_node_source_reports_error_none_on_success(client_cn):
 
 
 # ---------------------------------------------------------------------------
+# POST/PUT /editor/custom-nodes — "custom_nodes" must list ONLY real custom
+# nodes, never builtin ones. ISSUE-0011: _BUILTIN_TYPES (a hardcoded frozenset
+# in rayflow/editor/custom_nodes_routes.py) used to be missing ChatTrigger,
+# OnVariableChange and Claude — all three real builtin nodes — so they leaked
+# into "custom_nodes" as if they were custom. Fixed by deriving the filter
+# from each node's `is_builtin` metadata flag (set by rayflow/nodes/registry.py)
+# instead of a name list that has to be kept in sync by hand.
+# ---------------------------------------------------------------------------
+
+# Every real builtin node name, enumerated straight from the modules
+# registered in rayflow/nodes/registry.py's _BUILTIN_MODULES (control,
+# variables, events, cast, math, flow, compare, claude) plus the "FlowInput"
+# alias of "OnStart" registered explicitly in get_catalog(). If a new builtin
+# node is ever added without updating this list, the test below still passes
+# (it never special-cases "the 3 missing ones", it just asserts no builtin
+# name at all shows up in "custom_nodes") — this list exists to build the one
+# concrete custom node name we create and to sanity-check the 3 previously-
+# missing names specifically.
+_ALL_BUILTIN_NODE_NAMES = frozenset([
+    # control.py
+    "OnStart", "ChatTrigger", "FlowOutput", "Branch", "Sequence", "Parallel",
+    "ForEach", "While", "Map",
+    # variables.py
+    "Get", "Set",
+    # events.py
+    "OnEvent", "OnVariableChange", "EmitEvent",
+    # cast.py
+    "ToInt", "ToFloat", "ToStr", "ToBool",
+    # math.py
+    "Add",
+    # flow.py
+    "CallFlow",
+    # compare.py
+    "GreaterThan", "LessThan", "GreaterThanOrEqual", "LessThanOrEqual",
+    "Equal", "NotEqual", "Not", "And", "Or",
+    # claude.py
+    "Claude",
+    # alias registered in rayflow/nodes/registry.py's get_catalog()
+    "FlowInput",
+])
+
+
+def test_create_custom_node_custom_nodes_field_excludes_builtins(client_cn):
+    """The `custom_nodes` field of the create response must contain only the
+    genuinely custom node just created — no builtin node (regardless of when
+    it was added to the catalog) should ever show up there."""
+    r = client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    assert r.status_code == 201
+    data = r.json()
+
+    assert data["custom_nodes"] == ["GoodNode"]
+
+    # Specifically the 3 nodes ISSUE-0011 found leaking through the stale
+    # hardcoded frozenset, plus a broader sweep over the entire real builtin
+    # catalog for good measure.
+    assert "ChatTrigger" not in data["custom_nodes"]
+    assert "OnVariableChange" not in data["custom_nodes"]
+    assert "Claude" not in data["custom_nodes"]
+    assert not (set(data["custom_nodes"]) & _ALL_BUILTIN_NODE_NAMES)
+
+
+def test_update_custom_node_source_custom_nodes_field_excludes_builtins(client_cn):
+    """Same guarantee as above, exercised through the update (PUT) endpoint."""
+    client_cn.post("/editor/custom-nodes", json={"name": "GoodNode"})
+    r = client_cn.put(
+        "/editor/custom-nodes/GoodNode/source", json={"source": GOOD_CUSTOM_NODE_SRC}
+    )
+    assert r.status_code == 200
+    data = r.json()
+
+    assert data["custom_nodes"] == ["GoodNode"]
+    assert "ChatTrigger" not in data["custom_nodes"]
+    assert "OnVariableChange" not in data["custom_nodes"]
+    assert "Claude" not in data["custom_nodes"]
+    assert not (set(data["custom_nodes"]) & _ALL_BUILTIN_NODE_NAMES)
+
+
+# ---------------------------------------------------------------------------
 # Concurrency — several flows at once don't interfere with each other
 # ---------------------------------------------------------------------------
 

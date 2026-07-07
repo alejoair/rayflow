@@ -198,6 +198,83 @@ async def test_create_custom_node_rejects_duplicate_and_bad_syntax(mcp, custom_n
         assert "error" in bad
 
 
+# ---------------------------------------------------------------------------
+# create_custom_node / update_custom_node_source — "registered"/"error"
+# (ISSUE-0010 fields) must be present in the MCP response, exactly like the
+# REST endpoints (tests/test_editor.py), since these tools now delegate
+# directly to rayflow.editor.custom_nodes_routes instead of reimplementing
+# the write+reload logic. ISSUE-0013.
+# ---------------------------------------------------------------------------
+
+# @entry_node requires at least one ExecOutput (rayflow/nodes/decorators.py,
+# entry_node); this class doesn't declare one, so the decorator raises
+# ValueError at import time and the module never registers a class, even
+# though its Python syntax is perfectly valid.
+BROKEN_ENTRY_SRC = """\
+from rayflow.nodes.decorators import entry_node, Input
+
+@entry_node
+class BrokenEntry:
+    message = Input("str")
+"""
+
+
+async def test_create_custom_node_reports_registered_true(mcp, custom_nodes_dir):
+    async with Client(mcp) as c:
+        r = (await c.call_tool(
+            "create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC}
+        )).data
+    assert r["created"] is True
+    assert r["registered"] is True
+    assert "DoubleIt" in r["custom_nodes"]
+    assert r.get("error") is None
+
+
+async def test_create_custom_node_reports_registered_false_with_error_message(mcp, custom_nodes_dir):
+    """The file is still written to disk (valid Python syntax passes
+    ast.parse), so "created" is true — but the decorator raises on import,
+    so the class never reaches the catalog: "registered" must be false and
+    "error" must carry the actual exception message, not just be present."""
+    async with Client(mcp) as c:
+        r = (await c.call_tool(
+            "create_custom_node", {"name": "BrokenEntry", "source": BROKEN_ENTRY_SRC}
+        )).data
+    assert r["created"] is True
+    assert r["registered"] is False
+    assert "BrokenEntry" not in r["custom_nodes"]
+    assert r["error"] is not None
+    assert "ExecOutput" in r["error"]
+
+
+async def test_update_custom_node_source_reports_registered_true(mcp, custom_nodes_dir):
+    async with Client(mcp) as c:
+        await c.call_tool("create_custom_node", {"name": "DoubleIt", "source": DOUBLE_SRC})
+        updated_src = DOUBLE_SRC.replace("value * 2", "value * 10")
+        r = (await c.call_tool(
+            "update_custom_node_source", {"name": "DoubleIt", "source": updated_src}
+        )).data
+    assert r["saved"] is True
+    assert r["registered"] is True
+    assert "DoubleIt" in r["custom_nodes"]
+    assert r.get("error") is None
+
+
+async def test_update_custom_node_source_reports_registered_false_with_error_message(mcp, custom_nodes_dir):
+    """Start from a node that registers fine, then overwrite its source
+    with a decoration error — "saved" (file written) stays true, but
+    "registered" flips to false and "error" carries the real message."""
+    async with Client(mcp) as c:
+        await c.call_tool("create_custom_node", {"name": "ToBreak", "source": DOUBLE_SRC})
+        r = (await c.call_tool(
+            "update_custom_node_source", {"name": "ToBreak", "source": BROKEN_ENTRY_SRC}
+        )).data
+    assert r["saved"] is True
+    assert r["registered"] is False
+    assert "ToBreak" not in r["custom_nodes"]
+    assert r["error"] is not None
+    assert "ExecOutput" in r["error"]
+
+
 async def test_update_flow_unloads_stale_loaded_graph(mcp, flows_dir, custom_nodes_dir):
     """Regression test: without unloading on update, run_flow/test_flow would
     silently keep executing the OLD graph after update_flow, because they
