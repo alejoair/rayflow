@@ -1,4 +1,5 @@
-"""Curated guide to Rayflow's model, served by `GET /editor/guide`.
+"""Curated guide to Rayflow's model, served by `GET /editor/guide` and the
+MCP `get_guide` tool.
 
 This is the "semantic contract" an LLM agent needs to build flows, which
 used to live only in CLAUDE.md / code docstrings. Plain markdown text.
@@ -72,7 +73,7 @@ itself never reads it or enforces any permission based on it.
   - a literal of the correct type: `"b": 10`, `"flag": true`, `"name": "hello"`.
   - a reference `"node_id.pin"`: `"a": "entry.x"`, `"result": "add.result"`.
 
-## Dynamic pins (don't appear in the static /editor/nodes)
+## Dynamic pins (don't appear in the static node catalog: `GET /editor/nodes` / MCP `list_nodes`)
 
 - `FlowOutput`: has **one required data input per output of the flow**.
 - `Parallel`: its branches `branch_0`, `branch_1`, … are discovered from the
@@ -88,15 +89,16 @@ status/headers, call `ctx.set_response_status(code)` /
 invisible to non-HTTP callers (MCP's `run_flow`/`test_flow`), since it
 lives outside `flow.outputs`.
 
-Check `GET /editor/flows/{name}/catalog` to see the already-resolved pins
-of a specific flow.
+Check `GET /editor/flows/{name}/catalog` (or the MCP `flow_catalog` tool)
+to see the already-resolved pins of a specific flow.
 
 ## Type system
 
 Canonical types (strings): `int`, `float`, `str`, `bool`, `list`, `dict`,
 `Any`, plus generics `list[T]` and `dict[str, V]`. STRICT compatibility:
 same type, or one is `Any`. **int and float are incompatible**: cast with
-`ToInt`/`ToFloat`/`ToStr`/`ToBool`. Check `GET /editor/types`.
+`ToInt`/`ToFloat`/`ToStr`/`ToBool`. Check `GET /editor/types` (or the MCP
+`list_types` tool).
 
 ## Calling an LLM from a flow: the `Claude` node
 
@@ -131,13 +133,25 @@ already stateful via GraphState, no extra machinery needed.
 
 ## Recommended workflow for an agent
 
-1. `GET /editor/guide` and `GET /editor/nodes` to learn the catalog.
+This guide is served both over HTTP (`GET /editor/guide`) and as the MCP
+tool `get_guide`, so each step below names the REST route AND its MCP
+equivalent — use whichever your client can actually call.
+
+1. `GET /editor/guide` + `GET /editor/nodes`, or the MCP tools `get_guide`
+   + `list_nodes`, to learn the catalog.
 2. Build the flow JSON.
-3. `POST /editor/validate` -> returns ALL errors and warnings at once.
+3. `POST /editor/validate`, or the MCP tool `validate_flow` -> returns ALL
+   errors and warnings at once.
 4. Fix until `valid: true`.
-5. `POST /editor/flows` (create) or `PUT /editor/flows/{name}` (update).
-6. `POST /editor/flows/{name}/test` with `{inputs, expected_outputs}` to
-   verify it does what's expected, or `POST /flows/{name}/run` to run it
-   (loads it into Ray on demand if needed; add `Accept: text/event-stream`
-   for the SSE event stream instead of a single JSON response).
+5. `POST /editor/flows` (create) or `PUT /editor/flows/{name}` (update),
+   or the MCP tools `create_flow` / `update_flow`.
+6. To verify it does what's expected: `POST /editor/flows/{name}/test`
+   with `{inputs, expected_outputs}`, or the MCP tool `test_flow` with the
+   same arguments. To just run it: `POST /flows/{name}/run` (loads it into
+   Ray on demand if needed), or the MCP tool `run_flow`. Over HTTP, add
+   `Accept: text/event-stream` for the SSE event stream instead of a
+   single JSON response; over MCP, pass `trace=True` to `run_flow`/
+   `test_flow` instead — it returns the same ordered node_start/node_done/
+   edge_fire events as the SSE stream, just batched into one response
+   instead of streamed live.
 """
