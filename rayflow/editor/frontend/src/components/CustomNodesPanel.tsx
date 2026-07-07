@@ -10,15 +10,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 
 interface Props {
   onReload: () => void
+  // Opcional: si el padre (App.tsx) no lo pasa, el panel sigue funcionando
+  // — el warning de registro fallido se sigue mostrando inline vía
+  // `registrationWarning` más abajo, onToast es solo un refuerzo que
+  // reusa el sistema global de toasts de App.tsx cuando está disponible.
+  onToast?: (msg: string, type?: 'info' | 'success' | 'error') => void
 }
 
-export default function CustomNodesPanel({ onReload }: Props) {
+export default function CustomNodesPanel({ onReload, onToast }: Props) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState<CustomNodeFile[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [creatingName, setCreatingName] = useState('')
   const [createError, setCreateError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  // Distinto de createError: createError es del formulario de creación
+  // (errores de red/validación antes de que el nodo se haya guardado).
+  // registrationWarning cubre el caso ISSUE-0013 — el archivo SÍ se guardó
+  // en disco (created/saved: true) pero el catálogo no pudo registrarlo
+  // (registered: false) — y se muestra fuera del form, porque persiste
+  // aunque el form ya se haya cerrado.
+  const [registrationWarning, setRegistrationWarning] = useState<{ name: string; message: string } | null>(null)
 
   const { openCodeTab, activeTabName, tabs } = useFlowStore()
 
@@ -56,8 +68,23 @@ export default function CustomNodesPanel({ onReload }: Props) {
       setCreatingName('')
       await refreshList()
       const src = await getCustomNodeSource(res.name)
+      // El archivo se guardó en disco (created: true) independientemente de
+      // si el catálogo pudo registrarlo o no, así que siempre tiene sentido
+      // abrir el código para que el usuario lo revise/corrija.
       openCodeTab(res.name, src.source)
       onReload()
+      if (res.registered) {
+        setRegistrationWarning(null)
+        onToast?.(`Nodo "${res.name}" creado y registrado`, 'success')
+      } else {
+        // ISSUE-0013: el backend devuelve 200 con registered:false cuando el
+        // archivo se guardó pero el import/registro en el catálogo falló
+        // (import error, falta ExecOutput en @entry_node, nombre duplicado,
+        // etc.) — no lo tratamos como éxito silencioso.
+        const message = res.error || 'se guardó en disco pero no se registró en el catálogo (sin detalle de error)'
+        setRegistrationWarning({ name: res.name, message })
+        onToast?.(`Nodo "${res.name}" guardado pero no registrado: ${message}`, 'error')
+      }
     } catch (e) {
       setCreateError((e as Error).message)
     }
@@ -113,6 +140,33 @@ export default function CustomNodesPanel({ onReload }: Props) {
           <span style={{ fontSize: 10, transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
         </div>
       </button>
+
+      {/* Warning de registro fallido (ISSUE-0013): el nodo se guardó en
+          disco pero el catálogo no lo pudo registrar. Se muestra fuera del
+          bloque `open &&` para que no desaparezca si el usuario colapsa el
+          panel justo después de crear el nodo. */}
+      {registrationWarning && (
+        <div style={{
+          padding: '8px 12px',
+          display: 'flex', flexDirection: 'column', gap: 4,
+          borderBottom: '1px solid var(--border)',
+          background: 'rgba(239,68,68,0.08)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--destructive)' }}>
+              ⚠ "{registrationWarning.name}.py" se guardó pero no se registró en el catálogo
+            </span>
+            <button
+              onClick={() => setRegistrationWarning(null)}
+              title="Descartar"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--muted-foreground)', padding: 0, lineHeight: 1, flexShrink: 0 }}
+            >✕</button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--destructive)', fontFamily: 'monospace', wordBreak: 'break-word' }}>
+            {registrationWarning.message}
+          </div>
+        </div>
+      )}
 
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
