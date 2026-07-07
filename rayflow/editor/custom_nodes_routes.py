@@ -16,14 +16,6 @@ from rayflow.workspace import custom_nodes_path
 
 router = APIRouter(prefix="/editor/custom-nodes", tags=["custom-nodes"])
 
-_BUILTIN_TYPES = frozenset([
-    'OnStart', 'FlowInput', 'FlowOutput', 'Branch', 'Sequence', 'Parallel',
-    'ForEach', 'Map', 'Get', 'Set', 'CallFlow', 'OnEvent', 'EmitEvent',
-    'Add', 'GreaterThan', 'LessThan', 'GreaterThanOrEqual', 'LessThanOrEqual',
-    'Equal', 'NotEqual', 'Not', 'And', 'Or', 'ToInt', 'ToFloat', 'ToStr', 'ToBool',
-    'While',
-])
-
 NODE_TEMPLATE = '''\
 from rayflow.nodes.decorators import engine_node, ray_node, ExecContext, ExecInput, ExecOutput, Input, Output
 
@@ -72,9 +64,14 @@ def _reload_catalog() -> dict[str, Any]:
     reset_catalog()
     catalog = get_catalog()
 
+    # Derived from each node's `is_builtin` metadata flag (rayflow/nodes/registry.py
+    # marks every node coming from a _BUILTIN_MODULES module, plus the "FlowInput"
+    # alias of OnStart, as is_builtin=True; custom_nodes/ nodes stay is_builtin=False)
+    # rather than a hardcoded name list — a hardcoded set drifts out of sync with the
+    # real builtin catalog every time a builtin node is added (see ISSUE-0011).
     custom_names = [
-        name for name, _cls, _meta in catalog
-        if name not in _BUILTIN_TYPES
+        name for name, _cls, meta in catalog
+        if not meta.is_builtin
     ]
     return {
         "reloaded": True,

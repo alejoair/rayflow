@@ -50,7 +50,7 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 ## Dependencias entre sistemas
 
-Depende de: `frontend-canvas`, `frontend-panels`, `frontend-state`, `frontend-ui-kit`
+Depende de: _(ningún otro sistema)_
 
 Es dependencia de: _(ningún otro sistema)_
 
@@ -116,4 +116,4 @@ Es dependencia de: _(ningún otro sistema)_
 Esta es tu agenda de contactos — no invoques ningún otro subagente. Es una convención de diseño, no un bloqueo técnico (Claude Code no soporta restringir programáticamente qué puede invocar un subagente spawneado; solo el hilo principal puede tener esa restricción real).
 
 ---
-_Generado desde el commit `ad04fee`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `4c19f59`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
