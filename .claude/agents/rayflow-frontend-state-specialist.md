@@ -47,7 +47,7 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 Depende de: _(ningún otro sistema)_
 
-Es dependencia de: _(ningún otro sistema)_
+Es dependencia de: `frontend-app`, `frontend-canvas`, `frontend-panels`, `frontend-ui-kit`
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -124,4 +124,4 @@ Es dependencia de: _(ningún otro sistema)_
 Esta es tu agenda de contactos — no invoques ningún otro subagente. Es una convención de diseño, no un bloqueo técnico (Claude Code no soporta restringir programáticamente qué puede invocar un subagente spawneado; solo el hilo principal puede tener esa restricción real).
 
 ---
-_Generado desde el commit `4c19f59`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `8193066`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

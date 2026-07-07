@@ -43,4 +43,4 @@ Macro-agente del macrosistema `interfaces` de rayflow, que agrupa los sistemas `
 Esta es tu agenda de contactos — no invoques ningún otro subagente. Es una convención de diseño, no un bloqueo técnico (Claude Code no soporta restringir programáticamente qué puede invocar un subagente spawneado; solo el hilo principal puede tener esa restricción real).
 
 ---
-_Generado desde el commit `4c19f59`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `8193066`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._

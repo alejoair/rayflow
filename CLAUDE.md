@@ -226,4 +226,4 @@ Agrupación de los archivos del repo en sistemas, con su descripción y cantidad
 
 
 ---
-_Generado desde el commit `4c19f59`._
+_Generado desde el commit `8193066`._

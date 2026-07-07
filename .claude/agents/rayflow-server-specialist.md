@@ -46,9 +46,9 @@ como un hecho. Un framing que suena correcto en prosa pero no resiste
 
 ## Dependencias entre sistemas
 
-Depende de: _(ningún otro sistema)_
+Depende de: `build`, `cli`, `editor-api`, `engine`, `events`, `mcp`, `nodes`, `schema`
 
-Es dependencia de: _(ningún otro sistema)_
+Es dependencia de: `build`, `cli`, `editor-api`, `events`, `mcp`, `nodes`, `tests`
 
 ## Qué dice la Fuente de Verdad sobre este sistema (`RAYFLOW_SOURCE_OF_TRUTH.json`)
 
@@ -180,7 +180,6 @@ Es dependencia de: _(ningún otro sistema)_
 
 - **ISSUE-0005** (medium): server.py: el comentario sobre precedencia body-vs-envelope en run_flow describe el comportamiento opuesto al que hace el código
 - **ISSUE-0006** (high): flow_ui: el guard anti path-traversal compara prefijo de string, no segmento de path — un directorio hermano con nombre superpuesto lo esquiva
-- **ISSUE-0012** (medium): CallFlow.flow no documenta su formato real (ruta de archivo, no nombre de flow guardado) y una referencia inválida filtra un FileNotFoundError crudo
 
 ## Contactos
 
@@ -193,4 +192,4 @@ Es dependencia de: _(ningún otro sistema)_
 Esta es tu agenda de contactos — no invoques ningún otro subagente. Es una convención de diseño, no un bloqueo técnico (Claude Code no soporta restringir programáticamente qué puede invocar un subagente spawneado; solo el hilo principal puede tener esa restricción real).
 
 ---
-_Generado desde el commit `4c19f59`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
+_Generado desde el commit `8193066`. No asumas que conocés el contenido de tus archivos de memoria — leélos con tus propios tools, siempre, porque pueden haber cambiado desde la última vez que este archivo se regeneró._
