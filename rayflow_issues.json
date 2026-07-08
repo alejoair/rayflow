@@ -1,7 +1,7 @@
 {
   "$schema_note": "Cola de issues ABIERTOS detectados al comparar RAYFLOW_SOURCE_OF_TRUTH.json contra el estado real del repo. Cada issue enlaza claim_ids (RAYFLOW_SOURCE_OF_TRUTH.json), files (rutas afectadas, típicamente ya en rayflow_file_map.json), y docs (archivos de documentación en prosa que también quedan desactualizados: CLAUDE.md, README.md, SKILL.md, guide.py, etc.). Este archivo NO acumula historial: 'resolver' un issue es eliminarlo del array en el mismo commit que aplica el fix — el historial completo (cuándo se creó, cuándo se resolvió, en qué commit) vive en `git log -p -- rayflow_issues.json` / `git blame`, no acá. `next_id` es un contador monótono que nunca retrocede ni reutiliza ids, aunque el array se achique — por eso puede haber huecos en la numeración. Ver docs/issues_system.md para el diseño completo.",
   "schema_version": 1,
-  "next_id": 14,
+  "next_id": 15,
   "issues": [
     {
       "id": "ISSUE-0001",
@@ -249,6 +249,40 @@
         {
           "file": ".gitignore",
           "note": "git check-ignore -v (sin --no-index, comportamiento default que sí consulta el índice de git) sobre los mismos 4 paths no devuelve ninguna línea de match y sale con exit code 1 — confirma que la razón real por la que siguen trackeados es que git no aplica retroactivamente una regla de exclusión (nueva o recién arreglada) a un archivo ya indexado, un comportamiento estándar de git no relacionado con si el patrón está roto o no."
+        }
+      ]
+    },
+    {
+      "id": "ISSUE-0014",
+      "severity": "medium",
+      "kind": "claim_contradicted",
+      "title": "update_custom_node_source no invalida los actores Ray de flows ya servidos que usan el nodo editado, y esa asimetría con update_flow no está documentada donde un usuario la necesita",
+      "summary": "Verifiqué la causa raíz de forma independiente y la confirmo. rayflow/editor/custom_nodes_routes.py#_reload_catalog() (líneas 57-80) solo descarta módulos custom_nodes.* de sys.modules y reconstruye el NodeCatalog vía reset_catalog()/get_catalog(); no importa ni toca rayflow.registry en ningún punto. rayflow/registry.py confirma que ServedFlow.loaded guarda el LoadedFlow (actores Ray vivos) de cada flow servido, y no expone ni es consultado por ningún mecanismo de invalidación cruzada 'nodo custom X cambió -> qué flows servidos lo usan'. El contraste real: en rayflow/mcp/server.py, update_flow (línea 216) llama explícitamente _unload_if_loaded(name) al guardar un flow, precisamente para que el próximo run_flow reconstruya el grafo en vez de reusar el viejo — de hecho hay un test para ESE caso (claim sistema-tests#mcp-update-flow-invalida-grafo-cargado-stale, test_update_flow_unloads_stale_loaded_graph). update_custom_node_source (líneas 341-362) no tiene ningún llamado equivalente: edita el nodo, recarga el catálogo, pero dejar los actores Ray de un flow ya servido que usa ese tipo de nodo intactos con la clase vieja. El propio unload_flow documenta el workaround manual ('e.g. right after editing a custom node the flow uses', línea 235), pero esa pista vive únicamente en el docstring de unload_flow — el docstring de update_custom_node_source (líneas 341-347) y el de create_custom_node no mencionan en absoluto que un flow ya corrido con el tipo de nodo editado necesita un unload_flow (o un update_flow con el mismo JSON) para dejar de ejecutar la versión vieja del código. Busqué en RAYFLOW_SOURCE_OF_TRUTH.json (secciones api-rest-custom-nodes y capa-mcp): el único claim relevante, capa-mcp#create-custom-node-update-custom-node, dice textualmente que estas tools 'hacen hot-reload del catálogo automáticamente' — una afirmación acotada al catálogo (cierta, confirmada) que no dice nada sobre flows ya servidos, así que no queda técnicamente contradicha. No hay ningún claim del SOT que afirme que el hot-reload de custom nodes alcanza a instancias ya corridas, así que esto no es un claim_contradicted en el sentido estricto de una claim puntual — lo registro igual, siguiendo el mismo criterio que ISSUE-0005/ISSUE-0006 en este mismo archivo (código/documentación que se desincroniza de sí mismo, encontrado incidentalmente, sin claim_id puntual), porque es una asimetría real de comportamiento con impacto práctico directo: un agente que edita un custom node y vuelve a correr el mismo flow servido va a ver errores con el código viejo y ninguna pista en la tool que acaba de usar.",
+      "claim_ids": [],
+      "files": [
+        "rayflow/editor/custom_nodes_routes.py",
+        "rayflow/registry.py",
+        "rayflow/mcp/server.py"
+      ],
+      "docs": [],
+      "detected_by": {
+        "agent": "external-testing-session",
+        "run_id": "external-testing-session-2026-07-08",
+        "trigger": "manual"
+      },
+      "detected_at": "2026-07-08T00:00:00Z",
+      "evidence": [
+        {
+          "file": "rayflow/editor/custom_nodes_routes.py",
+          "note": "_reload_catalog() (líneas 57-80): elimina módulos custom_nodes.* de sys.modules y llama reset_catalog()+get_catalog(); no hay ninguna referencia a rayflow.registry, rayflow.api, ni a ningún ServedFlow en toda la función ni en el resto del archivo."
+        },
+        {
+          "file": "rayflow/registry.py",
+          "note": "ServedFlow.loaded (líneas 42-60) guarda el LoadedFlow con los actores Ray vivos de un flow servido; no existe ningún índice inverso 'tipo de nodo -> flows servidos que lo usan' ni ningún hook que custom_nodes_routes.py o el catálogo puedan invocar para invalidar entradas afectadas."
+        },
+        {
+          "file": "rayflow/mcp/server.py",
+          "note": "update_flow (líneas 197-217) llama _unload_if_loaded(name) explícitamente (línea 216) tras guardar el nuevo JSON; update_custom_node_source (líneas 341-362) no tiene ningún llamado equivalente pese a poder afectar el mismo tipo de actor Ray ya instanciado en otros flows servidos. unload_flow (líneas 231-238) documenta el workaround manual en su propio docstring ('e.g. right after editing a custom node the flow uses', línea 235) pero ese aviso no está replicado en el docstring de update_custom_node_source ni en el de create_custom_node."
         }
       ]
     }
